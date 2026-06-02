@@ -1,0 +1,2 @@
+- [Hansa company config](hansa-company-config.md) — master_company_no (items/customers) vs company_no (transactions) must be set correctly or all tonnes = 0
+- [Neon DB refresh pattern](neon-refresh-pattern.md) — long-running Hansa fetches need fresh DB session per step to avoid Neon idle-connection timeout

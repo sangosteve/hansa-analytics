@@ -13,7 +13,7 @@ class HansaClient:
         url = f"{self.base_url}/{path.lstrip('/')}"
 
         async with httpx.AsyncClient(
-            timeout=60,
+            timeout=300,
             auth=self.auth,
             headers={"Accept": "application/json"},
         ) as client:
