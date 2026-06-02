@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "Hansa Analytics Dashboard"
+version = "1.0.0"
+id = "artifacts/hansa-analytics"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 19517
+
+[services.development]
+run = "pnpm --filter @workspace/hansa-analytics run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/hansa-analytics", "run", "build" ]
+publicDir = "artifacts/hansa-analytics/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "19517"
+BASE_PATH = "/"
