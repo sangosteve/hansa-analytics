@@ -160,45 +160,48 @@ def execute_tool(
     db: Session, tool_name: str, parameters: dict[str, Any], request: AIInsightRequest
 ) -> dict[str, Any]:
     """Execute the chosen analytics tool with validated parameters."""
+    import inspect
 
-    # Merge request filters with parameters
-    params = {
+    tool_fn_map = {
+        "get_sales_trend": analytics_tools.get_sales_trend,
+        "get_sales_by_item_group": analytics_tools.get_sales_by_item_group,
+        "get_sales_by_customer": analytics_tools.get_sales_by_customer,
+        "get_sales_by_salesperson": analytics_tools.get_sales_by_salesperson,
+        "get_sales_by_location": analytics_tools.get_sales_by_location,
+        "get_customer_movement_insights": analytics_tools.get_customer_movement_insights,
+        "compare_current_vs_previous_month": analytics_tools.compare_current_vs_previous_month,
+    }
+
+    fn = tool_fn_map.get(tool_name)
+    if not fn:
+        return {"error": f"Unknown tool: {tool_name}"}
+
+    # Build full candidate params pool
+    params_pool: dict[str, Any] = {
         "db": db,
         "company_no": "3",
         **parameters,
     }
 
-    # Apply request-level filters
+    # Apply request-level filters (don't override explicit planner params)
     if request.date_from:
-        params.setdefault("date_from", request.date_from)
+        params_pool.setdefault("date_from", request.date_from)
     if request.date_to:
-        params.setdefault("date_to", request.date_to)
+        params_pool.setdefault("date_to", request.date_to)
     if request.location:
-        params.setdefault("location", request.location)
+        params_pool.setdefault("location", request.location)
     if request.salesperson:
-        params.setdefault("salesperson", request.salesperson)
+        params_pool.setdefault("salesperson", request.salesperson)
     if request.item_group_code:
-        params.setdefault("item_group_code", request.item_group_code)
+        params_pool.setdefault("item_group_code", request.item_group_code)
     if request.customer_code:
-        params.setdefault("customer_code", request.customer_code)
+        params_pool.setdefault("customer_code", request.customer_code)
 
-    # Execute the tool
-    if tool_name == "get_sales_trend":
-        return analytics_tools.get_sales_trend(**params)
-    elif tool_name == "get_sales_by_item_group":
-        return analytics_tools.get_sales_by_item_group(**params)
-    elif tool_name == "get_sales_by_customer":
-        return analytics_tools.get_sales_by_customer(**params)
-    elif tool_name == "get_sales_by_salesperson":
-        return analytics_tools.get_sales_by_salesperson(**params)
-    elif tool_name == "get_sales_by_location":
-        return analytics_tools.get_sales_by_location(**params)
-    elif tool_name == "get_customer_movement_insights":
-        return analytics_tools.get_customer_movement_insights(**params)
-    elif tool_name == "compare_current_vs_previous_month":
-        return analytics_tools.compare_current_vs_previous_month(**params)
-    else:
-        return {"error": f"Unknown tool: {tool_name}"}
+    # Only pass params the function actually accepts — avoids unexpected keyword errors
+    accepted = inspect.signature(fn).parameters
+    filtered_params = {k: v for k, v in params_pool.items() if k in accepted}
+
+    return fn(**filtered_params)
 
 
 def generate_final_response(
