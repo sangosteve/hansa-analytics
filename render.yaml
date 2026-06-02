@@ -24,8 +24,8 @@ services:
   - type: web
     name: hansa-analytics-frontend
     runtime: static
-    rootDir: artifacts/hansa-analytics
-    buildCommand: pnpm install && pnpm run build
+    rootDir: frontend
+    buildCommand: npm install && npm run build
     staticPublishPath: dist/public
     envVars:
       - key: VITE_API_URL

@@ -19,7 +19,7 @@ run = "pnpm --filter @workspace/hansa-analytics run dev"
 
 [services.production]
 build = [ "pnpm", "--filter", "@workspace/hansa-analytics", "run", "build" ]
-publicDir = "artifacts/hansa-analytics/dist/public"
+publicDir = "frontend/dist/public"
 serve = "static"
 
 [[services.production.rewrites]]

@@ -1,0 +1,1 @@
+- [Monorepo layout](monorepo-layout.md) — frontend/ and backend/ at root; Replit artifact.toml stays in artifacts/hansa-analytics/.replit-artifact/ but source lives in frontend/
