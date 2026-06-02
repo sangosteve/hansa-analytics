@@ -35,3 +35,6 @@ class Settings(BaseSettings):
         elif url.startswith("postgresql://") and "+psycopg" not in url:
             url = url.replace("postgresql://", "postgresql+psycopg://", 1)
         return url
+
+
+settings = Settings()
