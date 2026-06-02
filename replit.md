@@ -1,46 +1,44 @@
-# Hansa Analytics Dashboard
+# [Project name]
 
-A sales analytics dashboard for comparing company sales data, with AI-powered insights panel.
+_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
 
 ## Run & Operate
 
-- `pnpm --filter @workspace/hansa-analytics run dev` — run the frontend (port auto-assigned by workflow)
+- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
 - `pnpm run typecheck` — full typecheck across all packages
-- Required env: `VITE_API_URL` — URL to the Python FastAPI backend (default: `http://127.0.0.1:8000/api`)
+- `pnpm run build` — typecheck + build all packages
+- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
+- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
+- Required env: `DATABASE_URL` — Postgres connection string
 
 ## Stack
 
 - pnpm workspaces, Node.js 24, TypeScript 5.9
-- Frontend: React + Vite (artifact: `hansa-analytics`)
-- Charts: Apache ECharts via `echarts-for-react`
-- Styling: Tailwind CSS v4, shadcn/ui components
-- Font: Figtree (Google Fonts)
+- API: Express 5
+- DB: PostgreSQL + Drizzle ORM
+- Validation: Zod (`zod/v4`), `drizzle-zod`
+- API codegen: Orval (from OpenAPI spec)
+- Build: esbuild (CJS bundle)
 
 ## Where things live
 
-- `artifacts/hansa-analytics/` — the Vite + React frontend app
-- `artifacts/hansa-analytics/src/pages/home.tsx` — main dashboard page (sales charts + filters)
-- `artifacts/hansa-analytics/src/components/ai/ai-insights-panel.tsx` — AI insights chat panel
-- `artifacts/hansa-analytics/src/lib/api.ts` — typed API client (connects to Python FastAPI backend)
-- `.migration-backup/frontend/` — original Next.js source (reference only)
-- `.migration-backup/backend/` — original Python FastAPI backend (needs separate hosting)
+_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
 
 ## Architecture decisions
 
-- Frontend-only Replit artifact: the Python FastAPI backend is not ported (it uses Alembic, SQLAlchemy, and a separate DB). The frontend calls `VITE_API_URL` to reach it.
-- All `process.env.NEXT_PUBLIC_*` → `import.meta.env.VITE_*` pattern applied throughout.
-- `next/font/google` (Figtree) replaced with a standard Google Fonts `<link>` tag in `index.html`.
-- Scaffold shadcn UI components kept (button, card, input, select) — compatible with original app's component API.
+_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
 
 ## Product
 
-- Sales dashboard: filter by company and date range, view monthly/cumulative/growth charts and rep contribution pie chart.
-- AI Sales Insights: chat panel for natural language queries about sales tonnage, customers, and buying patterns.
+_Describe the high-level user-facing capabilities of this app once they exist._
+
+## User preferences
+
+_Populate as you build — explicit user instructions worth remembering across sessions._
 
 ## Gotchas
 
-- The Python backend must be run separately and configured via `VITE_API_URL`. Without it, the frontend shows "Unable to load sales summary" errors (expected behavior).
-- The backend lives in `.migration-backup/backend/` — it uses FastAPI + PostgreSQL + Alembic.
+_Populate as you build — sharp edges, "always run X before Y" rules._
 
 ## Pointers
 

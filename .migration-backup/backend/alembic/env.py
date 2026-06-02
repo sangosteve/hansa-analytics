@@ -18,8 +18,8 @@ from app.db import models  # noqa: F401
 
 config = context.config
 
-# Use DATABASE_URL from .env
-config.set_main_option("sqlalchemy.url", settings.database_url)
+# Use NEON_DATABASE_URL (or DATABASE_URL fallback)
+config.set_main_option("sqlalchemy.url", settings.db_url)
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)

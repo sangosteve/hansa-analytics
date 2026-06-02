@@ -1,5 +1,3 @@
-"use client";
-
 import { useEffect, useRef, useState } from "react";
 import { Send, Zap } from "lucide-react";
 import ReactECharts from "echarts-for-react";
@@ -7,8 +5,8 @@ import ReactECharts from "echarts-for-react";
 import {
   askAIInsight,
   getAISuggestions,
-  AIInsightResponse,
-  AISuggestion,
+  type AIInsightResponse,
+  type AISuggestion,
 } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import {
@@ -37,8 +35,8 @@ export default function AIInsightsPanel() {
 
   const loadSuggestions = async () => {
     try {
-      const suggestions = await getAISuggestions();
-      setSuggestions(suggestions);
+      const data = await getAISuggestions();
+      setSuggestions(data);
     } catch (err) {
       console.error("Failed to load suggestions:", err);
     }
@@ -97,7 +95,6 @@ export default function AIInsightsPanel() {
       </CardHeader>
 
       <CardContent className="flex-1 flex flex-col gap-4 p-6 overflow-y-auto">
-        {/* Suggestions */}
         {!response && suggestions.length > 0 && (
           <div>
             <p className="text-xs font-semibold text-slate-600 mb-3">
@@ -119,7 +116,6 @@ export default function AIInsightsPanel() {
           </div>
         )}
 
-        {/* Response */}
         {response && (
           <div className="space-y-4">
             <div className="bg-slate-50 p-4 rounded-lg border">
@@ -131,7 +127,6 @@ export default function AIInsightsPanel() {
               )}
             </div>
 
-            {/* Chart */}
             {response.chart && response.chart.type !== "none" && (
               <div className="bg-white p-4 rounded-lg border">
                 <p className="text-xs font-semibold text-slate-600 mb-2">
@@ -146,7 +141,6 @@ export default function AIInsightsPanel() {
               </div>
             )}
 
-            {/* Table */}
             {response.table && (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm border-collapse">
@@ -180,7 +174,6 @@ export default function AIInsightsPanel() {
               </div>
             )}
 
-            {/* Follow-up Questions */}
             {response.follow_up_questions.length > 0 && (
               <div>
                 <p className="text-xs font-semibold text-slate-600 mb-2">
@@ -223,7 +216,6 @@ export default function AIInsightsPanel() {
         <div ref={messagesEndRef} />
       </CardContent>
 
-      {/* Input */}
       <form
         onSubmit={handleSubmit}
         className="border-t p-4 flex gap-2 bg-slate-50"

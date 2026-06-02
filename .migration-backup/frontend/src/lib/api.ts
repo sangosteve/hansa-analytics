@@ -1,5 +1,5 @@
 const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000/api";
+  import.meta.env.VITE_API_URL ?? "http://127.0.0.1:8000/api";
 
 export type CustomerMovementRow = {
   id: number;
@@ -80,10 +80,7 @@ export async function getSalesSummary(
   }
 
   const response = await fetch(
-    `${API_BASE_URL}/sales-summary?${searchParams.toString()}`,
-    {
-      cache: "no-store",
-    }
+    `${API_BASE_URL}/sales-summary?${searchParams.toString()}`
   );
 
   if (!response.ok) {
@@ -96,19 +93,14 @@ export async function getSalesSummary(
 export async function getCustomerMovement(params?: {
   action_band?: string;
   buyer_status?: string;
-
 }) {
   const searchParams = new URLSearchParams();
 
   if (params?.action_band) searchParams.set("action_band", params.action_band);
   if (params?.buyer_status) searchParams.set("buyer_status", params.buyer_status);
 
-
   const response = await fetch(
-    `${API_BASE_URL}/customer-movement?${searchParams.toString()}`,
-    {
-      cache: "no-store",
-    }
+    `${API_BASE_URL}/customer-movement?${searchParams.toString()}`
   );
 
   if (!response.ok) {
@@ -123,10 +115,7 @@ export async function getCustomerProductGroupItems(
   productGroupCode: string
 ) {
   const response = await fetch(
-    `${API_BASE_URL}/customer-movement/${customerCode}/product-groups/${productGroupCode}/items`,
-    {
-      cache: "no-store",
-    }
+    `${API_BASE_URL}/customer-movement/${customerCode}/product-groups/${productGroupCode}/items`
   );
 
   if (!response.ok) {
@@ -147,8 +136,6 @@ export async function rebuildCustomerMovement() {
 
   return response.json();
 }
-
-// AI Insights types and helpers
 
 export type AIChatMessage = {
   role: "user" | "assistant";
@@ -180,14 +167,17 @@ export type AISuggestion = {
   icon?: string;
 };
 
-export async function askAIInsight(message: string, options?: {
-  date_from?: string;
-  date_to?: string;
-  location?: string;
-  salesperson?: string;
-  item_group_code?: string;
-  customer_code?: string;
-}): Promise<AIInsightResponse> {
+export async function askAIInsight(
+  message: string,
+  options?: {
+    date_from?: string;
+    date_to?: string;
+    location?: string;
+    salesperson?: string;
+    item_group_code?: string;
+    customer_code?: string;
+  }
+): Promise<AIInsightResponse> {
   const payload = {
     message,
     ...options,
@@ -199,7 +189,6 @@ export async function askAIInsight(message: string, options?: {
       "Content-Type": "application/json",
     },
     body: JSON.stringify(payload),
-    cache: "no-store",
   });
 
   if (!response.ok) {
@@ -210,9 +199,7 @@ export async function askAIInsight(message: string, options?: {
 }
 
 export async function getAISuggestions(): Promise<AISuggestion[]> {
-  const response = await fetch(`${API_BASE_URL}/ai/suggestions`, {
-    cache: "no-store",
-  });
+  const response = await fetch(`${API_BASE_URL}/ai/suggestions`);
 
   if (!response.ok) {
     throw new Error("Failed to fetch AI suggestions");
