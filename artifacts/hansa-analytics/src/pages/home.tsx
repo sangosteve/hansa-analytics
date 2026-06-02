@@ -380,7 +380,7 @@ export default function Home() {
   );
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background text-foreground">
+    <div className="flex h-full overflow-hidden">
       {/* ── Left: scrollable dashboard ── */}
       <div className="flex-1 min-w-0 overflow-y-auto">
         <div className="p-5 space-y-4">
@@ -588,7 +588,7 @@ export default function Home() {
       </div>
 
       {/* ── Right: AI sidebar ── */}
-      <div className="w-[360px] flex-shrink-0 border-l border-border flex flex-col bg-card">
+      <div className="w-[360px] flex-shrink-0 border-l border-border flex flex-col bg-card overflow-hidden">
         <AIInsightsPanel />
       </div>
     </div>

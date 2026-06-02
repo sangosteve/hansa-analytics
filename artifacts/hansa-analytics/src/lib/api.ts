@@ -198,6 +198,103 @@ export async function askAIInsight(
   return response.json() as Promise<AIInsightResponse>;
 }
 
+// ── Movement analytics types ──────────────────────────────────────────────
+
+export type ProductGroupMovementRow = {
+  group_code: string;
+  group_name: string;
+  total_tonnes: number;
+  t3m: number;
+  p3m: number;
+  ytd: number;
+  lytd: number;
+  last_sale: string | null;
+  unique_customers: number;
+  unique_items: number;
+  status: "Growing" | "Declining" | "Stable" | "Dead" | "New";
+  change_pct: number | null;
+  yoy_pct: number | null;
+};
+
+export type SlowMovingItem = {
+  item_code: string;
+  item_name: string;
+  group_code: string;
+  group_name: string;
+  total_tonnes: number;
+  t3m: number;
+  ytd: number;
+  last_sale: string | null;
+  days_since: number;
+  customers: number;
+  status: "Dead Stock" | "Very Slow" | "Slow Mover";
+};
+
+export type CustomerMovementRow = {
+  customer_code: string;
+  customer_name: string;
+  total_tonnes: number;
+  t3m: number;
+  p3m: number;
+  last_purchase: string | null;
+  days_since: number;
+  product_groups: number;
+  last_rep: string | null;
+  top_group: string | null;
+  status: "Active" | "At Risk" | "Stopped" | "Declining" | "Irregular";
+  change_pct: number | null;
+};
+
+export type MovementSummary = {
+  data_as_of: string;
+  growing_groups: number;
+  dead_groups: number;
+  declining_groups: number;
+  stopped_customers: number;
+  at_risk_customers: number;
+  slow_items: number;
+  dead_items: number;
+};
+
+export type GroupMonthlyRow = {
+  month: string;
+  tonnes: number;
+  customers: number;
+  items: number;
+};
+
+export async function getMovementSummary(companyNo = "3"): Promise<MovementSummary> {
+  const res = await fetch(`${API_BASE_URL}/movement/summary?company_no=${companyNo}`);
+  if (!res.ok) throw new Error("Failed to fetch movement summary");
+  return res.json();
+}
+
+export async function getProductGroupMovement(companyNo = "3"): Promise<ProductGroupMovementRow[]> {
+  const res = await fetch(`${API_BASE_URL}/movement/product-groups?company_no=${companyNo}`);
+  if (!res.ok) throw new Error("Failed to fetch product group movement");
+  return res.json();
+}
+
+export async function getProductGroupMonthly(groupCode: string, companyNo = "3"): Promise<GroupMonthlyRow[]> {
+  const res = await fetch(`${API_BASE_URL}/movement/product-groups/${groupCode}/monthly?company_no=${companyNo}`);
+  if (!res.ok) throw new Error("Failed to fetch group monthly");
+  return res.json();
+}
+
+export async function getSlowMovingItems(companyNo = "3", groupCode?: string): Promise<SlowMovingItem[]> {
+  const params = new URLSearchParams({ company_no: companyNo });
+  if (groupCode) params.set("group_code", groupCode);
+  const res = await fetch(`${API_BASE_URL}/movement/items?${params}`);
+  if (!res.ok) throw new Error("Failed to fetch slow moving items");
+  return res.json();
+}
+
+export async function getCustomerMovementAnalytics(companyNo = "3"): Promise<CustomerMovementRow[]> {
+  const res = await fetch(`${API_BASE_URL}/movement/customers?company_no=${companyNo}`);
+  if (!res.ok) throw new Error("Failed to fetch customer movement");
+  return res.json();
+}
+
 export async function getAISuggestions(): Promise<AISuggestion[]> {
   const response = await fetch(`${API_BASE_URL}/ai/suggestions`);
 
