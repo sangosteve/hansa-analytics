@@ -135,6 +135,14 @@ If the question is unclear or no tool matches, use tool_name "clarify".
 
         response_text = response.choices[0].message.content.strip()
 
+        # Strip markdown code fences if present
+        if response_text.startswith("```"):
+            lines = response_text.splitlines()
+            response_text = "\n".join(
+                line for line in lines
+                if not line.startswith("```")
+            ).strip()
+
         # Parse JSON response
         result = json.loads(response_text)
         return result
@@ -267,6 +275,14 @@ Table rules:
         )
 
         response_text = response.choices[0].message.content.strip()
+
+        # Strip markdown code fences if present
+        if response_text.startswith("```"):
+            lines = response_text.splitlines()
+            response_text = "\n".join(
+                line for line in lines
+                if not line.startswith("```")
+            ).strip()
 
         # Parse JSON
         data = json.loads(response_text)
