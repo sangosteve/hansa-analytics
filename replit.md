@@ -14,7 +14,7 @@ A professional analytics dashboard and AI-driven insight platform for HansaWorld
 - **Frontend**: React 19, TypeScript, Vite, Tailwind CSS v4, Radix UI, TanStack Query, ECharts, Wouter
 - **Backend**: Python 3.11, FastAPI, SQLAlchemy, Alembic, Pydantic, Uvicorn
 - **AI**: OpenAI SDK (GPT-4o) for AI insights
-- **Database**: Supabase PostgreSQL (via `NEON_DATABASE_URL`)
+- **Database**: Neon PostgreSQL (via `NEON_DATABASE_URL`)
 - **Monorepo**: pnpm workspaces
 
 ## Where things live
@@ -48,5 +48,5 @@ _Populate as you build — explicit user instructions worth remembering across s
 
 ## Pointers
 
-- DB connection: `NEON_DATABASE_URL` secret (Supabase connection string)
+- DB connection: `NEON_DATABASE_URL` secret (Neon connection string)
 - AI: `OPENAI_API_KEY` secret (optional — AI insights panel requires it)
