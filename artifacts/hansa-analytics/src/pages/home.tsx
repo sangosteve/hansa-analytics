@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { RefreshCw, TrendingUp, Calendar, Building2, AlertTriangle, TrendingDown, Activity, Package } from "lucide-react";
+import { RefreshCw, TrendingUp, Building2, AlertTriangle, TrendingDown, Activity, Package } from "lucide-react";
 import ReactECharts from "echarts-for-react";
 
 import {
@@ -9,7 +9,6 @@ import {
   type PredictiveInsightsResponse,
 } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import AIInsightsPanel from "@/components/ai/ai-insights-panel";
 import { useCompany } from "@/lib/company-context";
 
@@ -55,14 +54,12 @@ const darkChartBase = {
 };
 
 export default function Home() {
-  const { companyNos, saleScope, companyLabel } = useCompany();
+  const { companyNos, saleScope, companyLabel, dateFrom, dateTo, datePreset } = useCompany();
   const [summary, setSummary] = useState<SalesSummaryResponse | null>(null);
   const [predictive, setPredictive] = useState<PredictiveInsightsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [predictiveLoading, setPredictiveLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [dateFrom, setDateFrom] = useState("2024-01-01");
-  const [dateTo, setDateTo] = useState("2026-12-31");
   const [error, setError] = useState<string | null>(null);
 
   const loadAll = async () => {
@@ -85,11 +82,8 @@ export default function Home() {
     }
   };
 
-  useEffect(() => {
-    loadAll();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(companyNos), saleScope, dateFrom, dateTo]);
+  useEffect(() => { loadAll(); }, [JSON.stringify(companyNos), saleScope, dateFrom, dateTo]);
 
   const salesRows = summary?.monthly_sales ?? [];
 
@@ -296,24 +290,13 @@ export default function Home() {
             </Button>
           </div>
 
-          {/* Date filters */}
-          <div className="grid grid-cols-3 gap-3">
-            <div className="space-y-1">
-              <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Start date</label>
-              <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
-                className="h-8 text-xs border-border bg-secondary" />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">End date</label>
-              <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)}
-                className="h-8 text-xs border-border bg-secondary" />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Range</label>
-              <div className="h-8 flex items-center px-3 rounded-md border border-border bg-secondary text-xs text-muted-foreground">
-                {formatDateLabel(dateFrom)} — {formatDateLabel(dateTo)}
-              </div>
-            </div>
+          {/* Date range display */}
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-md border border-border bg-secondary text-xs text-muted-foreground">
+            <span className="font-medium text-foreground uppercase tracking-wider text-[10px]">
+              {datePreset === "all" ? "All time" : datePreset.toUpperCase()}
+            </span>
+            <span className="text-border">·</span>
+            {formatDateLabel(dateFrom)} — {formatDateLabel(dateTo)}
           </div>
 
           {/* KPI cards */}

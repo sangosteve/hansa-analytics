@@ -6,7 +6,14 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { useCompany, COMPANY_OPTIONS, SCOPE_OPTIONS, type SaleScope } from "@/lib/company-context";
+import {
+  useCompany,
+  COMPANY_OPTIONS,
+  SCOPE_OPTIONS,
+  DATE_PRESET_OPTIONS,
+  type SaleScope,
+  type DatePreset,
+} from "@/lib/company-context";
 
 const tabs = [
   { path: "/", label: "Sales Dashboard", icon: BarChart2 },
@@ -17,7 +24,12 @@ const ALL_VALUES = COMPANY_OPTIONS.map((c) => c.value);
 
 export default function NavBar() {
   const [location] = useLocation();
-  const { companyNos, setCompanyNos, saleScope, setSaleScope, companyLabel } = useCompany();
+  const {
+    companyNos, setCompanyNos,
+    saleScope, setSaleScope,
+    companyLabel,
+    datePreset, setDatePreset,
+  } = useCompany();
   const [open, setOpen] = useState(false);
 
   const isAll = companyNos.includes("all") || companyNos.length === ALL_VALUES.length || companyNos.length === 0;
@@ -59,6 +71,23 @@ export default function NavBar() {
       })}
 
       <div className="ml-auto flex items-center gap-2 pr-1">
+        {/* Date range presets */}
+        <div className="flex items-center rounded-md border border-border bg-secondary overflow-hidden h-7">
+          {DATE_PRESET_OPTIONS.map((opt) => (
+            <button
+              key={opt.value}
+              onClick={() => setDatePreset(opt.value as DatePreset)}
+              className={`px-2 h-full text-xs font-medium transition-colors border-r border-border last:border-r-0 ${
+                datePreset === opt.value
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:text-foreground hover:bg-accent/30"
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+
         {/* Sale scope segmented control */}
         <div className="flex items-center rounded-md border border-border bg-secondary overflow-hidden h-7">
           {SCOPE_OPTIONS.map((opt) => (

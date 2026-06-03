@@ -5,13 +5,15 @@ Shared SQL filter builders used across all route modules.
 ACTIVE_COMPANIES: tuple[str, ...] = ("3", "4", "5", "6")
 
 INTERNAL_CUSTOMER_CODES: frozenset[str] = frozenset({
-    "PSS-ENGINEERING",
-    "PSS-MINING",
-    "PSS-RETAIL",
-    "PSS-MANUFACTURING",
-    "PSS-HEADOFFICE",
-    "PSS-PROPERTY",
-    "PSS-CONSTRUCTION",
+    "PSS002",
+    "PSS002U",
+    "PSS003U",
+    "PSS004U",
+    "PSS005U",
+    "PSS006U",
+    "PSS007U",
+    "PSS008U",
+    "PSS0008U",
 })
 
 _INTERNAL_CODES_SQL = ", ".join(f"'{c}'" for c in sorted(INTERNAL_CUSTOMER_CODES))

@@ -191,7 +191,7 @@ def customer_movement(
                 MAX(salesperson) AS last_rep,
                 (SELECT item_group_code FROM fact_sales_lines f2
                  WHERE f2.customer_code = fact_sales_lines.customer_code
-                   AND {co_frag.replace('company_no', 'f2.company_no')}
+                   AND f2.company_no = fact_sales_lines.company_no
                  GROUP BY item_group_code ORDER BY SUM(tonnes) DESC LIMIT 1
                 ) AS top_group
             FROM fact_sales_lines
