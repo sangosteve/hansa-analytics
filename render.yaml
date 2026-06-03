@@ -1,0 +1,41 @@
+services:
+  # ── Backend: FastAPI (Python) ──────────────────────────────────────────────
+  - type: web
+    name: hansa-analytics-api
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: NEON_DATABASE_URL
+        sync: false
+      - key: HANSA_BASE_URL
+        sync: false
+      - key: HANSA_USERNAME
+        sync: false
+      - key: HANSA_PASSWORD
+        sync: false
+      - key: HANSA_COMPANY_NO
+        sync: false
+      - key: HANSA_MASTER_COMPANY_NO
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: ALLOWED_ORIGINS
+        value: "*"
+    healthCheckPath: /api/healthz
+
+  # ── Frontend: React / Vite (Static Site) ───────────────────────────────────
+  - type: web
+    name: hansa-analytics-frontend
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    envVars:
+      - key: VITE_API_URL
+        sync: false
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
