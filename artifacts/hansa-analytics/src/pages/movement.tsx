@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   TrendingUp, TrendingDown, AlertTriangle, Package,
-  Users, Box, ArrowUpRight, ArrowDownRight, Minus, RefreshCw
+  Users, Box, ArrowUpRight, ArrowDownRight, Minus, RefreshCw,
+  Warehouse, RotateCcw
 } from "lucide-react";
 import { useCompany } from "@/lib/company-context";
 import ReactECharts from "echarts-for-react";
@@ -12,14 +13,19 @@ import {
   getSlowMovingItems,
   getCustomerMovementAnalytics,
   getProductGroupMonthly,
+  getStockStatus,
+  getStockSummary,
+  triggerStockRefresh,
   type MovementSummary,
   type ProductGroupMovementRow,
   type SlowMovingItem,
   type CustomerMovementRow,
   type GroupMonthlyRow,
+  type StockRow,
+  type StockSummary,
 } from "@/lib/api";
 
-type TabId = "groups" | "items" | "customers";
+type TabId = "groups" | "items" | "customers" | "stock";
 
 const STATUS_BADGE: Record<string, string> = {
   Growing:    "bg-emerald-500/15 text-emerald-400 border border-emerald-500/25",
@@ -473,11 +479,203 @@ function CustomersTab({ companyNo }: { companyNo: string }) {
   );
 }
 
+// ── Stock Status tab ──────────────────────────────────────────────────────────
+function StockKpi({ label, value, color = "text-foreground", sub }: {
+  label: string; value: string | number; color?: string; sub?: string;
+}) {
+  return (
+    <div className="rounded-lg border border-border bg-card p-3">
+      <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider truncate">{label}</p>
+      <p className={`text-lg font-bold mt-1 ${color}`}>{value}</p>
+      {sub && <p className="text-[10px] text-muted-foreground mt-0.5">{sub}</p>}
+    </div>
+  );
+}
+
+const fmt2 = new Intl.NumberFormat("en-AU", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+const fmtMoney = new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD", minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+function StockTab({ companyNo }: { companyNo: string }) {
+  const [rows, setRows] = useState<StockRow[]>([]);
+  const [summary, setSummary] = useState<StockSummary | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [search, setSearch] = useState("");
+  const [stockFilter, setStockFilter] = useState<"all" | "instock" | "zero" | "alert">("all");
+  const [refreshMsg, setRefreshMsg] = useState<string | null>(null);
+
+  const load = () => {
+    setLoading(true);
+    Promise.all([
+      getStockStatus(companyNo),
+      getStockSummary(companyNo),
+    ]).then(([r, s]) => {
+      setRows(r);
+      setSummary(s);
+    }).finally(() => setLoading(false));
+  };
+
+  useEffect(() => { load(); }, [companyNo]);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    setRefreshMsg(null);
+    try {
+      const result = await triggerStockRefresh(companyNo);
+      const total = result.results?.reduce((acc: number, r: any) => acc + (r.records ?? 0), 0) ?? 0;
+      setRefreshMsg(`Refreshed — ${total} records`);
+      load();
+    } catch {
+      setRefreshMsg("Refresh failed");
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const filtered = useMemo(() => {
+    let r = rows;
+    if (stockFilter === "instock") r = r.filter((x) => x.instock > 0);
+    if (stockFilter === "zero") r = r.filter((x) => x.instock === 0);
+    if (stockFilter === "alert") r = r.filter((x) => x.instock === 0 && x.ord_out > 0);
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      r = r.filter((x) => x.art_code.toLowerCase().includes(q) || (x.item_name ?? "").toLowerCase().includes(q) || (x.item_group_code ?? "").toLowerCase().includes(q));
+    }
+    return r;
+  }, [rows, stockFilter, search]);
+
+  const stockBand = (row: StockRow) => {
+    if (row.instock === 0 && row.ord_out > 0) return "bg-red-500/8 hover:bg-red-500/14";
+    if (row.instock > 0 && row.instock < row.ord_out) return "bg-amber-500/8 hover:bg-amber-500/14";
+    return "hover:bg-accent/20";
+  };
+
+  const instock_color = (row: StockRow) => {
+    if (row.instock === 0) return "text-red-400 font-semibold";
+    if (row.instock < row.ord_out) return "text-amber-400 font-semibold";
+    return "text-emerald-400";
+  };
+
+  return (
+    <div className="space-y-3">
+      {/* KPI row */}
+      {summary && (
+        <div className="grid grid-cols-4 gap-2 sm:grid-cols-7">
+          <StockKpi label="Total Items" value={fmt2.format(summary.total_items)} />
+          <StockKpi label="In Stock" value={fmt2.format(summary.items_in_stock)} color="text-emerald-400" sub={`${summary.total_items ? Math.round((summary.items_in_stock / summary.total_items) * 100) : 0}% of items`} />
+          <StockKpi label="Zero Stock" value={fmt2.format(summary.items_zero_stock)} color="text-amber-400" />
+          <StockKpi label="Stockout + Orders" value={fmt2.format(summary.stockout_with_orders)} color="text-red-400" sub="Selling but empty" />
+          <StockKpi label="Total On Hand" value={fmt2.format(summary.total_instock)} sub="units" />
+          <StockKpi label="On Order (out)" value={fmt2.format(summary.total_ord_out)} sub="customer orders" />
+          <StockKpi label="Incoming (PO)" value={fmt2.format(summary.total_po_qty)} sub="purchase orders" color="text-sky-400" />
+        </div>
+      )}
+
+      {/* Controls */}
+      <div className="flex items-center gap-2 flex-wrap">
+        {[
+          { key: "all", label: "All" },
+          { key: "instock", label: "In Stock" },
+          { key: "zero", label: "Zero Stock" },
+          { key: "alert", label: "⚠ Stockout + Orders" },
+        ].map((f) => (
+          <button
+            key={f.key}
+            onClick={() => setStockFilter(f.key as typeof stockFilter)}
+            className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+              stockFilter === f.key
+                ? "bg-primary text-primary-foreground"
+                : "bg-secondary border border-border text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {f.label}
+          </button>
+        ))}
+        <input
+          type="text"
+          placeholder="Search item code or name…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="h-7 px-3 rounded-md border border-border bg-secondary text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+        />
+        <button
+          onClick={handleRefresh}
+          disabled={refreshing}
+          className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary/10 border border-primary/30 text-xs text-primary hover:bg-primary/20 transition-colors disabled:opacity-50"
+        >
+          <RotateCcw className={`h-3 w-3 ${refreshing ? "animate-spin" : ""}`} />
+          {refreshing ? "Refreshing…" : "Refresh from Hansa"}
+        </button>
+        {refreshMsg && <span className="text-[10px] text-muted-foreground">{refreshMsg}</span>}
+      </div>
+
+      {/* Last fetched */}
+      {summary?.last_fetched_at && (
+        <p className="text-[10px] text-muted-foreground">
+          Snapshot taken: {new Date(summary.last_fetched_at).toLocaleString("en-AU")}
+        </p>
+      )}
+
+      {/* Table */}
+      <div className="rounded-lg border border-border overflow-hidden">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="border-b border-border bg-secondary/60">
+              <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground">Item</th>
+              <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground">Group</th>
+              <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground">Location</th>
+              <th className="text-right px-3 py-2.5 font-semibold text-muted-foreground">In Stock</th>
+              <th className="text-right px-3 py-2.5 font-semibold text-muted-foreground">On Order</th>
+              <th className="text-right px-3 py-2.5 font-semibold text-muted-foreground">PO Qty</th>
+              <th className="text-right px-3 py-2.5 font-semibold text-muted-foreground">Reserved</th>
+              <th className="text-right px-3 py-2.5 font-semibold text-muted-foreground">In Transit</th>
+              <th className="text-right px-3 py-2.5 font-semibold text-muted-foreground">Avg Cost</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <LoadingRows cols={9} />
+            ) : filtered.slice(0, 500).map((r, i) => (
+              <tr key={`${r.art_code}-${r.location}-${i}`} className={`border-b border-border/40 transition-colors ${stockBand(r)}`}>
+                <td className="px-3 py-2">
+                  <div className="font-medium text-foreground truncate max-w-[200px]">{r.item_name ?? r.art_code}</div>
+                  <div className="text-[10px] text-muted-foreground">{r.art_code}</div>
+                </td>
+                <td className="px-3 py-2 text-muted-foreground truncate max-w-[110px]">{r.item_group_name ?? r.item_group_code ?? "—"}</td>
+                <td className="px-3 py-2">
+                  <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-secondary border border-border text-muted-foreground">{r.location}</span>
+                </td>
+                <td className={`px-3 py-2 text-right ${instock_color(r)}`}>{fmt2.format(r.instock)}</td>
+                <td className="px-3 py-2 text-right text-foreground">{r.ord_out > 0 ? fmt2.format(r.ord_out) : <span className="text-muted-foreground">—</span>}</td>
+                <td className="px-3 py-2 text-right text-sky-400">{r.po_qty > 0 ? fmt2.format(r.po_qty) : <span className="text-muted-foreground">—</span>}</td>
+                <td className="px-3 py-2 text-right text-muted-foreground">{r.rsrv_qty > 0 ? fmt2.format(r.rsrv_qty) : "—"}</td>
+                <td className="px-3 py-2 text-right text-muted-foreground">{r.in_shipment > 0 ? fmt2.format(r.in_shipment) : "—"}</td>
+                <td className="px-3 py-2 text-right text-muted-foreground">{r.weighed_av_price ? fmtMoney.format(r.weighed_av_price) : "—"}</td>
+              </tr>
+            ))}
+            {!loading && filtered.length === 0 && (
+              <tr><td colSpan={9} className="px-3 py-10 text-center text-muted-foreground">
+                {rows.length === 0
+                  ? <span>No stock data — click <strong>Refresh from Hansa</strong> to load a snapshot</span>
+                  : "No items match your filter"}
+              </td></tr>
+            )}
+            {!loading && filtered.length > 500 && (
+              <tr><td colSpan={9} className="px-3 py-2 text-center text-muted-foreground text-xs">Showing 500 of {filtered.length} items</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 const TABS: { id: TabId; label: string; icon: typeof Package }[] = [
   { id: "groups", label: "Product Groups", icon: Package },
   { id: "items", label: "Slow-Moving Items", icon: Box },
   { id: "customers", label: "Customers", icon: Users },
+  { id: "stock", label: "Stock Status", icon: Warehouse },
 ];
 
 export default function Movement() {
@@ -556,6 +754,7 @@ export default function Movement() {
         {tab === "groups" && <ProductGroupsTab companyNo={companyNo} />}
         {tab === "items" && <ItemsTab companyNo={companyNo} />}
         {tab === "customers" && <CustomersTab companyNo={companyNo} />}
+        {tab === "stock" && <StockTab companyNo={companyNo} />}
       </div>
     </div>
   );

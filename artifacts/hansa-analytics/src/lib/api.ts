@@ -379,3 +379,60 @@ export async function getAISuggestions(): Promise<AISuggestion[]> {
 
   return response.json() as Promise<AISuggestion[]>;
 }
+
+// ── Stock status types ────────────────────────────────────────────────────────
+
+export type StockRow = {
+  company_no: string;
+  art_code: string;
+  location: string;
+  item_name: string | null;
+  item_group_code: string | null;
+  item_group_name: string | null;
+  instock: number;
+  ord_out: number;
+  po_qty: number;
+  rsrv_qty: number;
+  in_shipment: number;
+  weighed_av_price: number | null;
+  fetched_at: string | null;
+};
+
+export type StockSummary = {
+  total_items: number;
+  items_in_stock: number;
+  items_zero_stock: number;
+  stockout_with_orders: number;
+  total_instock: number;
+  total_ord_out: number;
+  total_po_qty: number;
+  total_in_shipment: number;
+  last_fetched_at: string | null;
+};
+
+export async function getStockStatus(
+  companyNo: string = "all",
+  search?: string,
+  groupCode?: string,
+): Promise<StockRow[]> {
+  const params = new URLSearchParams({ company_no: companyNo });
+  if (search) params.set("search", search);
+  if (groupCode) params.set("group_code", groupCode);
+  const res = await fetch(`${API_BASE_URL}/stock?${params}`);
+  if (!res.ok) throw new Error("Failed to fetch stock status");
+  return res.json();
+}
+
+export async function getStockSummary(companyNo: string = "all"): Promise<StockSummary> {
+  const params = new URLSearchParams({ company_no: companyNo });
+  const res = await fetch(`${API_BASE_URL}/stock/summary?${params}`);
+  if (!res.ok) throw new Error("Failed to fetch stock summary");
+  return res.json();
+}
+
+export async function triggerStockRefresh(companyNo: string = "all"): Promise<{ results: any[] }> {
+  const params = new URLSearchParams({ company_no: companyNo });
+  const res = await fetch(`${API_BASE_URL}/stock/refresh?${params}`, { method: "POST" });
+  if (!res.ok) throw new Error("Stock refresh failed");
+  return res.json();
+}

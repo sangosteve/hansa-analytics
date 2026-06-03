@@ -8,6 +8,7 @@ from app.api.routes_hansa import router as hansa_router
 from app.api.routes_movement import router as movement_router
 from app.api.routes_refresh import router as refresh_router
 from app.api.routes_sales_summary import router as sales_summary_router
+from app.api.routes_stock import router as stock_router
 from app.core.config import settings
 
 app = FastAPI(
@@ -29,6 +30,7 @@ app.include_router(analytics_router)
 app.include_router(sales_summary_router)
 app.include_router(customer_movement_router)
 app.include_router(movement_router)
+app.include_router(stock_router)
 app.include_router(ai_router)
 
 

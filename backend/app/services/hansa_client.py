@@ -127,6 +127,22 @@ class HansaClient:
             f"&fields=SerNr,OrderNr,ShipDate,CustCode,ArtCode,Ship,Location,Weight,OKFlag"
         )
 
+    async def get_item_stock_status(self, location: str) -> list[dict]:
+        """
+        Fetch the ItemStatusVc (Item Status) support register for a specific
+        warehouse location.  Returns one row per item in that location.
+
+        Fields returned by Hansa: Code (item code), Location, Instock,
+        OrddOut (customer orders out), POQty, RsrvQty, InShipment, WeighedAvPrice.
+        Note: the item key field is "Code", not "ArtCode", and customer-order qty
+        is "OrddOut" (double-d).  Empty Code rows are warehouse-level totals — skip them.
+        """
+        return await self._get(
+            f"api/{self.company_no}/ItemStatusVc"
+            f"?fields=Code,Location,Instock,OrddOut,POQty,RsrvQty,InShipment,WeighedAvPrice"
+            f"&filter.Location={location}"
+        )
+
     async def debug_item_groups_response(self) -> dict:
         response = await self._request(
             f"api/{self.company_no}/ITVc"

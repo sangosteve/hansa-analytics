@@ -377,6 +377,41 @@ class HansaDeliveryLine(Base):
     )
 
 
+class ItemStockStatus(Base):
+    """
+    Snapshot of stock levels from Hansa ItemStatusVc register.
+    One row per (company_no, art_code, location).
+    Replaced wholesale on each refresh for the given company.
+    """
+    __tablename__ = "item_stock_status"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+
+    company_no: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    art_code: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    location: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+
+    item_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    item_group_code: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, index=True)
+    item_group_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+
+    instock: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False, default=0)
+    ord_out: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False, default=0)
+    po_qty: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False, default=0)
+    rsrv_qty: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False, default=0)
+    in_shipment: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False, default=0)
+    weighed_av_price: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 4), nullable=True)
+
+    fetched_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+    )
+
+    __table_args__ = (
+        UniqueConstraint("company_no", "art_code", "location", name="uq_item_stock_company_art_loc"),
+    )
+
+
 class FactSalesLine(Base):
     __tablename__ = "fact_sales_lines"
 

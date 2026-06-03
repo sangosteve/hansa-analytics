@@ -19,6 +19,7 @@ from app.services.source_invoice_service import refresh_invoice_source
 from app.services.source_delivery_service import refresh_delivery_source
 from app.services.fact_sales_service import rebuild_fact_sales_lines
 from app.services.movement_service import rebuild_customer_product_group_movement
+from app.services.stock_service import refresh_stock_status
 
 DATE_FROM = date(2024, 1, 1)
 DATE_TO   = date(2026, 6, 3)
@@ -52,6 +53,7 @@ async def run_step(label, coro_fn, *args, **kwargs):
 def parse_args():
     args = sys.argv[1:]
     skip_master = "--skip-master" in args
+    skip_stock  = "--skip-stock"  in args
     if "--companies" in args:
         idx = args.index("--companies")
         companies = []
@@ -64,16 +66,16 @@ def parse_args():
             sys.exit(1)
     else:
         companies = ALL_COMPANIES
-    return skip_master, companies
+    return skip_master, skip_stock, companies
 
 
 async def main():
-    skip_master, companies = parse_args()
+    skip_master, skip_stock, companies = parse_args()
 
     log(f"Companies to refresh: {companies}")
     log(f"Date range: {DATE_FROM} → {DATE_TO}")
 
-    total_steps = (0 if skip_master else 1) + len(companies) * 3 + 1
+    total_steps = (0 if skip_master else 1) + len(companies) * 3 + 1 + (0 if skip_stock else len(companies))
     step = 0
 
     def next_step(label):
@@ -90,7 +92,7 @@ async def main():
         log(f"\n--- Company {company_no} ---")
 
         await run_step(
-            next_step(f"source invoices  [company={company_no}]"),
+            next_step(f"source invoices   [company={company_no}]"),
             refresh_invoice_source,
             DATE_FROM, DATE_TO, company_no,
         )
@@ -109,6 +111,16 @@ async def main():
 
     await run_step(next_step("customer-movement (all companies)"),
                    rebuild_customer_product_group_movement)
+
+    if not skip_stock:
+        for company_no in companies:
+            await run_step(
+                next_step(f"stock status      [company={company_no}]"),
+                refresh_stock_status,
+                company_no,
+            )
+    else:
+        log("=== stock-status (SKIPPED) ===")
 
     log("\n=== ALL DONE ===")
 
