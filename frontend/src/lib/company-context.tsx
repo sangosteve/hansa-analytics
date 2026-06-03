@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useMemo, type ReactNode } from "react";
+import { createContext, useContext, useState, useMemo, useCallback, type ReactNode } from "react";
 
 export const COMPANY_OPTIONS = [
   { value: "3", label: "Retail" },
@@ -78,6 +78,10 @@ type CompanyContextType = {
   setDatePreset: (v: DatePreset) => void;
   dateFrom: string;
   dateTo: string;
+  customFrom: string;
+  customTo: string;
+  isCustom: boolean;
+  setCustomDates: (from: string, to: string) => void;
 };
 
 const CompanyContext = createContext<CompanyContextType | null>(null);
@@ -89,7 +93,7 @@ function buildLabel(companyNos: string[]): string {
     return "All Companies";
   }
   if (companyNos.length === 1) {
-    return `Co. ${companyNos[0]} — ${COMPANY_OPTIONS.find((c) => c.value === companyNos[0])?.label ?? companyNos[0]}`;
+    return COMPANY_OPTIONS.find((c) => c.value === companyNos[0])?.label ?? companyNos[0];
   }
   return companyNos
     .map((no) => COMPANY_OPTIONS.find((c) => c.value === no)?.label ?? no)
@@ -99,10 +103,31 @@ function buildLabel(companyNos: string[]): string {
 export function CompanyProvider({ children }: { children: ReactNode }) {
   const [companyNos, setCompanyNos] = useState<string[]>(["all"]);
   const [saleScope, setSaleScope] = useState<SaleScope>("all");
-  const [datePreset, setDatePreset] = useState<DatePreset>("all");
+  const [datePreset, setDatePresetRaw] = useState<DatePreset>("all");
+  const [customFrom, setCustomFrom] = useState<string>("");
+  const [customTo, setCustomTo] = useState<string>("");
+
+  const isCustom = !!(customFrom && customTo);
 
   const companyLabel = buildLabel(companyNos);
-  const { dateFrom, dateTo } = useMemo(() => computePresetDates(datePreset), [datePreset]);
+  const { dateFrom: presetFrom, dateTo: presetTo } = useMemo(
+    () => computePresetDates(datePreset),
+    [datePreset],
+  );
+
+  const dateFrom = isCustom ? customFrom : presetFrom;
+  const dateTo   = isCustom ? customTo   : presetTo;
+
+  const setDatePreset = useCallback((v: DatePreset) => {
+    setCustomFrom("");
+    setCustomTo("");
+    setDatePresetRaw(v);
+  }, []);
+
+  const setCustomDates = useCallback((from: string, to: string) => {
+    setCustomFrom(from);
+    setCustomTo(to);
+  }, []);
 
   return (
     <CompanyContext.Provider value={{
@@ -111,6 +136,8 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
       companyLabel,
       datePreset, setDatePreset,
       dateFrom, dateTo,
+      customFrom, customTo, isCustom,
+      setCustomDates,
     }}>
       {children}
     </CompanyContext.Provider>

@@ -54,15 +54,18 @@ const darkChartBase = {
 };
 
 export default function Home() {
-  const { companyNos, saleScope, companyLabel, dateFrom, dateTo, datePreset } = useCompany();
+  const { companyNos, saleScope, companyLabel, dateFrom, dateTo, datePreset, isCustom } = useCompany();
   const [summary, setSummary] = useState<SalesSummaryResponse | null>(null);
+  const [momSummary, setMomSummary] = useState<SalesSummaryResponse | null>(null);
   const [predictive, setPredictive] = useState<PredictiveInsightsResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [momLoading, setMomLoading] = useState(true);
   const [predictiveLoading, setPredictiveLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const loadAll = async () => {
+  // Loads date-filtered KPI data + predictive (re-runs on any filter change)
+  const loadFiltered = async () => {
     setLoading(true);
     setPredictiveLoading(true);
     setError(null);
@@ -82,33 +85,58 @@ export default function Home() {
     }
   };
 
+  // Loads all-time MoM comparison data (only re-runs when company or scope changes)
+  const loadMom = async () => {
+    setMomLoading(true);
+    try {
+      const data = await getSalesSummary("2000-01-01", "2099-12-31", companyNos, saleScope);
+      setMomSummary(data);
+    } catch {
+      // silently keep previous MoM data on error
+    } finally {
+      setMomLoading(false);
+    }
+  };
+
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { loadAll(); }, [JSON.stringify(companyNos), saleScope, dateFrom, dateTo]);
+  useEffect(() => { loadFiltered(); }, [JSON.stringify(companyNos), saleScope, dateFrom, dateTo]);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { loadMom(); }, [JSON.stringify(companyNos), saleScope]);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try { await Promise.all([loadFiltered(), loadMom()]); } finally { setRefreshing(false); }
+  };
+
+  // Date-filtered rows → KPI numbers, division breakdown
   const salesRows = summary?.monthly_sales ?? [];
+  // All-time rows → MoM comparison charts (unaffected by date range filter)
+  const momRows = momSummary?.monthly_sales ?? [];
 
-  const years = useMemo(
-    () => Array.from(new Set(salesRows.map((row) => row.year))).sort(),
-    [salesRows]
+  // MoM chart data — uses all-time momRows, NOT affected by date range
+  const momYears = useMemo(
+    () => Array.from(new Set(momRows.map((row) => row.year))).sort(),
+    [momRows]
   );
-  const currentYear = years[years.length - 1];
-  const previousYear = years[years.length - 2];
+  const currentYear = momYears[momYears.length - 1];
+  const previousYear = momYears[momYears.length - 2];
 
   const monthlyComparisonData = useMemo(() => {
     const monthMap = new Map<number, Record<string, number | string>>();
     for (let month = 1; month <= 12; month++) monthMap.set(month, { month: monthLabels[month - 1] });
-    salesRows.forEach((row) => {
+    momRows.forEach((row) => {
       const record = monthMap.get(row.month);
       if (!record) return;
       record[`year${row.year}`] = row.total_tonnes;
     });
     return Array.from(monthMap.values());
-  }, [salesRows]);
+  }, [momRows]);
 
   const cumulativeComparisonData = useMemo(() => {
     const yearMonthTotals = new Map<number, number[]>();
-    years.forEach((year) => yearMonthTotals.set(year, Array(12).fill(0)));
-    salesRows.forEach((row) => {
+    momYears.forEach((year) => yearMonthTotals.set(year, Array(12).fill(0)));
+    momRows.forEach((row) => {
       const totals = yearMonthTotals.get(row.year);
       if (!totals) return;
       totals[row.month - 1] += row.total_tonnes;
@@ -116,19 +144,19 @@ export default function Home() {
     return Array.from({ length: 12 }, (_, index) => {
       const month = index + 1;
       const point: Record<string, number | string> = { month: monthLabels[index] };
-      years.forEach((year) => {
+      momYears.forEach((year) => {
         const totals = yearMonthTotals.get(year) ?? [];
         point[`year${year}`] = totals.slice(0, month).reduce((sum, v) => sum + v, 0);
       });
       return point;
     });
-  }, [salesRows, years]);
+  }, [momRows, momYears]);
 
   const growthData = useMemo(() => {
     if (!currentYear) return [];
     const currentTotals = new Array(12).fill(0);
     const previousTotals = new Array(12).fill(0);
-    salesRows.forEach((row) => {
+    momRows.forEach((row) => {
       if (row.year === currentYear) currentTotals[row.month - 1] += row.total_tonnes;
       if (row.year === previousYear) previousTotals[row.month - 1] += row.total_tonnes;
     });
@@ -136,8 +164,9 @@ export default function Home() {
       const prior = previousTotals[index];
       return { month: monthLabels[index], current: total, growth: prior === 0 ? 0 : ((total - prior) / prior) * 100 };
     });
-  }, [currentYear, previousYear, salesRows]);
+  }, [currentYear, previousYear, momRows]);
 
+  // Date-filtered total for KPI card
   const totalTonnes = useMemo(() => salesRows.reduce((sum, row) => sum + row.total_tonnes, 0), [salesRows]);
 
   const topGroup = useMemo(() => {
@@ -153,11 +182,6 @@ export default function Home() {
 
   const divisionBreakdown = summary?.division_breakdown ?? [];
 
-  const handleRefresh = async () => {
-    setRefreshing(true);
-    try { await loadAll(); } finally { setRefreshing(false); }
-  };
-
   // ── Chart options ─────────────────────────────────────────────────────────
 
   const monthlyComparisonOptions = useMemo(() => ({
@@ -167,13 +191,13 @@ export default function Home() {
       formatter: (params) => params.map((item: { seriesName: string; value: number }) =>
         `${item.seriesName}: ${numberFormatter.format(item.value)} t`).join("<br />"),
     },
-    legend: { data: years.map((y) => String(y)), top: "4%", textStyle: { color: "#8b949e" } },
+    legend: { data: momYears.map((y) => String(y)), top: "4%", textStyle: { color: "#8b949e" } },
     grid: { left: "8%", right: "4%", bottom: "12%", top: "18%" },
     xAxis: { type: "category", data: monthlyComparisonData.map((d) => d.month),
       axisLine: { lineStyle: { color: "#30363d" } }, axisLabel: { color: "#8b949e" }, splitLine: { show: false } },
     yAxis: { type: "value", name: "Tonnes", nameTextStyle: { color: "#8b949e" },
       axisLabel: { color: "#8b949e" }, splitLine: { lineStyle: { color: "#21262d" } } },
-    series: years.map((year, index) => ({
+    series: momYears.map((year, index) => ({
       name: String(year), type: "line",
       data: monthlyComparisonData.map((d) => d[`year${year}`] ?? 0),
       smooth: true, lineStyle: { width: 2, color: chartColors[index % chartColors.length] },
@@ -182,7 +206,7 @@ export default function Home() {
       areaStyle: { color: { type: "linear", x: 0, y: 0, x2: 0, y2: 1,
         colorStops: [{ offset: 0, color: `${chartColors[index % chartColors.length]}30` }, { offset: 1, color: "transparent" }] } },
     })),
-  }), [monthlyComparisonData, years]);
+  }), [monthlyComparisonData, momYears]);
 
   const growthOptions = useMemo(() => ({
     ...darkChartBase,
@@ -219,13 +243,13 @@ export default function Home() {
       formatter: (params) => params.map((item: { seriesName: string; value: number }) =>
         `${item.seriesName}: ${numberFormatter.format(item.value)} t`).join("<br />"),
     },
-    legend: { data: years.map((y) => String(y)), top: "4%", textStyle: { color: "#8b949e" } },
+    legend: { data: momYears.map((y) => String(y)), top: "4%", textStyle: { color: "#8b949e" } },
     grid: { left: "8%", right: "4%", bottom: "12%", top: "18%" },
     xAxis: { type: "category", data: cumulativeComparisonData.map((d) => d.month),
       axisLine: { lineStyle: { color: "#30363d" } }, axisLabel: { color: "#8b949e" }, splitLine: { show: false } },
     yAxis: { type: "value", name: "Tonnes", nameTextStyle: { color: "#8b949e" },
       axisLabel: { color: "#8b949e" }, splitLine: { lineStyle: { color: "#21262d" } } },
-    series: years.map((year, index) => ({
+    series: momYears.map((year, index) => ({
       name: String(year), type: "line",
       data: cumulativeComparisonData.map((d) => d[`year${year}`] ?? 0),
       smooth: true, lineStyle: { width: 2, color: chartColors[index % chartColors.length] },
@@ -233,7 +257,7 @@ export default function Home() {
       areaStyle: { color: { type: "linear", x: 0, y: 0, x2: 0, y2: 1,
         colorStops: [{ offset: 0, color: `${chartColors[index % chartColors.length]}25` }, { offset: 1, color: "transparent" }] } },
     })),
-  }), [cumulativeComparisonData, years]);
+  }), [cumulativeComparisonData, momYears]);
 
   // Sales by Division chart (used when "all" is selected)
   const divisionChartOptions = useMemo(() => {
@@ -293,7 +317,7 @@ export default function Home() {
           {/* Date range display */}
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-md border border-border bg-secondary text-xs text-muted-foreground">
             <span className="font-medium text-foreground uppercase tracking-wider text-[10px]">
-              {datePreset === "all" ? "All time" : datePreset.toUpperCase()}
+              {isCustom ? "Custom" : datePreset === "all" ? "All time" : datePreset.toUpperCase()}
             </span>
             <span className="text-border">·</span>
             {formatDateLabel(dateFrom)} — {formatDateLabel(dateTo)}
@@ -362,7 +386,7 @@ export default function Home() {
                 <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Scope</span>
               </div>
               <div className="text-sm font-bold text-foreground leading-tight">{companyLabel}</div>
-              <div className="text-xs text-muted-foreground mt-0.5">{years.join(", ") || "—"}</div>
+              <div className="text-xs text-muted-foreground mt-0.5">{momYears.join(", ") || "—"}</div>
             </div>
           </div>
 
@@ -469,7 +493,7 @@ export default function Home() {
             <div className="rounded-lg border border-border bg-card p-4">
               <h3 className="text-xs font-semibold text-foreground mb-3">Month-on-month comparison</h3>
               <div className="h-[280px]">
-                {loading ? loadingOverlay : (
+                {momLoading ? loadingOverlay : (
                   <ReactECharts option={monthlyComparisonOptions} style={{ width: "100%", height: "100%" }} notMerge lazyUpdate />
                 )}
               </div>
@@ -477,7 +501,7 @@ export default function Home() {
             <div className="rounded-lg border border-border bg-card p-4">
               <h3 className="text-xs font-semibold text-foreground mb-3">Monthly growth</h3>
               <div className="h-[280px]">
-                {loading ? loadingOverlay : (
+                {momLoading ? loadingOverlay : (
                   <ReactECharts option={growthOptions} style={{ width: "100%", height: "100%" }} notMerge lazyUpdate />
                 )}
               </div>
@@ -485,7 +509,7 @@ export default function Home() {
             <div className="col-span-2 rounded-lg border border-border bg-card p-4">
               <h3 className="text-xs font-semibold text-foreground mb-3">Cumulative sales comparison</h3>
               <div className="h-[240px]">
-                {loading ? loadingOverlay : (
+                {momLoading ? loadingOverlay : (
                   <ReactECharts option={cumulativeComparisonOptions} style={{ width: "100%", height: "100%" }} notMerge lazyUpdate />
                 )}
               </div>
