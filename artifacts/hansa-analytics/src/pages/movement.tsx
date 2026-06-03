@@ -723,12 +723,18 @@ export default function Movement() {
           <KpiCard label="At-Risk Custs" value={summaryLoading ? "…" : summary?.at_risk_customers ?? 0} sub="No purchase 30–60d" color="text-amber-400" />
           <KpiCard label="Slow Items" value={summaryLoading ? "…" : summary?.slow_items ?? 0} sub="> 90d inactive" color="text-amber-400" />
           <KpiCard label="Dead Stock Items" value={summaryLoading ? "…" : summary?.dead_items ?? 0} sub="> 180d inactive" color="text-red-400" />
-          <div className="rounded-lg border border-border bg-card p-3.5 flex flex-col justify-between">
+          <div className="rounded-lg border border-border bg-card p-3.5 flex flex-col gap-2">
             <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Legend</p>
-            <div className="space-y-1 mt-1">
-              {["Growing", "Stable", "Declining", "Dead"].map((s) => (
-                <div key={s} className="flex items-center gap-1.5">
-                  <StatusBadge status={s} />
+            <div className="space-y-2">
+              {[
+                { status: "Growing",  desc: "↑ 15%+ more volume vs prior 3 months" },
+                { status: "Stable",   desc: "Volume within ±15% of prior 3 months" },
+                { status: "Declining",desc: "↓ 15%+ less volume vs prior 3 months" },
+                { status: "Dead",     desc: "No sales recorded in last 3 months" },
+              ].map(({ status, desc }) => (
+                <div key={status} className="flex flex-col gap-0.5">
+                  <StatusBadge status={status} />
+                  <p className="text-[10px] text-muted-foreground pl-0.5">{desc}</p>
                 </div>
               ))}
             </div>
