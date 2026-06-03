@@ -2,6 +2,10 @@
 One-shot script to populate the Neon database from Hansa.
 Run from the backend/ directory:  python run_refresh.py
 
+By default runs all four companies: 3, 4, 5, 6.
+Use --companies to restrict, e.g.:  python run_refresh.py --companies 4 5
+Use --skip-master to skip master-data fetch (items/customers).
+
 Uses a fresh DB session per step to avoid Neon idle-connection timeouts
 during long Hansa API fetches.
 """
@@ -18,6 +22,8 @@ from app.services.movement_service import rebuild_customer_product_group_movemen
 
 DATE_FROM = date(2023, 1, 1)
 DATE_TO   = date(2026, 12, 31)
+
+ALL_COMPANIES = ["3", "4", "5", "6"]
 
 
 def log(msg):
@@ -43,27 +49,68 @@ async def run_step(label, coro_fn, *args, **kwargs):
         db.close()
 
 
+def parse_args():
+    args = sys.argv[1:]
+    skip_master = "--skip-master" in args
+    if "--companies" in args:
+        idx = args.index("--companies")
+        companies = []
+        for a in args[idx + 1:]:
+            if a.startswith("--"):
+                break
+            companies.append(a)
+        if not companies:
+            log("ERROR: --companies requires at least one company number")
+            sys.exit(1)
+    else:
+        companies = ALL_COMPANIES
+    return skip_master, companies
+
+
 async def main():
-    skip_master = "--skip-master" in sys.argv
+    skip_master, companies = parse_args()
+
+    log(f"Companies to refresh: {companies}")
+    log(f"Date range: {DATE_FROM} → {DATE_TO}")
+
+    total_steps = (0 if skip_master else 1) + len(companies) * 3 + 1
+    step = 0
+
+    def next_step(label):
+        nonlocal step
+        step += 1
+        return f"Step {step}/{total_steps}: {label}"
 
     if not skip_master:
-        await run_step("Step 1/5: master-data", refresh_master_data)
+        await run_step(next_step("master-data"), refresh_master_data)
     else:
-        log("=== Step 1/5: master-data (SKIPPED) ===")
+        log("=== master-data (SKIPPED) ===")
 
-    await run_step("Step 2/5: source invoices", refresh_invoice_source,
-                   DATE_FROM, DATE_TO)
+    for company_no in companies:
+        log(f"\n--- Company {company_no} ---")
 
-    await run_step("Step 3/5: source deliveries", refresh_delivery_source,
-                   DATE_FROM, DATE_TO)
+        await run_step(
+            next_step(f"source invoices  [company={company_no}]"),
+            refresh_invoice_source,
+            DATE_FROM, DATE_TO, company_no,
+        )
 
-    await run_step("Step 4/5: fact-sales", rebuild_fact_sales_lines,
-                   DATE_FROM, DATE_TO)
+        await run_step(
+            next_step(f"source deliveries [company={company_no}]"),
+            refresh_delivery_source,
+            DATE_FROM, DATE_TO, company_no,
+        )
 
-    await run_step("Step 5/5: customer-movement",
+        await run_step(
+            next_step(f"fact-sales        [company={company_no}]"),
+            rebuild_fact_sales_lines,
+            DATE_FROM, DATE_TO, company_no,
+        )
+
+    await run_step(next_step("customer-movement (all companies)"),
                    rebuild_customer_product_group_movement)
 
-    log("=== ALL DONE ===")
+    log("\n=== ALL DONE ===")
 
 
 asyncio.run(main())
