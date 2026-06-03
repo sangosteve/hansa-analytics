@@ -9,7 +9,7 @@ import {
   type PredictiveInsightsResponse,
 } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import AIInsightsPanel from "@/components/ai/ai-insights-panel";
+import AIFloatingDrawer from "@/components/ai/ai-floating-drawer";
 import { useCompany } from "@/lib/company-context";
 
 const monthLabels = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -605,8 +605,8 @@ export default function Home() {
         </div>
       </div>
 
-      {/* ── Right: AI panel ── */}
-      <AIInsightsPanel companyNos={companyNos} saleScope={saleScope} dateFrom={dateFrom} dateTo={dateTo} />
+      {/* ── Floating AI drawer (fixed overlay, no layout impact) ── */}
+      <AIFloatingDrawer companyNos={companyNos} saleScope={saleScope} dateFrom={dateFrom} dateTo={dateTo} />
     </div>
   );
 }
