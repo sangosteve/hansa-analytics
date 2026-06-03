@@ -1,36 +1,40 @@
-# [Project name]
+# Hansa Analytics
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+A professional analytics dashboard and AI-driven insight platform for HansaWorld/Standard ERP data. Provides sales summaries, customer movement tracking, stock status monitoring, and predictive analytics powered by an AI assistant.
 
 ## Run & Operate
 
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
-- `pnpm run typecheck` — full typecheck across all packages
-- `pnpm run build` — typecheck + build all packages
-- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
+- `API Server` workflow — Python FastAPI backend on port 8080 (uvicorn, auto-reload)
+- `Hansa Analytics` workflow — React/Vite frontend on port 19517 (mapped to port 80 in preview)
+- `cd backend && python -m alembic upgrade head` — apply database migrations
+- `cd backend && python run_refresh.py` — trigger Hansa ERP data sync
 
 ## Stack
 
-- pnpm workspaces, Node.js 24, TypeScript 5.9
-- API: Express 5
-- DB: PostgreSQL + Drizzle ORM
-- Validation: Zod (`zod/v4`), `drizzle-zod`
-- API codegen: Orval (from OpenAPI spec)
-- Build: esbuild (CJS bundle)
+- **Frontend**: React 19, TypeScript, Vite, Tailwind CSS v4, Radix UI, TanStack Query, ECharts, Wouter
+- **Backend**: Python 3.11, FastAPI, SQLAlchemy, Alembic, Pydantic, Uvicorn
+- **AI**: OpenAI SDK (GPT-4o) for AI insights
+- **Database**: Supabase PostgreSQL (via `NEON_DATABASE_URL`)
+- **Monorepo**: pnpm workspaces
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `backend/app/` — FastAPI application (routes, services, models)
+- `backend/alembic/versions/` — database migration files
+- `artifacts/hansa-analytics/src/` — React frontend source
+- `lib/api-spec/` — OpenAPI spec (source of truth for API contract)
+- `lib/api-client-react/` — generated React Query hooks (from codegen)
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- FastAPI backend handles all data logic and ERP sync; frontend is a pure React SPA
+- Database URL checked as `NEON_DATABASE_URL` first, then `DATABASE_URL` fallback (see `backend/app/core/config.py`)
+- Alembic migrations manage schema — run `alembic upgrade head` after any schema changes
+- OpenAI used server-side only for AI insights (never exposed to browser)
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+Sales analytics, customer movement (at-risk/stopped/declining), stock management, dead stock identification, and a natural-language AI insights panel backed by GPT-4o.
 
 ## User preferences
 
@@ -38,8 +42,11 @@ _Populate as you build — explicit user instructions worth remembering across s
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- The frontend dev server runs on port 19517 (not 5000) — mapped to port 80 for the preview pane
+- Database tables are populated via Hansa ERP sync (`run_refresh.py`) — a fresh DB will show empty data until synced
+- Python deps are installed to `.pythonlibs/` — run `pip install -r backend/requirements.txt` if packages are missing after environment resets
 
 ## Pointers
 
-- See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details
+- DB connection: `NEON_DATABASE_URL` secret (Supabase connection string)
+- AI: `OPENAI_API_KEY` secret (optional — AI insights panel requires it)
