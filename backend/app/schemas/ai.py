@@ -9,67 +9,56 @@ from pydantic import BaseModel, Field
 
 
 class AIChatMessage(BaseModel):
-    """Single chat message in conversation history."""
+    role: str = Field(..., description="'user' or 'assistant'")
+    content: str
 
-    role: str = Field(..., description="Message role: 'user' or 'assistant'")
-    content: str = Field(..., description="Message content")
+
+class DashboardContext(BaseModel):
+    """Current dashboard state — passed so AI understands 'this' / 'current' references."""
+    page: Optional[str] = Field(default=None, description="home | movement | stock")
+    selected_salesperson: Optional[str] = None
+    selected_location: Optional[str] = None
+    selected_item_group: Optional[str] = None
+    selected_customer: Optional[str] = None
 
 
 class AIInsightRequest(BaseModel):
-    """Request for AI insight generation."""
-
-    message: str = Field(..., description="User question or request")
-    history: Optional[list[AIChatMessage]] = Field(
-        default=None, description="Optional chat history"
-    )
-    date_from: Optional[date] = Field(default=None, description="Start date for analysis")
-    date_to: Optional[date] = Field(default=None, description="End date for analysis")
-    location: Optional[str] = Field(default=None, description="Filter by location")
-    salesperson: Optional[str] = Field(default=None, description="Filter by salesperson")
-    item_group_code: Optional[str] = Field(
-        default=None, description="Filter by item group code"
-    )
-    customer_code: Optional[str] = Field(default=None, description="Filter by customer code")
-    company_nos: Optional[list[str]] = Field(
-        default=None, description="Company numbers to filter (e.g. ['3', '5'])"
-    )
-    sale_scope: Optional[str] = Field(
-        default="all", description="Sale scope: all | external | internal"
-    )
+    message: str
+    history: Optional[list[AIChatMessage]] = None
+    date_from: Optional[date] = None
+    date_to: Optional[date] = None
+    location: Optional[str] = None
+    salesperson: Optional[str] = None
+    item_group_code: Optional[str] = None
+    customer_code: Optional[str] = None
+    company_nos: Optional[list[str]] = Field(default=None, description="e.g. ['3','5']")
+    sale_scope: Optional[str] = Field(default="all", description="all | external | internal")
+    dashboard_context: Optional[DashboardContext] = None
 
 
 class AIChartConfig(BaseModel):
-    """Apache ECharts configuration object."""
-
-    type: str = Field(..., description="Chart type: bar, line, pie, none")
-    title: str = Field(..., description="Chart title")
-    option: dict[str, Any] = Field(..., description="ECharts option object")
+    type: str = Field(..., description="bar | line | pie | none")
+    title: str
+    option: dict[str, Any]
 
 
 class AITableResult(BaseModel):
-    """Table data result."""
-
-    columns: list[str] = Field(..., description="Column names")
-    rows: list[dict[str, Any]] = Field(..., description="Table rows as dictionaries")
+    columns: list[str]
+    rows: list[dict[str, Any]]
 
 
 class AIInsightResponse(BaseModel):
-    """Response with AI insight, optional chart, and follow-up questions."""
-
-    answer: str = Field(..., description="Executive summary insight")
-    chart: Optional[AIChartConfig] = Field(default=None, description="Optional chart config")
-    table: Optional[AITableResult] = Field(default=None, description="Optional table data")
-    follow_up_questions: list[str] = Field(
-        default_factory=list, description="Suggested follow-up questions"
-    )
-    tool_used: Optional[str] = Field(default=None, description="Which tool was used")
-    assumptions: list[str] = Field(
-        default_factory=list, description="Assumptions made in analysis"
-    )
+    answer: str
+    chart: Optional[AIChartConfig] = None
+    table: Optional[AITableResult] = None
+    follow_up_questions: list[str] = Field(default_factory=list)
+    tools_used: list[str] = Field(default_factory=list)
+    intent: Optional[str] = None
+    company_scope: Optional[str] = None
+    assumptions: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
 
 
 class AISuggestion(BaseModel):
-    """Suggested question for user."""
-
-    text: str = Field(..., description="Question text")
-    icon: Optional[str] = Field(default=None, description="Optional emoji/icon")
+    text: str
+    icon: Optional[str] = None

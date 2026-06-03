@@ -1,7 +1,14 @@
 """
-AI Insights Service: Two-step orchestration.
-Step 1: Intent planning (choose tool + parameters)
-Step 2: Execute tool → generate final response with chart/table
+AI Insights Service — multi-step orchestration with intent classification.
+
+Flow:
+  1. classify_intent()   — identify what the user wants
+  2. plan_steps()        — choose 1–3 tool calls
+  3. execute_steps()     — run each tool safely
+  4. synthesize()        — generate answer + chart + table from all results
+
+Business context is injected from business_context.py.
+All DB access goes through analytics_tools.py — no raw SQL here.
 """
 
 import json
@@ -14,526 +21,760 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.schemas.ai import AIInsightRequest, AIInsightResponse, AIChartConfig, AITableResult
 from app.services import analytics_tools
+from app.services.business_context import (
+    BUSINESS_GLOSSARY,
+    COMPANY_MAP,
+    ACTIVE_COMPANIES,
+    company_label,
+    scope_label,
+    company_scope_sentence,
+)
 
 logger = logging.getLogger(__name__)
 
-# ─── Business context injected into every AI prompt ───────────────────────────
-BUSINESS_CONTEXT = """
-You are the AI analyst for Hansa Analytics — a sales intelligence platform for a multi-division
-commodities/distribution business running on HansaWorld (Standard ERP).
+# ─── Tool catalogue ────────────────────────────────────────────────────────────
 
-KEY BUSINESS FACTS:
-- The business has 4 divisions (also called companies or company numbers): 3, 4, 5, and 6.
-  These may be referred to as divisions like Retail, Manufacturing, Wholesale, or other names.
-  When a user says "retail division" or "manufacturing", map it to the relevant company number(s).
-- Sales volume is always measured in TONNES. This is the primary performance metric.
-- Data covers sales transactions, customer buying patterns, and live stock levels.
-- The customer_movement table tracks buying regularity — it shows 6-month averages, current-month
-  tonnage, gaps vs expectations, buyer status (active/at-risk/stopped/churned), and action bands.
-- "Stopped buying" = customers with high days_since_last_purchase and previously regular buying.
-- "Declining" = customers or product groups where recent volume is significantly below prior periods.
-- Stock is tracked per item per location. Stock status categories: critical_low (<0.5 months cover),
-  low_stock (<1.5 months), adequate (1.5–4 months), overstocked (>4 months).
-- "Products to stock" means items with high sales velocity but low months_of_cover.
-- Common date references: "this month" = current month, "last quarter" = last 3 months,
-  "YTD" = year to date from January.
-
-COMPANY NUMBER MAPPING (use these when the user mentions a division):
-- Use company_nos: ["3","4","5","6"] for "all divisions" or when unspecified
-- Use a specific company_no when the user names a specific division
-"""
-
-# ─── Available tools ───────────────────────────────────────────────────────────
-AVAILABLE_TOOLS = [
+TOOL_CATALOGUE: list[dict] = [
     {
         "name": "get_sales_trend",
+        "intent_tags": ["trend_analysis", "drilldown_analysis"],
         "description": (
-            "Monthly sales trend over time. Use for: overall trends, trends by product group, "
-            "customer, salesperson, or location. Good for 'how are sales trending', 'show me "
-            "sales over time', 'YTD performance', 'which months were best'."
+            "Monthly sales trend over time. Use for: overall trends, 'how are sales trending', "
+            "'YTD performance', 'sales over the last N months', 'which months were best/worst'. "
+            "Set dimension to: total | item_group | customer | salesperson | location."
         ),
         "parameters": {
+            "company_nos": "list[str] — e.g. ['3'] or ['3','4','5','6']. REQUIRED.",
             "dimension": "total | item_group | customer | salesperson | location",
-            "date_from": "ISO date string YYYY-MM-DD (optional)",
-            "date_to": "ISO date string YYYY-MM-DD (optional)",
-            "location": "Optional location/branch name filter",
-            "salesperson": "Optional salesperson name filter",
-            "item_group_code": "Optional product group code filter",
+            "date_from": "YYYY-MM-DD",
+            "date_to": "YYYY-MM-DD",
+            "location": "optional string",
+            "salesperson": "optional string",
+            "item_group_code": "optional string",
+        },
+    },
+    {
+        "name": "get_sales_by_company",
+        "intent_tags": ["ranking_analysis", "comparison_analysis"],
+        "description": (
+            "Compare sales across all divisions. Use for: 'compare divisions/companies', "
+            "'which company sold most', 'division breakdown', 'rank companies by tonnage', "
+            "'group-wide sales', 'company performance'."
+        ),
+        "parameters": {
+            "company_nos": "list[str] — use ['3','4','5','6'] to compare all divisions.",
+            "date_from": "YYYY-MM-DD",
+            "date_to": "YYYY-MM-DD",
+            "item_group_code": "optional string",
         },
     },
     {
         "name": "get_sales_by_item_group",
+        "intent_tags": ["ranking_analysis", "drilldown_analysis"],
         "description": (
-            "Total sales ranked by product group/category for a period. Use for: "
-            "'which products sell most', 'top product groups', 'product mix', "
-            "'what are we selling'. Returns bar chart ready data."
+            "Sales ranked by product group. Use for: 'top product groups', 'product mix', "
+            "'which products sell most', 'what are we selling', 'product contribution'."
         ),
         "parameters": {
-            "date_from": "ISO date string YYYY-MM-DD (optional)",
-            "date_to": "ISO date string YYYY-MM-DD (optional)",
-            "location": "Optional location filter",
-            "salesperson": "Optional salesperson filter",
+            "company_nos": "list[str]. REQUIRED.",
+            "date_from": "YYYY-MM-DD",
+            "date_to": "YYYY-MM-DD",
+            "location": "optional",
+            "salesperson": "optional",
         },
     },
     {
         "name": "get_sales_by_customer",
+        "intent_tags": ["ranking_analysis", "drilldown_analysis"],
         "description": (
-            "Total sales ranked by customer for a period. Use for: 'top customers', "
-            "'biggest buyers', 'customer ranking', 'who buys the most'. Returns bar chart."
+            "Sales ranked by customer. Use for: 'top customers', 'biggest buyers', "
+            "'customer ranking', 'who buys the most', 'customer concentration'."
         ),
         "parameters": {
-            "date_from": "ISO date string YYYY-MM-DD (optional)",
-            "date_to": "ISO date string YYYY-MM-DD (optional)",
-            "location": "Optional location filter",
-            "item_group_code": "Optional product group filter",
-            "salesperson": "Optional salesperson filter",
+            "company_nos": "list[str]. REQUIRED.",
+            "date_from": "YYYY-MM-DD",
+            "date_to": "YYYY-MM-DD",
+            "location": "optional",
+            "item_group_code": "optional",
+            "salesperson": "optional",
         },
     },
     {
         "name": "get_sales_by_salesperson",
+        "intent_tags": ["salesperson_performance_analysis", "ranking_analysis"],
         "description": (
-            "Sales performance ranked by salesperson. Use for: 'salesperson performance', "
-            "'who is selling most', 'sales team ranking', 'rep performance'."
+            "Sales performance by salesperson. Use for: 'salesperson performance', "
+            "'who is selling most', 'sales rep ranking', 'rep performance', 'sales team'."
         ),
         "parameters": {
-            "date_from": "ISO date string YYYY-MM-DD (optional)",
-            "date_to": "ISO date string YYYY-MM-DD (optional)",
-            "location": "Optional location filter",
-            "item_group_code": "Optional product group filter",
+            "company_nos": "list[str]. REQUIRED — filter to specific division when asked.",
+            "date_from": "YYYY-MM-DD",
+            "date_to": "YYYY-MM-DD",
+            "location": "optional",
+            "item_group_code": "optional",
         },
     },
     {
         "name": "get_sales_by_location",
-        "description": (
-            "Sales totals ranked by branch/location/region. Use for: 'branch performance', "
-            "'which location sells most', 'regional breakdown'."
-        ),
+        "intent_tags": ["ranking_analysis", "comparison_analysis"],
+        "description": "Sales by branch/location. Use for: 'branch performance', 'regional breakdown'.",
         "parameters": {
-            "date_from": "ISO date string YYYY-MM-DD (optional)",
-            "date_to": "ISO date string YYYY-MM-DD (optional)",
-            "item_group_code": "Optional product group filter",
-            "salesperson": "Optional salesperson filter",
+            "company_nos": "list[str]. REQUIRED.",
+            "date_from": "YYYY-MM-DD",
+            "date_to": "YYYY-MM-DD",
+            "item_group_code": "optional",
         },
     },
     {
-        "name": "get_declining_product_groups",
+        "name": "get_internal_vs_external_sales",
+        "intent_tags": ["internal_external_sales_analysis", "comparison_analysis"],
         "description": (
-            "Compare product group sales: recent 3 months vs prior 3 months to find what is "
-            "growing or declining. Use for: 'which products are declining', 'product trends', "
-            "'what products are losing volume', 'which categories are growing/shrinking'."
+            "Split sales into internal (inter-company) vs external customers. "
+            "Use for: 'compare internal vs external', 'how much is inter-company', "
+            "'external customer sales', 'show internal sales', 'exclude internal'."
         ),
         "parameters": {
-            "location": "Optional location filter",
-            "salesperson": "Optional salesperson filter",
-        },
-    },
-    {
-        "name": "get_churned_customers",
-        "description": (
-            "Customers who used to buy regularly but have stopped — sorted by their historical "
-            "volume (highest loss first). Use for: 'which customers stopped buying', "
-            "'lost customers', 'customer churn', 'who haven't we seen in a while', "
-            "'customers we lost', 'inactive customers who were big buyers'."
-        ),
-        "parameters": {
-            "days_inactive": "Number of days of inactivity to qualify as churned (default 60)",
-            "product_group_code": "Optional product group filter",
-            "location": "Optional location filter",
-            "salesperson": "Optional salesperson filter",
-        },
-    },
-    {
-        "name": "get_customer_movement_insights",
-        "description": (
-            "At-risk and declining customers with their tonnage gaps vs expectations. Use for: "
-            "'at-risk customers', 'declining customers', 'customers buying less than expected', "
-            "'customer health', 'who needs a call', 'action required customers'."
-        ),
-        "parameters": {
-            "action_band": "Optional action band filter (e.g. 'Urgent', 'Watch')",
-            "buyer_status": "Optional buyer status filter",
-            "product_group_code": "Optional product group filter",
-        },
-    },
-    {
-        "name": "get_stock_recommendations",
-        "description": (
-            "Stock analysis: items with high sales velocity vs current stock levels. Use for: "
-            "'what should we stock', 'which products to order', 'low stock alerts', "
-            "'stock recommendations', 'what are we running out of', 'overstocked items', "
-            "'inventory health', 'reorder suggestions'."
-        ),
-        "parameters": {
-            "location": "Optional location/branch filter",
-            "item_group_code": "Optional product group filter",
+            "company_nos": "list[str]. REQUIRED.",
+            "date_from": "YYYY-MM-DD",
+            "date_to": "YYYY-MM-DD",
+            "item_group_code": "optional",
         },
     },
     {
         "name": "compare_current_vs_previous_month",
+        "intent_tags": ["comparison_analysis", "explanation_analysis"],
         "description": (
-            "Month-over-month comparison of sales tonnage. Use for: 'how is this month going', "
-            "'compare to last month', 'MoM growth', 'are we up or down vs last month'."
+            "Month-over-month comparison. Use for: 'how is this month going', "
+            "'compare to last month', 'MoM growth', 'are we up or down vs last month', "
+            "'why did sales change'. Can break down by item_group, salesperson, location."
         ),
         "parameters": {
-            "dimension": "total | item_group | customer | salesperson | location",
+            "company_nos": "list[str]. REQUIRED.",
+            "dimension": "total | item_group | salesperson | location",
+        },
+    },
+    {
+        "name": "get_declining_product_groups",
+        "intent_tags": ["trend_analysis", "explanation_analysis", "anomaly_detection"],
+        "description": (
+            "Compare product groups: recent 3 months vs prior 3 months. "
+            "Use for: 'which products are declining', 'product trends', "
+            "'what is losing volume', 'which categories are shrinking/growing'."
+        ),
+        "parameters": {
+            "company_nos": "list[str]. REQUIRED.",
+            "location": "optional",
+            "salesperson": "optional",
+        },
+    },
+    {
+        "name": "get_top_growing_groups",
+        "intent_tags": ["trend_analysis", "ranking_analysis"],
+        "description": (
+            "Product groups with strongest positive growth: recent 3m vs prior 3m. "
+            "Use for: 'growing product groups', 'what is growing', 'top performers', 'which products are up'."
+        ),
+        "parameters": {
+            "company_nos": "list[str]. REQUIRED.",
+            "location": "optional",
+        },
+    },
+    {
+        "name": "get_churned_customers",
+        "intent_tags": ["customer_movement_analysis"],
+        "description": (
+            "Customers who stopped buying — sorted by lost monthly volume. "
+            "Use for: 'which customers stopped buying', 'lost customers', 'churned customers', "
+            "'inactive customers', 'customers we haven't seen', 'who stopped'. "
+            "days_inactive: 30=recently stopped, 60=default, 90=long gone."
+        ),
+        "parameters": {
+            "company_nos": "list[str]. REQUIRED.",
+            "days_inactive": "int (default 60)",
+            "product_group_code": "optional",
+            "location": "optional",
+            "salesperson": "optional",
+        },
+    },
+    {
+        "name": "get_customer_movement_insights",
+        "intent_tags": ["customer_movement_analysis", "explanation_analysis"],
+        "description": (
+            "At-risk and declining customers — compares recent 2 months vs prior 2 months. "
+            "Use for: 'at-risk customers', 'buying less', 'customer health', "
+            "'who needs a visit', 'declining customers', 'customers to watch'."
+        ),
+        "parameters": {
+            "company_nos": "list[str]. REQUIRED.",
+            "product_group_code": "optional",
+            "location": "optional",
+            "salesperson": "optional",
+        },
+    },
+    {
+        "name": "get_fast_movers",
+        "intent_tags": ["trend_analysis", "ranking_analysis"],
+        "description": (
+            "Items with highest velocity and growth. "
+            "Use for: 'fast moving items', 'high demand products', 'what is selling fast', 'hot items'."
+        ),
+        "parameters": {
+            "company_nos": "list[str]. REQUIRED.",
+            "item_group_code": "optional",
+            "location": "optional",
+        },
+    },
+    {
+        "name": "get_slow_movers",
+        "intent_tags": ["anomaly_detection", "ranking_analysis"],
+        "description": (
+            "Items with little or no recent sales. "
+            "Use for: 'slow moving items', 'dead stock', 'what is not selling', 'stagnant inventory'."
+        ),
+        "parameters": {
+            "company_nos": "list[str]. REQUIRED.",
+            "item_group_code": "optional",
+            "days_slow": "int days of inactivity threshold (default 60)",
+        },
+    },
+    {
+        "name": "get_stock_recommendations",
+        "intent_tags": ["predictive_analysis"],
+        "description": (
+            "Stock vs sales velocity — items running low or overstocked. "
+            "Use for: 'what should we stock', 'low stock alerts', 'stock recommendations', "
+            "'running out of stock', 'reorder suggestions', 'inventory health', 'overstocked'."
+        ),
+        "parameters": {
+            "company_nos": "list[str]. REQUIRED.",
+            "location": "optional",
+            "item_group_code": "optional",
+        },
+    },
+    {
+        "name": "project_month_end_sales",
+        "intent_tags": ["predictive_analysis"],
+        "description": (
+            "Project current month end tonnage based on MTD run rate. "
+            "Use for: 'project this month', 'month-end forecast', 'how will we close', "
+            "'are we on track', 'MTD projection', 'end of month estimate'."
+        ),
+        "parameters": {
+            "company_nos": "list[str]. REQUIRED.",
+            "sale_scope": "all | external | internal",
+            "item_group_code": "optional",
+            "salesperson": "optional",
+        },
+    },
+    {
+        "name": "identify_products_to_push",
+        "intent_tags": ["predictive_analysis", "ranking_analysis"],
+        "description": (
+            "Products sales should focus on: growing demand, low stock, or recovery opportunities. "
+            "Use for: 'what should sales focus on', 'products to push', 'where to focus', "
+            "'sales opportunities', 'which products need attention', 'strategic focus'."
+        ),
+        "parameters": {
+            "company_nos": "list[str]. REQUIRED.",
+            "location": "optional",
         },
     },
 ]
 
+# ─── Growing alias (must be defined before _TOOL_FN_MAP) ──────────────────────
 
-def _coerce_dates(parameters: dict[str, Any]) -> dict[str, Any]:
-    """Convert any ISO date strings to Python date objects so SQLAlchemy comparisons work."""
-    coerced = dict(parameters)
-    for key in ("date_from", "date_to"):
-        val = coerced.get(key)
-        if isinstance(val, str) and val:
+def _make_growing_alias(*args, **kwargs):
+    """get_declining_product_groups returns both growing and declining — filter here."""
+    result = analytics_tools.get_declining_product_groups(*args, **kwargs)
+    result["rows"] = [r for r in result.get("rows", []) if r.get("change_tonnes", 0) > 0]
+    result["rows"].sort(key=lambda x: x.get("change_tonnes", 0), reverse=True)
+    return result
+
+
+# Build name → function map from analytics_tools
+_TOOL_FN_MAP: dict[str, Any] = {
+    "get_sales_trend":                   analytics_tools.get_sales_trend,
+    "get_sales_by_company":              analytics_tools.get_sales_by_company,
+    "get_sales_by_item_group":           analytics_tools.get_sales_by_item_group,
+    "get_sales_by_customer":             analytics_tools.get_sales_by_customer,
+    "get_sales_by_salesperson":          analytics_tools.get_sales_by_salesperson,
+    "get_sales_by_location":             analytics_tools.get_sales_by_location,
+    "get_internal_vs_external_sales":    analytics_tools.get_internal_vs_external_sales,
+    "compare_current_vs_previous_month": analytics_tools.compare_current_vs_previous_month,
+    "get_declining_product_groups":      analytics_tools.get_declining_product_groups,
+    "get_churned_customers":             analytics_tools.get_churned_customers,
+    "get_customer_movement_insights":    analytics_tools.get_customer_movement_insights,
+    "get_fast_movers":                   analytics_tools.get_fast_movers,
+    "get_slow_movers":                   analytics_tools.get_slow_movers,
+    "get_stock_recommendations":         analytics_tools.get_stock_recommendations,
+    "project_month_end_sales":           analytics_tools.project_month_end_sales,
+    "identify_products_to_push":         analytics_tools.identify_products_to_push,
+    "get_top_growing_groups":            _make_growing_alias,
+}
+
+
+# ─── Date coercion ─────────────────────────────────────────────────────────────
+
+def _coerce_dates(params: dict[str, Any]) -> dict[str, Any]:
+    out = dict(params)
+    for k in ("date_from", "date_to"):
+        v = out.get(k)
+        if isinstance(v, str) and v:
             try:
-                coerced[key] = date.fromisoformat(val[:10])
+                out[k] = date.fromisoformat(v[:10])
             except ValueError:
-                coerced.pop(key, None)
-        elif val is not None and not isinstance(val, date):
-            coerced.pop(key, None)
-    return coerced
+                out.pop(k, None)
+        elif v is not None and not isinstance(v, date):
+            out.pop(k, None)
+    return out
 
 
-def plan_intent(message: str) -> dict[str, Any]:
-    """
-    Step 1: Ask the AI to choose the right tool and parameters.
-    Returns: {"tool_name": "...", "parameters": {...}}
-    """
+# ─── OpenAI client factory ─────────────────────────────────────────────────────
 
+def _openai_client():
+    from openai import OpenAI
+    import httpx
+    return OpenAI(api_key=settings.openai_api_key, http_client=httpx.Client(mounts=None))
+
+
+def _clean_json(text: str) -> str:
+    text = text.strip()
+    if text.startswith("```"):
+        lines = text.splitlines()
+        text = "\n".join(ln for ln in lines if not ln.startswith("```")).strip()
+    return text
+
+
+# ─── Step 1: Classify intent ───────────────────────────────────────────────────
+
+INTENT_DESCRIPTIONS = {
+    "trend_analysis": "sales over time, growth/decline trajectory",
+    "ranking_analysis": "top/bottom lists, comparisons, league tables",
+    "comparison_analysis": "comparing two things: periods, companies, scopes",
+    "drilldown_analysis": "zooming into a specific customer, product, or rep",
+    "customer_movement_analysis": "churned, at-risk, stopped, declining customers",
+    "internal_external_sales_analysis": "inter-company vs external customer sales",
+    "salesperson_performance_analysis": "rep rankings, performance, attribution",
+    "predictive_analysis": "projections, forecasts, month-end estimates, stock cover",
+    "anomaly_detection": "unusual drops, outliers, dead stock, fast/slow movers",
+    "explanation_analysis": "'why' questions — need multiple tools to answer",
+    "clarification_needed": "out of scope or genuinely unclear",
+}
+
+
+def classify_intent(message: str) -> str:
+    """Classify the user's question into one intent type."""
     if not settings.openai_api_key:
-        logger.warning("OpenAI API key not configured")
-        return {"tool_name": "clarify", "parameters": {}, "reason": "API not configured"}
-
+        return "ranking_analysis"
     try:
-        from openai import OpenAI
-        import httpx
+        client = _openai_client()
+        desc = "\n".join(f"  {k}: {v}" for k, v in INTENT_DESCRIPTIONS.items())
+        prompt = (
+            f"{BUSINESS_GLOSSARY}\n\n"
+            f"Classify this question into ONE intent type:\n\n"
+            f"Question: \"{message}\"\n\n"
+            f"Intent types:\n{desc}\n\n"
+            "Respond with ONLY the intent type key (no quotes, no extra text)."
+        )
+        resp = client.chat.completions.create(
+            model=settings.openai_model,
+            messages=[{"role": "user", "content": prompt}],
+            max_completion_tokens=20,
+        )
+        raw = resp.choices[0].message.content.strip().lower().replace('"', "").replace("'", "")
+        return raw if raw in INTENT_DESCRIPTIONS else "ranking_analysis"
+    except Exception as e:
+        logger.warning(f"Intent classification failed: {e}")
+        return "ranking_analysis"
 
-        http_client = httpx.Client(mounts=None)
-        client = OpenAI(api_key=settings.openai_api_key, http_client=http_client)
 
-        tools_desc = json.dumps(AVAILABLE_TOOLS, indent=2)
-        today = date.today().isoformat()
+# ─── Step 2: Plan analysis steps ──────────────────────────────────────────────
 
-        prompt = f"""
-{BUSINESS_CONTEXT}
+def plan_steps(
+    message: str,
+    intent: str,
+    request: AIInsightRequest,
+) -> list[dict[str, Any]]:
+    """
+    Ask the AI to plan 1–3 tool steps to answer the question.
+    Returns: [{tool_name, parameters, purpose}, ...]
+    """
+    if not settings.openai_api_key:
+        return []
 
-Today's date: {today}
+    today_ref = date(2026, 2, 9)  # data max date — always use this as reference
+    tools_json = json.dumps(
+        [{"name": t["name"], "description": t["description"], "parameters": t["parameters"]}
+         for t in TOOL_CATALOGUE],
+        indent=2,
+    )
 
-Your task: Given the user's question, choose the BEST analytics tool and provide parameters.
+    # Build context block
+    req_co = request.company_nos or ["3", "4", "5", "6"]
+    req_scope = request.sale_scope or "all"
+
+    ui_filter = (
+        f"Dashboard context: company_nos={req_co}, sale_scope='{req_scope}'"
+        + (f", date_from={request.date_from}, date_to={request.date_to}"
+           if request.date_from else "")
+    )
+
+    max_steps = 3 if intent == "explanation_analysis" else 1
+
+    prompt = f"""
+{BUSINESS_GLOSSARY}
+
+Reference date (data max): {today_ref}
+{ui_filter}
+User intent classified as: {intent}
 
 Available tools:
-{tools_desc}
+{tools_json}
 
 User question: "{message}"
 
-Rules:
-- For date ranges, compute actual ISO dates (YYYY-MM-DD). E.g. "last 6 months" = from {(date.today().replace(day=1))}
-  back 6 months. "YTD" = from {date.today().year}-01-01 to {today}.
-- For "declining products/product groups" → use get_declining_product_groups
-- For "stopped buying / churned / lost customers" → use get_churned_customers
-- For "at-risk / declining customers" → use get_customer_movement_insights
-- For "what to stock / low stock / inventory" → use get_stock_recommendations
-- For general sales trends over time → use get_sales_trend with the right dimension
-- Only use "clarify" if the question is completely unrelated to sales, customers, products, or stock.
+PLANNING RULES:
+1. Return {max_steps} step(s) maximum.
+2. ALWAYS populate company_nos in every step's parameters:
+   - User mentions a division name → map to correct number(s)
+   - No division mentioned → use dashboard context: {req_co}
+   - "all companies/group/overall" → ["3","4","5","6"]
+3. Date rules (reference = {today_ref}):
+   - "this month" → date_from=2026-02-01, date_to=2026-02-09
+   - "last month" → date_from=2026-01-01, date_to=2026-01-31
+   - "YTD" → date_from=2026-01-01, date_to=2026-02-09
+   - "last 6 months" → date_from=2025-08-01, date_to=2026-02-09
+   - "last year/2025" → date_from=2025-01-01, date_to=2025-12-31
+   - "last 3 months" → date_from=2025-11-01, date_to=2026-02-09
+   - "last 12 months" → date_from=2025-02-01, date_to=2026-02-09
+4. explanation_analysis → plan multiple steps:
+   Example "Why did sales drop?":
+     Step 1: compare_current_vs_previous_month (identify the drop)
+     Step 2: get_declining_product_groups (what drove the drop)
+     Step 3: get_customer_movement_insights (who is responsible)
+5. For single-intent questions, use ONE step only.
+6. Pick the most appropriate tool for the intent.
 
-Respond with ONLY a JSON object (no extra text, no markdown):
+Respond with ONLY valid JSON (no markdown):
 {{
-  "tool_name": "name_of_tool",
-  "parameters": {{}},
-  "reason": "brief explanation"
+  "steps": [
+    {{
+      "tool_name": "tool_name_here",
+      "parameters": {{"company_nos": [...], ...}},
+      "purpose": "one-line explanation of why this step"
+    }}
+  ],
+  "company_scope_used": "Using Retail only" | "Using all companies" | etc.
 }}
 """
 
-        response = client.chat.completions.create(
+    try:
+        client = _openai_client()
+        resp = client.chat.completions.create(
             model=settings.openai_model,
             messages=[{"role": "user", "content": prompt}],
-            max_completion_tokens=600,
+            max_completion_tokens=800,
         )
-
-        response_text = response.choices[0].message.content.strip()
-
-        if response_text.startswith("```"):
-            lines = response_text.splitlines()
-            response_text = "\n".join(
-                line for line in lines if not line.startswith("```")
-            ).strip()
-
-        result = json.loads(response_text)
-        return result
-
+        data = json.loads(_clean_json(resp.choices[0].message.content))
+        steps = data.get("steps", [])
+        # Validate tool names
+        valid_names = {t["name"] for t in TOOL_CATALOGUE}
+        steps = [s for s in steps if s.get("tool_name") in valid_names]
+        return steps[:3], data.get("company_scope_used", "")
     except Exception as e:
-        logger.error(f"Intent planning error: {e}")
-        return {
-            "tool_name": "clarify",
-            "parameters": {},
-            "reason": f"Error planning intent: {str(e)}",
-        }
+        logger.error(f"Step planning failed: {e}")
+        return [], ""
 
+
+# ─── Step 3: Execute a single tool ────────────────────────────────────────────
 
 def execute_tool(
-    db: Session, tool_name: str, parameters: dict[str, Any], request: AIInsightRequest
+    db: Session,
+    tool_name: str,
+    parameters: dict[str, Any],
+    request: AIInsightRequest,
 ) -> dict[str, Any]:
-    """Execute the chosen analytics tool with validated parameters."""
+    """Execute a tool safely with validated, type-coerced parameters."""
     import inspect
 
-    tool_fn_map = {
-        "get_sales_trend": analytics_tools.get_sales_trend,
-        "get_sales_by_item_group": analytics_tools.get_sales_by_item_group,
-        "get_sales_by_customer": analytics_tools.get_sales_by_customer,
-        "get_sales_by_salesperson": analytics_tools.get_sales_by_salesperson,
-        "get_sales_by_location": analytics_tools.get_sales_by_location,
-        "get_declining_product_groups": analytics_tools.get_declining_product_groups,
-        "get_churned_customers": analytics_tools.get_churned_customers,
-        "get_customer_movement_insights": analytics_tools.get_customer_movement_insights,
-        "get_stock_recommendations": analytics_tools.get_stock_recommendations,
-        "compare_current_vs_previous_month": analytics_tools.compare_current_vs_previous_month,
-    }
-
-    fn = tool_fn_map.get(tool_name)
+    fn = _TOOL_FN_MAP.get(tool_name)
     if not fn:
-        return {"error": f"Unknown tool: {tool_name}"}
+        return {"error": f"Unknown tool: {tool_name}", "rows": []}
 
-    # Coerce any string dates to date objects BEFORE building the params pool
     parameters = _coerce_dates(parameters)
 
-    params_pool: dict[str, Any] = {
+    # Build parameter pool — AI params win over request-level defaults
+    pool: dict[str, Any] = {
         "db": db,
-        "company_nos": request.company_nos or ["all"],
         "sale_scope": request.sale_scope or "all",
-        **parameters,
     }
 
-    # Apply request-level filters (don't override explicit planner params)
+    # Company resolution: AI planner wins, then request context, then all
+    ai_co = parameters.get("company_nos")
+    req_co = request.company_nos
+    if ai_co:
+        pool["company_nos"] = ai_co
+    elif req_co:
+        pool["company_nos"] = req_co
+    else:
+        pool["company_nos"] = ["3", "4", "5", "6"]
+
+    # Merge AI params (skip company_nos, already handled)
+    for k, v in parameters.items():
+        if k != "company_nos":
+            pool[k] = v
+
+    # Request-level fallbacks (don't override AI params)
     if request.date_from:
-        params_pool.setdefault("date_from", request.date_from)
+        pool.setdefault("date_from", request.date_from)
     if request.date_to:
-        params_pool.setdefault("date_to", request.date_to)
+        pool.setdefault("date_to", request.date_to)
     if request.location:
-        params_pool.setdefault("location", request.location)
+        pool.setdefault("location", request.location)
     if request.salesperson:
-        params_pool.setdefault("salesperson", request.salesperson)
+        pool.setdefault("salesperson", request.salesperson)
     if request.item_group_code:
-        params_pool.setdefault("item_group_code", request.item_group_code)
+        pool.setdefault("item_group_code", request.item_group_code)
     if request.customer_code:
-        params_pool.setdefault("customer_code", request.customer_code)
-    if request.company_nos:
-        params_pool["company_nos"] = request.company_nos
-    if request.sale_scope:
-        params_pool["sale_scope"] = request.sale_scope
+        pool.setdefault("customer_code", request.customer_code)
 
-    # Coerce dates that came from the request object too
-    params_pool = _coerce_dates(params_pool)
+    pool = _coerce_dates(pool)
 
-    # Only pass params the function actually accepts
+    # Only pass accepted params
     accepted = inspect.signature(fn).parameters
-    filtered_params = {k: v for k, v in params_pool.items() if k in accepted}
+    filtered = {k: v for k, v in pool.items() if k in accepted}
 
-    return fn(**filtered_params)
+    try:
+        return fn(**filtered)
+    except Exception as e:
+        logger.error(f"Tool {tool_name} execution error: {e}", exc_info=True)
+        return {"error": str(e), "rows": []}
 
 
-def generate_final_response(
-    message: str, tool_result: dict[str, Any], tool_name: str
+# ─── Step 4: Synthesize response ──────────────────────────────────────────────
+
+def synthesize_response(
+    message: str,
+    intent: str,
+    steps_with_results: list[dict],
+    request: AIInsightRequest,
+    company_scope_used: str,
 ) -> AIInsightResponse:
-    """
-    Step 2: Ask the AI to generate the final insight with chart/table from the tool result.
-    """
+    """Generate executive insight, chart, table, and follow-ups from all step results."""
 
     if not settings.openai_api_key:
         return AIInsightResponse(
-            answer="API key not configured. Cannot generate insights.",
-            chart=None,
-            table=None,
-            follow_up_questions=[],
-            tool_used=tool_name,
-            assumptions=[],
+            answer="OpenAI API key not configured.",
+            tools_used=[s["step"]["tool_name"] for s in steps_with_results],
+            intent=intent,
+            company_scope=company_scope_used,
         )
 
-    try:
-        from openai import OpenAI
-        import httpx
+    tools_used = [s["step"]["tool_name"] for s in steps_with_results]
+    results_json = json.dumps(
+        [{"tool": s["step"]["tool_name"], "purpose": s["step"].get("purpose", ""),
+          "result": s["data"]}
+         for s in steps_with_results],
+        default=str, indent=2
+    )
 
-        http_client = httpx.Client(mounts=None)
-        client = OpenAI(api_key=settings.openai_api_key, http_client=http_client)
+    # Build history context
+    history_text = ""
+    if request.history:
+        turns = request.history[-6:]
+        history_text = "\nConversation history:\n" + "\n".join(
+            f"  {m.role.upper()}: {m.content}" for m in turns
+        )
 
-        tool_result_json = json.dumps(tool_result, default=str)
-        row_count = len(tool_result.get("rows", []))
+    co_nos = (steps_with_results[0]["step"]["parameters"].get("company_nos")
+              if steps_with_results else request.company_nos)
+    scope_sentence = company_scope_sentence(co_nos, request.sale_scope)
 
-        prompt = f"""
-{BUSINESS_CONTEXT}
+    prompt = f"""
+{BUSINESS_GLOSSARY}
+{history_text}
 
-Your task: Analyze the tool result and give an executive-level insight for the user's question.
+User question: "{message}"
+Intent: {intent}
+Company scope: {company_scope_used or scope_sentence}
 
-User's question: "{message}"
-Tool used: {tool_name}
-Tool result ({row_count} rows):
-{tool_result_json}
+Analysis results from {len(steps_with_results)} tool(s):
+{results_json}
 
-Respond with ONLY valid JSON (no markdown, no extra text):
+Generate a response as valid JSON only (no markdown fences):
 {{
-  "answer": "2-4 sentence executive insight that directly answers the question with specific numbers and actionable commentary. Name the top items. Highlight the most important finding.",
+  "answer": "3-6 sentence executive insight that directly answers the question",
   "chart": {{
     "type": "bar|line|pie|none",
-    "title": "descriptive chart title",
+    "title": "descriptive title",
     "option": {{}}
   }},
   "table": {{
-    "columns": ["Column Name 1", "Column Name 2"],
-    "rows": [{{}}, {{}}]
+    "columns": ["Human Column Name", ...],
+    "rows": [{{...}}, ...]
   }},
-  "follow_up_questions": ["3-4 specific follow-up questions relevant to this result"],
-  "tool_used": "{tool_name}",
-  "assumptions": ["any important assumptions or notes about the data"]
+  "follow_up_questions": ["3-4 specific follow-up questions"],
+  "assumptions": ["any notes about data or time period"],
+  "warnings": ["any data quality or completeness concerns"]
 }}
 
+INSIGHT RULES:
+- Open with the single most important number or finding.
+- When results include company_no, break down by division
+  (e.g. "Retail (Co.3): 245t, Manufacturing (Co.4): 180t…"). Never blend.
+- Quote actual tonnage with units: "245.3t", "down 45t (-18%)".
+- For customer churn: name customers + their typical monthly volume + days inactive.
+- For projections: use cautious wording — "projected", "estimated", "based on current run rate".
+- For declining: state the % and absolute change.
+- End every answer with ONE specific actionable recommendation.
+- If 0 rows returned: explain what that means and suggest a broader query.
+- State the company scope clearly: "{company_scope_used or scope_sentence}"
+
 CHART RULES:
-- Trends over time → line chart (xAxis: months, series per dimension)
-- Rankings/totals → bar chart (sorted by value descending, show top 10-15 items)
-- Composition/share → pie chart
-- Movement/stock tables → set type "none" (table is better)
-- ECharts option must be complete valid JSON — no JavaScript functions
-- For bar: include xAxis.data (array of labels) and series[0].data (array of numbers)
-- For line with multiple series: include legend.data, xAxis.data, and series array
-- Always include tooltip: {{"trigger": "axis"}} and reasonable grid padding
-- Label values to 1 decimal place using formatter in label config
+- Sales trends over time → line chart. xAxis = months (string array), series per company/dimension.
+- Rankings / comparisons → bar chart sorted descending, top 10–15 items max.
+- Company share → pie chart with company division names as labels.
+- Movement/stock/churn tables → set type "none" (table shows the data better).
+- ECharts option must be complete valid JSON — NO JavaScript functions anywhere.
+- Bar chart MUST include: xAxis.data (string array), series[0].data (number array), yAxis: {{}}.
+- Line chart MUST include: xAxis.data (string array), series array with name + data arrays.
+- Always include: tooltip: {{"trigger": "axis"}}, grid: {{"left": "5%", "right": "5%", "bottom": "15%", "containLabel": true}}.
+- textStyle: {{"fontSize": 10}} on all axis labels.
+- When company_no present, one series per division with division name (not number).
 
 TABLE RULES:
-- Always include a table for movement/stock/customer data
-- Column names should be human-readable (e.g. "Customer Name" not "customer_name")
-- For declining data: include change columns with +/- signs
-- Limit to top 15 rows in the table
-- For stock: include "Stock Status" column with clear labels
-
-INSIGHT RULES:
-- Lead with the single most important finding
-- Include specific tonnage numbers
-- Mention specific customer/product names from the top results
-- For declining: quantify the drop (e.g. "down 45t or -23%")
-- For churned customers: mention how long they've been inactive and their typical volume
-- For stock: name the specific items at risk and their months of cover
-- End with a brief actionable recommendation
+- Always include a table for movement/stock/churn/ranking data.
+- Column names MUST be human-readable: "Customer Name" not "customer_name".
+- Include "Division" column mapping company_no → 3=Retail, 4=Manufacturing, 5=Engineering, 6=Mining.
+- Colour hint: prefix declining values with "▼" and growing with "▲" in the value string.
+- Limit table to 20 rows max.
+- For churn: include "Days Inactive", "Last Purchase", "Avg Monthly Tonnes".
+- For stock: include "Stock Status" with human labels.
+- For decline: include "Recent 3M", "Prior 3M", "Change (t)", "Change (%)".
 """
 
-        response = client.chat.completions.create(
+    try:
+        client = _openai_client()
+        resp = client.chat.completions.create(
             model=settings.openai_model,
             messages=[{"role": "user", "content": prompt}],
-            max_completion_tokens=3000,
+            max_completion_tokens=4000,
         )
+        data = json.loads(_clean_json(resp.choices[0].message.content))
 
-        response_text = response.choices[0].message.content.strip()
-
-        if response_text.startswith("```"):
-            lines = response_text.splitlines()
-            response_text = "\n".join(
-                line for line in lines if not line.startswith("```")
-            ).strip()
-
-        data = json.loads(response_text)
-
-        chart_config = None
-        if data.get("chart") and data["chart"].get("type") not in ("none", None):
-            chart_config = AIChartConfig(
-                type=data["chart"]["type"],
-                title=data["chart"]["title"],
-                option=data["chart"].get("option", {}),
+        chart = None
+        chart_data = data.get("chart", {})
+        if chart_data and chart_data.get("type") not in ("none", None, ""):
+            chart = AIChartConfig(
+                type=chart_data["type"],
+                title=chart_data.get("title", ""),
+                option=chart_data.get("option", {}),
             )
 
-        table_result = None
-        if data.get("table") and data["table"].get("rows"):
-            table_result = AITableResult(
-                columns=data["table"].get("columns", []),
-                rows=data["table"].get("rows", []),
+        table = None
+        table_data = data.get("table", {})
+        if table_data and table_data.get("rows"):
+            table = AITableResult(
+                columns=table_data.get("columns", []),
+                rows=table_data.get("rows", []),
             )
 
         return AIInsightResponse(
             answer=data.get("answer", "Analysis complete."),
-            chart=chart_config,
-            table=table_result,
+            chart=chart,
+            table=table,
             follow_up_questions=data.get("follow_up_questions", []),
-            tool_used=tool_name,
+            tools_used=tools_used,
+            intent=intent,
+            company_scope=company_scope_used or scope_sentence,
             assumptions=data.get("assumptions", []),
+            warnings=data.get("warnings", []),
         )
 
     except json.JSONDecodeError as e:
-        logger.error(f"JSON decode error in final response: {e}")
+        logger.error(f"JSON decode error in synthesis: {e}")
         return AIInsightResponse(
             answer="Error parsing AI response. Please try again.",
-            chart=None,
-            table=None,
-            follow_up_questions=[],
-            tool_used=tool_name,
-            assumptions=[],
+            tools_used=tools_used,
+            intent=intent,
+            company_scope=company_scope_used,
         )
     except Exception as e:
-        logger.error(f"Final response generation error: {e}")
+        logger.error(f"Synthesis error: {e}", exc_info=True)
         return AIInsightResponse(
             answer=f"Error generating response: {str(e)}",
-            chart=None,
-            table=None,
-            follow_up_questions=[],
-            tool_used=tool_name,
-            assumptions=[],
+            tools_used=tools_used,
+            intent=intent,
+            company_scope=company_scope_used,
         )
 
 
-async def generate_insight(
-    db: Session, request: AIInsightRequest
-) -> AIInsightResponse:
-    """
-    Main orchestration: plan intent → execute tool → generate response.
-    """
+# ─── Main orchestration ────────────────────────────────────────────────────────
 
-    # Step 1: Plan intent
-    intent = plan_intent(request.message)
-    tool_name = intent.get("tool_name", "clarify")
-    parameters = intent.get("parameters", {})
+async def generate_insight(db: Session, request: AIInsightRequest) -> AIInsightResponse:
+    """Full orchestration: classify → plan → execute → synthesize."""
 
-    if tool_name == "clarify":
+    if not settings.openai_api_key:
         return AIInsightResponse(
-            answer=f"I can help with sales and business analytics. {intent.get('reason', '')} Try asking about sales trends, product performance, customer activity, or stock levels.",
-            chart=None,
-            table=None,
-            follow_up_questions=[
-                "Which product groups are declining this quarter?",
-                "Which customers have stopped buying?",
-                "What products should we stock up on?",
-                "Show me sales trend for the last 6 months",
-                "Who are our top 10 customers?",
-            ],
-            tool_used=None,
-            assumptions=[],
+            answer="OpenAI API key is not configured. Please add OPENAI_API_KEY to secrets.",
+            tools_used=[],
+            company_scope="",
         )
 
-    # Step 2: Execute tool
+    # 1. Classify intent
+    intent = classify_intent(request.message)
+    logger.info(f"AI intent: {intent} | question: {request.message[:80]}")
+
+    # 2. Plan steps
     try:
-        tool_result = execute_tool(db, tool_name, parameters, request)
+        steps, company_scope_used = plan_steps(request.message, intent, request)
     except Exception as e:
-        logger.error(f"Tool execution error: {e}", exc_info=True)
+        logger.error(f"Step planning error: {e}", exc_info=True)
+        steps, company_scope_used = [], ""
+
+    if not steps:
+        co_nos = request.company_nos or ["3", "4", "5", "6"]
         return AIInsightResponse(
-            answer=f"Error executing analysis: {str(e)}",
-            chart=None,
-            table=None,
-            follow_up_questions=[],
-            tool_used=tool_name,
-            assumptions=[],
+            answer=(
+                "I can help with sales analytics across all divisions. "
+                "Try asking about trends, product performance, customer activity, stock, or projections."
+            ),
+            follow_up_questions=[
+                "Show sales trend for the last 6 months by division",
+                "Which customers stopped buying in the last 60 days?",
+                "Which product groups are declining this quarter?",
+                "Project this month's sales",
+                "Compare internal vs external sales",
+                "Which products should sales focus on?",
+            ],
+            tools_used=[],
+            intent=intent,
+            company_scope=company_scope_sentence(co_nos, request.sale_scope),
         )
 
-    # Step 3: Generate final response
-    response = generate_final_response(request.message, tool_result, tool_name)
-    return response
+    # 3. Execute steps
+    steps_with_results = []
+    for step in steps:
+        logger.info(f"Executing tool: {step['tool_name']} | params: {step.get('parameters', {})}")
+        result = execute_tool(db, step["tool_name"], step.get("parameters", {}), request)
+        steps_with_results.append({"step": step, "data": result})
 
+    # 4. Synthesize
+    return synthesize_response(
+        request.message, intent, steps_with_results, request, company_scope_used
+    )
+
+
+# ─── Suggested questions ───────────────────────────────────────────────────────
 
 def get_suggested_questions() -> list[dict[str, str]]:
-    """Return suggested questions for the user."""
-
     return [
-        {"text": "Which product groups are declining?", "icon": "📉"},
+        {"text": "Show sales trend for the last 12 months by division", "icon": "📈"},
+        {"text": "Which product groups declined the most this quarter?", "icon": "📉"},
+        {"text": "Compare internal vs external sales", "icon": "🔄"},
         {"text": "Which customers stopped buying?", "icon": "🚨"},
-        {"text": "What products should we stock?", "icon": "📦"},
-        {"text": "Show sales trend for the last 12 months", "icon": "📈"},
-        {"text": "Who are our top 10 customers?", "icon": "🏆"},
-        {"text": "Compare this month vs last month", "icon": "📊"},
-        {"text": "Which customers are at risk of churning?", "icon": "⚠️"},
-        {"text": "Show salesperson performance this year", "icon": "👤"},
+        {"text": "Project this month's sales", "icon": "🔮"},
+        {"text": "Which products should sales focus on?", "icon": "🎯"},
+        {"text": "Show top 10 customers in Retail", "icon": "🏆"},
+        {"text": "Why did sales drop this month?", "icon": "🔍"},
     ]

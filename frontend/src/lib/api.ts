@@ -157,7 +157,11 @@ export type AIInsightResponse = {
   table?: AITableResult;
   follow_up_questions: string[];
   tool_used?: string;
+  tools_used: string[];
+  intent?: string;
+  company_scope?: string;
   assumptions: string[];
+  warnings: string[];
 };
 
 export type AISuggestion = {
@@ -176,6 +180,7 @@ export async function askAIInsight(
     customer_code?: string;
     company_nos?: string[];
     sale_scope?: string;
+    history?: AIChatMessage[];
   }
 ): Promise<AIInsightResponse> {
   const payload = { message, ...options };
