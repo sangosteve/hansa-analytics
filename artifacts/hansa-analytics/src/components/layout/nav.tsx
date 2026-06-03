@@ -1,5 +1,13 @@
 import { Link, useLocation } from "wouter";
 import { BarChart2, TrendingDown } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useCompany, COMPANIES } from "@/lib/company-context";
 
 const tabs = [
   { path: "/", label: "Sales Dashboard", icon: BarChart2 },
@@ -8,6 +16,7 @@ const tabs = [
 
 export default function NavBar() {
   const [location] = useLocation();
+  const { companyNo, setCompanyNo } = useCompany();
 
   return (
     <nav className="flex-shrink-0 h-10 border-b border-border bg-card flex items-stretch px-2 gap-0.5">
@@ -31,6 +40,20 @@ export default function NavBar() {
           </Link>
         );
       })}
+      <div className="ml-auto flex items-center pr-1">
+        <Select value={companyNo} onValueChange={setCompanyNo}>
+          <SelectTrigger className="h-7 text-xs border-border bg-secondary w-44">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent className="bg-card border-border">
+            {COMPANIES.map((c) => (
+              <SelectItem key={c.value} value={c.value} className="text-xs">
+                {c.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
     </nav>
   );
 }

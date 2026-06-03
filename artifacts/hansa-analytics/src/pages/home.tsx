@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { RefreshCw, TrendingUp, Users, Calendar, Building2, AlertTriangle, TrendingDown, Activity } from "lucide-react";
+import { RefreshCw, TrendingUp, Calendar, Building2, AlertTriangle, TrendingDown, Activity, Package } from "lucide-react";
 import ReactECharts from "echarts-for-react";
 
 import {
@@ -10,24 +10,17 @@ import {
 } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import AIInsightsPanel from "@/components/ai/ai-insights-panel";
-
-const COMPANIES = [
-  { value: "3", label: "Co. 3 — Retail" },
-  { value: "4", label: "Co. 4 — Manufacturing" },
-  { value: "5", label: "Co. 5 — Engineering" },
-  { value: "6", label: "Co. 6 — Mining" },
-];
+import { useCompany } from "@/lib/company-context";
 
 const monthLabels = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const chartColors = ["#818cf8","#34d399","#fb923c","#f87171","#a78bfa","#38bdf8"];
+const divisionColors: Record<string, string> = {
+  "3": "#818cf8",
+  "4": "#34d399",
+  "5": "#fb923c",
+  "6": "#f87171",
+};
 
 const numberFormatter = new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 });
 
@@ -62,13 +55,13 @@ const darkChartBase = {
 };
 
 export default function Home() {
+  const { companyNo, companyLabel } = useCompany();
   const [summary, setSummary] = useState<SalesSummaryResponse | null>(null);
   const [predictive, setPredictive] = useState<PredictiveInsightsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [predictiveLoading, setPredictiveLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [companyNo, setCompanyNo] = useState("3");
-  const [dateFrom, setDateFrom] = useState("2025-01-01");
+  const [dateFrom, setDateFrom] = useState("2024-01-01");
   const [dateTo, setDateTo] = useState("2026-12-31");
   const [error, setError] = useState<string | null>(null);
 
@@ -150,16 +143,20 @@ export default function Home() {
     });
   }, [currentYear, previousYear, salesRows]);
 
-  const repData = useMemo(() => {
-    const rows = summary?.rep_contribution ?? [];
-    const topRows = rows.slice(0, 5);
-    const others = rows.slice(5).reduce((sum, row) => sum + row.total_tonnes, 0);
-    return others > 0 ? [...topRows, { salesperson: "Other", total_tonnes: others }] : topRows;
-  }, [summary]);
-
   const totalTonnes = useMemo(() => salesRows.reduce((sum, row) => sum + row.total_tonnes, 0), [salesRows]);
-  const topSalesperson = summary?.rep_contribution?.[0]?.salesperson ?? "-";
-  const topRepTonnes = summary?.rep_contribution?.[0]?.total_tonnes ?? 0;
+
+  const topGroup = useMemo(() => {
+    if (!predictive?.product_group_trends?.length) return null;
+    const sorted = [...predictive.product_group_trends].sort((a, b) => b.current_3m_tonnes - a.current_3m_tonnes);
+    return sorted[0] ?? null;
+  }, [predictive]);
+
+  const growingGroups = useMemo(
+    () => predictive?.product_group_trends.filter((g) => g.trend === "growing") ?? [],
+    [predictive]
+  );
+
+  const divisionBreakdown = summary?.division_breakdown ?? [];
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -243,26 +240,30 @@ export default function Home() {
     })),
   }), [cumulativeComparisonData, years]);
 
-  const repOptions = useMemo(() => ({
-    ...darkChartBase,
-    tooltip: { ...darkChartBase.tooltip, trigger: "item",
-      // @ts-ignore
-      formatter: (params) => `${params.name}: ${numberFormatter.format(params.value)} t (${params.percent}%)`,
-    },
-    legend: { orient: "vertical", left: "left", top: "middle", textStyle: { color: "#8b949e" } },
-    series: [{
-      name: "Sales rep", type: "pie", radius: ["40%", "68%"], center: ["60%", "50%"],
-      avoidLabelOverlap: true,
-      itemStyle: { borderRadius: 4, borderColor: "#161b22", borderWidth: 2 },
-      label: { show: false },
-      emphasis: { label: { show: true, fontSize: 13, fontWeight: "bold", color: "#e6edf3" } },
-      labelLine: { show: false },
-      data: repData.map((entry, i) => ({
-        name: entry.salesperson, value: entry.total_tonnes,
-        itemStyle: { color: chartColors[i % chartColors.length] },
-      })),
-    }],
-  }), [repData]);
+  // Sales by Division chart (used when "all" is selected)
+  const divisionChartOptions = useMemo(() => {
+    if (!divisionBreakdown.length) return null;
+    return {
+      ...darkChartBase,
+      tooltip: { ...darkChartBase.tooltip, trigger: "item",
+        // @ts-ignore
+        formatter: (p) => `${p.name}: ${numberFormatter.format(p.value)} t (${p.percent}%)`,
+      },
+      legend: { orient: "vertical", left: "left", top: "middle", textStyle: { color: "#8b949e" } },
+      series: [{
+        name: "Division", type: "pie", radius: ["40%", "68%"], center: ["60%", "50%"],
+        avoidLabelOverlap: true,
+        itemStyle: { borderRadius: 4, borderColor: "#161b22", borderWidth: 2 },
+        label: { show: false },
+        emphasis: { label: { show: true, fontSize: 13, fontWeight: "bold", color: "#e6edf3" } },
+        labelLine: { show: false },
+        data: divisionBreakdown.map((d) => ({
+          name: d.label, value: d.total_tonnes,
+          itemStyle: { color: divisionColors[d.company_no] ?? "#818cf8" },
+        })),
+      }],
+    };
+  }, [divisionBreakdown]);
 
   const loadingOverlay = (
     <div className="flex h-full items-center justify-center text-muted-foreground text-sm">
@@ -273,7 +274,6 @@ export default function Home() {
     </div>
   );
 
-  const companyLabel = COMPANIES.find((c) => c.value === companyNo)?.label ?? companyNo;
   const mtd = predictive?.mtd_projection;
 
   return (
@@ -295,19 +295,8 @@ export default function Home() {
             </Button>
           </div>
 
-          {/* Filters row */}
-          <div className="grid grid-cols-4 gap-3">
-            <div className="space-y-1">
-              <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Company</label>
-              <Select value={companyNo} onValueChange={setCompanyNo}>
-                <SelectTrigger className="h-8 text-xs border-border bg-secondary"><SelectValue /></SelectTrigger>
-                <SelectContent className="bg-card border-border">
-                  {COMPANIES.map((c) => (
-                    <SelectItem key={c.value} value={c.value} className="text-xs">{c.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+          {/* Date filters */}
+          <div className="grid grid-cols-3 gap-3">
             <div className="space-y-1">
               <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Start date</label>
               <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
@@ -328,6 +317,7 @@ export default function Home() {
 
           {/* KPI cards */}
           <div className="grid grid-cols-4 gap-3">
+            {/* Total Tonnes */}
             <div className="rounded-lg border border-border bg-card p-3.5">
               <div className="flex items-center gap-2 mb-1.5">
                 <TrendingUp className="h-3.5 w-3.5 text-primary" />
@@ -335,15 +325,29 @@ export default function Home() {
               </div>
               <div className="text-2xl font-bold text-foreground">{formatTonnes(totalTonnes)}</div>
             </div>
+
+            {/* Top Product Group (replaces Top Rep) */}
             <div className="rounded-lg border border-border bg-card p-3.5">
               <div className="flex items-center gap-2 mb-1.5">
-                <Users className="h-3.5 w-3.5 text-primary" />
-                <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Top rep</span>
+                <Package className="h-3.5 w-3.5 text-primary" />
+                <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Top group (3m)</span>
               </div>
-              <div className="text-2xl font-bold text-foreground truncate">{topSalesperson}</div>
-              <div className="text-xs text-muted-foreground mt-0.5">{formatTonnes(topRepTonnes)}</div>
+              {predictiveLoading ? (
+                <div className="text-xs text-muted-foreground">Loading…</div>
+              ) : topGroup ? (
+                <>
+                  <div className="text-lg font-bold text-foreground truncate">{topGroup.name || topGroup.code}</div>
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-0.5">
+                    <span>{formatTonnes(topGroup.current_3m_tonnes)}</span>
+                    {pctBadge(topGroup.pct_change)}
+                  </div>
+                </>
+              ) : (
+                <div className="text-2xl font-bold text-foreground">—</div>
+              )}
             </div>
-            {/* MTD projection KPI */}
+
+            {/* MTD projection */}
             <div className="rounded-lg border border-border bg-card p-3.5">
               <div className="flex items-center gap-2 mb-1.5">
                 <Activity className="h-3.5 w-3.5 text-primary" />
@@ -366,12 +370,14 @@ export default function Home() {
                 <div className="text-2xl font-bold text-foreground">—</div>
               )}
             </div>
+
+            {/* Company / scope */}
             <div className="rounded-lg border border-border bg-card p-3.5">
               <div className="flex items-center gap-2 mb-1.5">
                 <Building2 className="h-3.5 w-3.5 text-primary" />
-                <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Company</span>
+                <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Scope</span>
               </div>
-              <div className="text-2xl font-bold text-foreground">{companyNo}</div>
+              <div className="text-sm font-bold text-foreground leading-tight">{companyLabel}</div>
               <div className="text-xs text-muted-foreground mt-0.5">{years.join(", ") || "—"}</div>
             </div>
           </div>
@@ -444,31 +450,32 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* Salesperson trends */}
+              {/* Growing product groups (replaces Rep Trends) */}
               <div className="rounded-lg border border-border bg-card p-3.5">
                 <div className="flex items-center gap-2 mb-2">
                   <TrendingUp className="h-3.5 w-3.5 text-emerald-400" />
                   <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-                    Rep trends (3m)
+                    Growing groups (3m)
                   </span>
                 </div>
                 <div className="space-y-1.5 max-h-[120px] overflow-y-auto">
-                  {predictive.salesperson_trends.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">No data</p>
-                  ) : predictive.salesperson_trends.slice(0, 5).map((s) => (
-                    <div key={s.salesperson} className="flex items-center justify-between">
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        {trendIcon(s.trend)}
-                        <span className="text-xs text-foreground truncate max-w-[110px]">{s.salesperson}</span>
-                      </div>
+                  {growingGroups.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">No growing groups</p>
+                  ) : growingGroups.slice(0, 5).map((g) => (
+                    <div key={g.code} className="flex items-center justify-between">
+                      <span className="text-xs text-foreground truncate max-w-[130px]">
+                        {g.name || g.code}
+                      </span>
                       <div className="flex items-center gap-1.5 flex-shrink-0">
-                        {pctBadge(s.pct_change)}
-                        <span className="text-[10px] text-muted-foreground">{formatTonnes(s.current_3m_tonnes)}</span>
+                        {pctBadge(g.pct_change)}
+                        <span className="text-[10px] text-muted-foreground">{formatTonnes(g.current_3m_tonnes)}</span>
                       </div>
                     </div>
                   ))}
                 </div>
-                <div className="mt-2 text-[10px] text-muted-foreground">vs prior 3 months</div>
+                <div className="mt-2 text-[10px] text-muted-foreground">
+                  {growingGroups.length} of {predictive.product_group_trends.length} groups growing
+                </div>
               </div>
             </div>
           )}
@@ -499,18 +506,61 @@ export default function Home() {
                 )}
               </div>
             </div>
-            <div className="rounded-lg border border-border bg-card p-4">
-              <h3 className="text-xs font-semibold text-foreground mb-3">Sales rep contribution</h3>
-              <div className="h-[260px]">
-                {loading ? loadingOverlay : repData.length === 0 ? (
-                  <div className="flex h-full items-center justify-center text-muted-foreground text-sm">No rep data</div>
-                ) : (
-                  <ReactECharts option={repOptions} style={{ width: "100%", height: "100%" }} notMerge lazyUpdate />
-                )}
-              </div>
-            </div>
 
-            {/* Product group trend chart */}
+            {/* Division breakdown (all) OR product group trends table */}
+            {companyNo === "all" ? (
+              <div className="rounded-lg border border-border bg-card p-4">
+                <h3 className="text-xs font-semibold text-foreground mb-3">Sales by division</h3>
+                <div className="h-[260px]">
+                  {loading ? loadingOverlay : divisionChartOptions ? (
+                    <ReactECharts option={divisionChartOptions} style={{ width: "100%", height: "100%" }} notMerge lazyUpdate />
+                  ) : (
+                    <div className="flex h-full items-center justify-center text-muted-foreground text-sm">No data</div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-lg border border-border bg-card p-4">
+                <h3 className="text-xs font-semibold text-foreground mb-3">Sales rep contribution</h3>
+                <div className="h-[260px]">
+                  {loading ? loadingOverlay : !summary?.rep_contribution?.length ? (
+                    <div className="flex h-full items-center justify-center text-muted-foreground text-sm">No rep data</div>
+                  ) : (
+                    <ReactECharts
+                      option={{
+                        ...darkChartBase,
+                        tooltip: { ...darkChartBase.tooltip, trigger: "item",
+                          // @ts-ignore
+                          formatter: (p) => `${p.name}: ${numberFormatter.format(p.value)} t (${p.percent}%)`,
+                        },
+                        legend: { orient: "vertical", left: "left", top: "middle", textStyle: { color: "#8b949e" } },
+                        series: [{
+                          name: "Sales rep", type: "pie", radius: ["40%", "68%"], center: ["60%", "50%"],
+                          avoidLabelOverlap: true,
+                          itemStyle: { borderRadius: 4, borderColor: "#161b22", borderWidth: 2 },
+                          label: { show: false },
+                          emphasis: { label: { show: true, fontSize: 13, fontWeight: "bold", color: "#e6edf3" } },
+                          labelLine: { show: false },
+                          data: (() => {
+                            const rows = summary.rep_contribution;
+                            const top = rows.slice(0, 5);
+                            const others = rows.slice(5).reduce((s, r) => s + r.total_tonnes, 0);
+                            const all = others > 0 ? [...top, { salesperson: "Other", total_tonnes: others }] : top;
+                            return all.map((e, i) => ({
+                              name: e.salesperson, value: e.total_tonnes,
+                              itemStyle: { color: chartColors[i % chartColors.length] },
+                            }));
+                          })(),
+                        }],
+                      }}
+                      style={{ width: "100%", height: "100%" }} notMerge lazyUpdate
+                    />
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Product group trends table */}
             {!predictiveLoading && predictive && predictive.product_group_trends.length > 0 && (
               <div className="rounded-lg border border-border bg-card p-4">
                 <h3 className="text-xs font-semibold text-foreground mb-3">Product group trends (3m vs prior 3m)</h3>
@@ -543,13 +593,12 @@ export default function Home() {
               </div>
             )}
           </div>
+
         </div>
       </div>
 
-      {/* ── Right: AI sidebar ── */}
-      <div className="w-[360px] flex-shrink-0 border-l border-border flex flex-col bg-card overflow-hidden">
-        <AIInsightsPanel />
-      </div>
+      {/* ── Right: AI panel ── */}
+      <AIInsightsPanel companyNo={companyNo} dateFrom={dateFrom} dateTo={dateTo} />
     </div>
   );
 }

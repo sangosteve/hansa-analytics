@@ -3,6 +3,7 @@ import {
   TrendingUp, TrendingDown, AlertTriangle, Package,
   Users, Box, ArrowUpRight, ArrowDownRight, Minus, RefreshCw
 } from "lucide-react";
+import { useCompany } from "@/lib/company-context";
 import ReactECharts from "echarts-for-react";
 
 import {
@@ -481,7 +482,7 @@ const TABS: { id: TabId; label: string; icon: typeof Package }[] = [
 
 export default function Movement() {
   const [tab, setTab] = useState<TabId>("groups");
-  const [companyNo] = useState("3");
+  const { companyNo, companyLabel } = useCompany();
   const [summary, setSummary] = useState<MovementSummary | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(true);
 
@@ -500,7 +501,7 @@ export default function Movement() {
           <div>
             <h1 className="text-sm font-semibold text-foreground">Movement Analytics</h1>
             <p className="text-[10px] text-muted-foreground mt-0.5">
-              Product group health, slow movers &amp; customer activity — Company {companyNo}
+              Product group health, slow movers &amp; customer activity — {companyLabel}
               {summary?.data_as_of && (
                 <span className="ml-2 text-primary">· data as of {summary.data_as_of.slice(0, 10)}</span>
               )}

@@ -1,7 +1,7 @@
 const API_BASE_URL =
   import.meta.env.VITE_API_URL ?? "/api";
 
-export type CustomerMovementRow = {
+export type LegacyCustomerMovementRow = {
   id: number;
   customer_code: string;
   customer_name: string | null;
@@ -24,7 +24,7 @@ export type CustomerMovementRow = {
 
 export type CustomerMovementResponse = {
   count: number;
-  data: CustomerMovementRow[];
+  data: LegacyCustomerMovementRow[];
 };
 
 export type CustomerProductGroupItem = {
@@ -58,12 +58,19 @@ export type SalesSummaryRepRow = {
   total_tonnes: number;
 };
 
+export type DivisionBreakdownRow = {
+  company_no: string;
+  label: string;
+  total_tonnes: number;
+};
+
 export type SalesSummaryResponse = {
   company_no: string;
   date_from: string;
   date_to: string;
   monthly_sales: SalesSummaryMonthlyRow[];
   rep_contribution: SalesSummaryRepRow[];
+  division_breakdown: DivisionBreakdownRow[];
 };
 
 export async function getSalesSummary(
