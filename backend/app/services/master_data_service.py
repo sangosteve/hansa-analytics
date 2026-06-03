@@ -29,8 +29,8 @@ def to_int(value):
         return None
 
 
-async def refresh_master_data(db: Session) -> RefreshRun:
-    company_no = settings.hansa_company_no
+async def refresh_master_data(db: Session, company_no: str | None = None) -> RefreshRun:
+    company_no = company_no or settings.hansa_master_company_no
 
     refresh_run = RefreshRun(
         company_no=company_no,

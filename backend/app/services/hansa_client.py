@@ -1,12 +1,20 @@
+"""
+HansaWorld ERP client.
+Pass company_no explicitly to override the settings default,
+enabling multi-company refresh in a single process.
+"""
+
+from typing import Optional
+
 import httpx
 
 from app.core.config import settings
 
 
 class HansaClient:
-    def __init__(self) -> None:
+    def __init__(self, company_no: Optional[str] = None) -> None:
         self.base_url = settings.hansa_base_url.rstrip("/")
-        self.company_no = settings.hansa_company_no
+        self.company_no = company_no or settings.hansa_company_no
         self.auth = (settings.hansa_username, settings.hansa_password)
 
     async def _request(self, path: str) -> httpx.Response:
@@ -29,7 +37,6 @@ class HansaClient:
         - a register-named dict: {"ITVc": [...]}
         - a nested dict containing the list somewhere deeper
         """
-
         if isinstance(data, list):
             if all(isinstance(row, dict) for row in data):
                 return data
@@ -94,14 +101,20 @@ class HansaClient:
             f"api/{self.company_no}/CUVc"
             "?fields=Code,Name,CUType&filter.CUType=1"
         )
+
     async def get_invoices(self, date_from: str, date_to: str) -> list[dict]:
+        """
+        Fetch stock-updating invoices (UpdStockFlag=1) for the date range.
+        OrderNr is included so deliveries can be linked back to their
+        originating invoice for salesperson attribution.
+        """
         return await self._get(
             f"api/{self.company_no}/IVVc"
             f"?sort=InvDate"
             f"&range={date_from}:{date_to}"
             f"&filter.OKFlag=1"
             f"&filter.UpdStockFlag=1"
-            f"&fields=SerNr,InvDate,CustCode,ArtCode,Quant,Location,"
+            f"&fields=SerNr,InvDate,CustCode,OrderNr,ArtCode,Quant,Location,"
             f"NotUpdStockFlag,UpdStockFlag,SalesMan,PayDeal,CredMark,InvType,OKFlag"
         )
 

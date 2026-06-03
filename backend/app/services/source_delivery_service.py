@@ -1,3 +1,9 @@
+"""
+Delivery source refresh service.
+Fetches OK'd deliveries from Hansa for a given company and date range,
+applying a range-reload strategy (delete then insert).
+"""
+
 import hashlib
 from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation
@@ -14,7 +20,6 @@ from app.services.hansa_client import HansaClient
 def to_decimal(value: Any) -> Decimal:
     if value is None or value == "":
         return Decimal("0")
-
     try:
         return Decimal(str(value))
     except (InvalidOperation, ValueError, TypeError):
@@ -24,7 +29,6 @@ def to_decimal(value: Any) -> Decimal:
 def to_int(value: Any) -> int | None:
     if value is None or value == "":
         return None
-
     try:
         return int(value)
     except (ValueError, TypeError):
@@ -34,7 +38,6 @@ def to_int(value: Any) -> int | None:
 def parse_date(value: Any) -> date:
     if isinstance(value, date):
         return value
-
     return datetime.strptime(str(value), "%Y-%m-%d").date()
 
 
@@ -47,8 +50,9 @@ async def refresh_delivery_source(
     db: Session,
     date_from: date,
     date_to: date,
+    company_no: str | None = None,
 ) -> RefreshRun:
-    company_no = settings.hansa_company_no
+    company_no = company_no or settings.hansa_company_no
 
     refresh_run = RefreshRun(
         company_no=company_no,
@@ -62,7 +66,7 @@ async def refresh_delivery_source(
     db.commit()
     db.refresh(refresh_run)
 
-    client = HansaClient()
+    client = HansaClient(company_no=company_no)
 
     try:
         deliveries = await client.get_deliveries(
@@ -72,8 +76,7 @@ async def refresh_delivery_source(
 
         # Range reload: delete existing source delivery rows for this period.
         db.execute(
-            text(
-                """
+            text("""
                 DELETE FROM hansa_delivery_lines dl
                 USING hansa_delivery_headers dh
                 WHERE dl.company_no = dh.company_no
@@ -81,34 +84,21 @@ async def refresh_delivery_source(
                   AND dh.company_no = :company_no
                   AND dh.ship_date >= :date_from
                   AND dh.ship_date <= :date_to;
-                """
-            ),
-            {
-                "company_no": company_no,
-                "date_from": date_from,
-                "date_to": date_to,
-            },
+            """),
+            {"company_no": company_no, "date_from": date_from, "date_to": date_to},
         )
-
         db.execute(
-            text(
-                """
+            text("""
                 DELETE FROM hansa_delivery_headers
                 WHERE company_no = :company_no
                   AND ship_date >= :date_from
                   AND ship_date <= :date_to;
-                """
-            ),
-            {
-                "company_no": company_no,
-                "date_from": date_from,
-                "date_to": date_to,
-            },
+            """),
+            {"company_no": company_no, "date_from": date_from, "date_to": date_to},
         )
 
         headers: list[HansaDeliveryHeader] = []
         lines: list[HansaDeliveryLine] = []
-
         skipped_headers = 0
         skipped_lines = 0
 
@@ -171,7 +161,6 @@ async def refresh_delivery_source(
 
         if headers:
             db.add_all(headers)
-
         if lines:
             db.add_all(lines)
 
@@ -179,30 +168,24 @@ async def refresh_delivery_source(
         refresh_run.finished_at = datetime.now(timezone.utc)
         refresh_run.records_processed = len(headers) + len(lines)
         refresh_run.message = (
-            f"Delivery source refreshed successfully. "
-            f"Documents fetched: {len(deliveries)}. "
-            f"Headers inserted: {len(headers)}. "
-            f"Lines inserted: {len(lines)}. "
-            f"Skipped headers: {skipped_headers}. "
-            f"Skipped lines: {skipped_lines}."
+            f"Delivery source refreshed. company={company_no} "
+            f"Documents: {len(deliveries)}. "
+            f"Headers: {len(headers)}. Lines: {len(lines)}. "
+            f"Skipped headers: {skipped_headers}. Skipped lines: {skipped_lines}."
         )
 
         db.commit()
         db.refresh(refresh_run)
-
         return refresh_run
 
     except Exception as error:
         db.rollback()
-
-        failed_refresh_run = db.get(RefreshRun, refresh_run.id)
-
-        if failed_refresh_run:
-            failed_refresh_run.status = "failed"
-            failed_refresh_run.finished_at = datetime.now(timezone.utc)
-            failed_refresh_run.message = str(error)
+        failed = db.get(RefreshRun, refresh_run.id)
+        if failed:
+            failed.status = "failed"
+            failed.finished_at = datetime.now(timezone.utc)
+            failed.message = str(error)
             db.commit()
-            db.refresh(failed_refresh_run)
-            return failed_refresh_run
-
+            db.refresh(failed)
+            return failed
         raise

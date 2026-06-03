@@ -295,6 +295,74 @@ export async function getCustomerMovementAnalytics(companyNo = "3"): Promise<Cus
   return res.json();
 }
 
+// ── Predictive analytics types ────────────────────────────────────────────
+
+export type MtdProjection = {
+  month: string;
+  days_elapsed: number;
+  days_in_month: number;
+  actual_tonnes: number;
+  projected_eom_tonnes: number;
+  same_period_last_year_tonnes: number;
+  yoy_pct_change: number | null;
+};
+
+export type ProductGroupTrend = {
+  code: string;
+  name: string;
+  current_3m_tonnes: number;
+  prior_3m_tonnes: number;
+  pct_change: number | null;
+  trend: "growing" | "declining" | "stable" | "new" | "stopped";
+};
+
+export type CustomerLapseRisk = {
+  customer_code: string;
+  customer_name: string | null;
+  tonnes_6m_prior: number;
+  last_purchase_date: string | null;
+  days_since_purchase: number | null;
+  active_months_before: number;
+  revenue_tier: "high" | "medium" | "low";
+};
+
+export type ProductToPush = {
+  item_code: string;
+  item_name: string | null;
+  item_group_name: string | null;
+  recent_3m_tonnes: number;
+  prior_3m_tonnes: number;
+  pct_change: number | null;
+};
+
+export type SalespersonTrend = {
+  salesperson: string;
+  current_3m_tonnes: number;
+  prior_3m_tonnes: number;
+  pct_change: number | null;
+  trend: "growing" | "declining" | "stable" | "new";
+};
+
+export type PredictiveInsightsResponse = {
+  company_no: string;
+  reference_date: string | null;
+  mtd_projection: MtdProjection | null;
+  product_group_trends: ProductGroupTrend[];
+  customer_lapse_risk: CustomerLapseRisk[];
+  products_to_push: ProductToPush[];
+  salesperson_trends: SalespersonTrend[];
+};
+
+export async function getPredictiveInsights(
+  companyNo?: string
+): Promise<PredictiveInsightsResponse> {
+  const params = new URLSearchParams();
+  if (companyNo) params.set("company_no", companyNo);
+  const res = await fetch(`${API_BASE_URL}/analytics/predictive?${params}`);
+  if (!res.ok) throw new Error("Failed to fetch predictive insights");
+  return res.json();
+}
+
 export async function getAISuggestions(): Promise<AISuggestion[]> {
   const response = await fetch(`${API_BASE_URL}/ai/suggestions`);
 

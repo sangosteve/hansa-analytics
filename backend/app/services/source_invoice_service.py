@@ -1,3 +1,10 @@
+"""
+Invoice source refresh service.
+Fetches stock-updating invoices from Hansa for a given company and date range,
+applying a range-reload strategy (delete then insert) to keep source data current.
+Stores OrderNr so deliveries can later be linked back for salesperson attribution.
+"""
+
 import hashlib
 from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation
@@ -14,7 +21,6 @@ from app.services.hansa_client import HansaClient
 def to_decimal(value: Any) -> Decimal:
     if value is None or value == "":
         return Decimal("0")
-
     try:
         return Decimal(str(value))
     except (InvalidOperation, ValueError, TypeError):
@@ -24,7 +30,6 @@ def to_decimal(value: Any) -> Decimal:
 def to_int(value: Any) -> int | None:
     if value is None or value == "":
         return None
-
     try:
         return int(value)
     except (ValueError, TypeError):
@@ -34,7 +39,6 @@ def to_int(value: Any) -> int | None:
 def parse_date(value: Any) -> date:
     if isinstance(value, date):
         return value
-
     return datetime.strptime(str(value), "%Y-%m-%d").date()
 
 
@@ -47,8 +51,9 @@ async def refresh_invoice_source(
     db: Session,
     date_from: date,
     date_to: date,
+    company_no: str | None = None,
 ) -> RefreshRun:
-    company_no = settings.hansa_company_no
+    company_no = company_no or settings.hansa_company_no
 
     refresh_run = RefreshRun(
         company_no=company_no,
@@ -62,7 +67,7 @@ async def refresh_invoice_source(
     db.commit()
     db.refresh(refresh_run)
 
-    client = HansaClient()
+    client = HansaClient(company_no=company_no)
 
     try:
         invoices = await client.get_invoices(
@@ -72,8 +77,7 @@ async def refresh_invoice_source(
 
         # Range reload: delete existing source invoice rows for this period.
         db.execute(
-            text(
-                """
+            text("""
                 DELETE FROM hansa_invoice_lines il
                 USING hansa_invoice_headers ih
                 WHERE il.company_no = ih.company_no
@@ -81,34 +85,21 @@ async def refresh_invoice_source(
                   AND ih.company_no = :company_no
                   AND ih.inv_date >= :date_from
                   AND ih.inv_date <= :date_to;
-                """
-            ),
-            {
-                "company_no": company_no,
-                "date_from": date_from,
-                "date_to": date_to,
-            },
+            """),
+            {"company_no": company_no, "date_from": date_from, "date_to": date_to},
         )
-
         db.execute(
-            text(
-                """
+            text("""
                 DELETE FROM hansa_invoice_headers
                 WHERE company_no = :company_no
                   AND inv_date >= :date_from
                   AND inv_date <= :date_to;
-                """
-            ),
-            {
-                "company_no": company_no,
-                "date_from": date_from,
-                "date_to": date_to,
-            },
+            """),
+            {"company_no": company_no, "date_from": date_from, "date_to": date_to},
         )
 
         headers: list[HansaInvoiceHeader] = []
         lines: list[HansaInvoiceLine] = []
-
         skipped_headers = 0
         skipped_lines = 0
 
@@ -128,6 +119,7 @@ async def refresh_invoice_source(
                     ser_nr=ser_nr,
                     inv_date=inv_date,
                     cust_code=document.get("CustCode"),
+                    order_no=document.get("OrderNr") or None,
                     pay_deal=document.get("PayDeal"),
                     ok_flag=to_int(document.get("OKFlag")),
                     inv_type=document.get("InvType"),
@@ -175,7 +167,6 @@ async def refresh_invoice_source(
 
         if headers:
             db.add_all(headers)
-
         if lines:
             db.add_all(lines)
 
@@ -183,30 +174,24 @@ async def refresh_invoice_source(
         refresh_run.finished_at = datetime.now(timezone.utc)
         refresh_run.records_processed = len(headers) + len(lines)
         refresh_run.message = (
-            f"Invoice source refreshed successfully. "
-            f"Documents fetched: {len(invoices)}. "
-            f"Headers inserted: {len(headers)}. "
-            f"Lines inserted: {len(lines)}. "
-            f"Skipped headers: {skipped_headers}. "
-            f"Skipped lines: {skipped_lines}."
+            f"Invoice source refreshed. company={company_no} "
+            f"Documents: {len(invoices)}. "
+            f"Headers: {len(headers)}. Lines: {len(lines)}. "
+            f"Skipped headers: {skipped_headers}. Skipped lines: {skipped_lines}."
         )
 
         db.commit()
         db.refresh(refresh_run)
-
         return refresh_run
 
     except Exception as error:
         db.rollback()
-
-        failed_refresh_run = db.get(RefreshRun, refresh_run.id)
-
-        if failed_refresh_run:
-            failed_refresh_run.status = "failed"
-            failed_refresh_run.finished_at = datetime.now(timezone.utc)
-            failed_refresh_run.message = str(error)
+        failed = db.get(RefreshRun, refresh_run.id)
+        if failed:
+            failed.status = "failed"
+            failed.finished_at = datetime.now(timezone.utc)
+            failed.message = str(error)
             db.commit()
-            db.refresh(failed_refresh_run)
-            return failed_refresh_run
-
+            db.refresh(failed)
+            return failed
         raise

@@ -259,6 +259,7 @@ class HansaInvoiceHeader(Base):
     cred_mark: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     sales_man: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, index=True)
     upd_stock_flag: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    order_no: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, index=True)
     location: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, index=True)
 
     source_sequence: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)

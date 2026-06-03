@@ -1,0 +1,363 @@
+Here’s the revised Replit prompt, updated to make clear that **AI is already being implemented**, and that we also want **explainable predictive insights** added carefully.
+
+We already have a working Hansa Analytics app built in this project.
+
+The app currently has:
+
+* FastAPI backend
+* PostgreSQL/Neon database
+* SQLAlchemy/Alembic
+* Hansa Standard ERP integration
+* Master data refresh
+* Invoice/delivery transaction refresh
+* Sales/fact data copied into Neon
+* Customer movement dashboard
+* Next.js frontend dashboard
+* Existing refresh endpoints and dashboard UI
+* AI insights implementation has already started or is being added
+
+This is not a greenfield build. Treat this as an improvement/refactor task.
+
+Your job is to review the existing implementation and improve it safely into a more production-grade analytics platform.
+
+Do not rewrite everything unnecessarily.
+Do not break working functionality.
+Do not remove existing working endpoints until replacements are validated.
+Make changes incrementally and explain what changed.
+
+Business context:
+We need analytics across multiple Hansa companies/divisions:
+
+* Company 3: Retail
+* Company 4: Manufacturing
+* Company 5: Engineering
+* Company 6: Mining
+
+Company 1 is mainly the shared master data source for:
+
+* Items
+* Item groups
+* Customers
+
+Operating companies have their own transactions:
+
+* Invoices
+* Deliveries
+* Sales Orders
+
+Personnel/salesperson records can remain company-specific for now. Do not implement global person merging or global salesperson identity mapping.
+
+Primary improvement goals:
+
+1. Multi-company support
+
+Improve the existing data pipeline so it can refresh data for companies 3, 4, 5, and 6, not just one company.
+
+The system should support:
+
+* All companies view
+* Individual company/division view
+* Company/division filters across dashboard and APIs
+* Refreshing one company at a time
+* Refreshing all active companies
+* Company/division available as a first-class analytics dimension
+
+2. Production-grade refresh process
+
+Improve refresh logic so it is safe for large data volumes.
+
+Requirements:
+
+* Use range reloads, not blind appends.
+* Avoid duplicate records.
+* Support date range refreshes.
+* Support current period/incremental refreshes.
+* Support refresh by company.
+* Support refresh across all companies.
+* Refresh logs must clearly show company, date range, source type, status, records fetched, inserted, skipped, and errors.
+* Make refresh failures easy to diagnose.
+* Keep data traceable back to Hansa source documents.
+
+3. Correct sales tonnage logic
+
+Sales come from two business flows:
+
+Flow 1:
+Quote → Invoice
+
+In this case:
+
+* Invoice updates stock.
+* Use invoice lines for tonnage.
+* Salesperson comes from invoice.
+
+Flow 2:
+Sales Order → Invoice → Delivery
+
+In this case:
+
+* Invoice does not update stock.
+* Delivery updates stock.
+* Use delivery lines for tonnage.
+* Delivery has no salesperson field.
+* Salesperson must come from the linked Sales Order using the delivery order number.
+
+Important:
+
+* Do not double-count invoice and delivery for the same sale.
+* Count invoice tonnage only where the invoice updates stock.
+* Count delivery tonnage where the delivery updates stock.
+* For delivery-based sales, enrich salesperson from the linked Sales Order.
+* If salesperson cannot be found, keep the row and mark salesperson as Unassigned.
+* It is acceptable to exclude analytics/fact rows where item code/ArtCode is missing, because those are not useful for product tonnage analytics.
+* Missing ArtCode should be the main reason to skip a sales analytics line.
+* Preserve source data as much as practical before transforming it into analytics/fact data.
+
+4. Orders integration
+
+Add or improve Sales Order fetching only as needed to support salesperson attribution for deliveries.
+
+We mainly need orders so that delivery rows can be linked back to the order salesperson.
+
+5. Analytics-ready sales data
+
+Ensure there is a clean, reliable analytics dataset/table/view for:
+
+* Tonnes by company/division
+* Tonnes by customer
+* Tonnes by item group
+* Tonnes by item
+* Tonnes by salesperson
+* Tonnes by month
+* Current period vs previous period
+* Sales trends
+* Product group movement
+* Customer movement
+
+This data should be trusted and should be the source used by dashboard and AI insights.
+
+6. Scalability
+
+We may have 1M+ rows for 2025 and beyond.
+
+Please improve performance where necessary:
+
+* Proper indexes
+* Efficient queries
+* Avoid returning huge raw datasets to frontend
+* Use summary queries or summary tables/views where appropriate
+* Keep drilldowns narrow and filtered
+* Make dashboard endpoints fast
+* Make the project structure production-grade and maintainable, not just the database.
+
+7. Customer movement
+
+Keep and improve the existing customer movement analysis.
+
+It should answer:
+
+* Which customers used to buy a product group but no longer buy it?
+* Which customers are declining?
+* Which customers are growing?
+* Which customers are active?
+* Customer → Product Group → Item drilldown
+
+Make sure this uses the improved analytics data, not outdated legacy tables, if the project now has a better sales/fact table.
+
+8. Stock movement and replenishment preparation
+
+Do not build full inventory yet.
+
+We will later provide the correct Hansa stock quantity table/register.
+
+For now, prepare the system conceptually so we can later support:
+
+* Fast-moving products
+* Slow-moving products
+* Products to replenish
+* Stockout risk
+* Days cover
+* Suggested reorder quantity
+* Products sales should push
+
+Current sales movement data can already be used to identify:
+
+* Fast movers
+* Slow movers
+* Declining products
+* Products sales should push based on reduced demand
+
+Actual replenishment decisions will need current stock quantity once we provide the correct stock source.
+
+Do not build location imbalance yet.
+
+9. AI insights implementation
+
+AI insights are part of this project and should be implemented/improved now, not treated as optional.
+
+We want a Copilot-style AI insights module using GPT-5 and OPENAI_API_KEY.
+
+The AI should answer business questions like:
+
+* Show sales trend by item group for the last 6 months
+* Which customers declined the most?
+* Which salesperson sold the most tonnage?
+* Which product groups are growing?
+* Show top 10 customers by tonnage
+* Draw a chart of sales by product group
+* Explain why sales dropped this month
+* Compare current month vs previous month by company
+* Which customers stopped buying cement?
+* What products should sales focus on?
+
+Important AI safety requirement:
+The AI must not execute arbitrary SQL or perform CRUD operations.
+
+It should only fetch/analyze data through:
+
+* Safe approved analytics functions
+* Validated query plans
+* Backend-controlled parameterized queries
+
+The backend must remain in control of all database queries.
+
+The AI should be able to return:
+
+* Short written insight
+* Apache ECharts chart config
+* Optional table data
+* Follow-up questions
+
+The frontend should render AI answers in a clean chat-style insight panel and display charts inside the chat window using Apache ECharts.
+
+10. Predictive insights
+
+Add explainable predictive analysis carefully.
+
+Do not build black-box machine learning yet.
+Start with simple, explainable, business-friendly predictive insights.
+
+The system should support or prepare for:
+
+A. Month-to-date projection
+Example:
+
+* Based on current month sales so far, estimate expected month-end tonnage.
+* Compare projected month-end tonnage against previous month or recent average.
+
+B. Sales trend direction
+Example:
+
+* Product group is growing, declining, or stable based on recent movement.
+* Compare last 3 months vs previous 3 months.
+* Compare current month-to-date vs expected run rate.
+
+C. Customer lapse risk
+Example:
+
+* Customer has reduced buying frequency.
+* Customer bought regularly before but has not bought recently.
+* Customer/product group combination is at risk of stopping.
+
+D. Demand growth/decline
+Example:
+
+* Identify products or product groups whose demand is increasing.
+* Identify products or product groups whose demand is weakening.
+
+E. Stockout risk later
+Once stock quantity data is added:
+
+* Estimate days cover using current stock and average daily movement.
+* Predict when an item may run out.
+* Flag items that need replenishment soon.
+
+F. Products to push
+Use sales movement patterns to identify:
+
+* High historical demand but recent decline
+* Customers who used to buy but stopped
+* Product groups with declining current movement
+* Products that may need sales attention
+
+Predictive analysis must be explainable.
+For every prediction, show the basis, such as:
+
+* Last 30 days movement
+* Last 90 days movement
+* 3-month average
+* 6-month average
+* Current month-to-date run rate
+* Previous period comparison
+
+Avoid presenting predictions as certainty.
+Use wording like:
+
+* likely
+* projected
+* at risk
+* trending
+* based on current movement
+
+11. Frontend improvements
+
+Improve the existing dashboard, do not rebuild from scratch.
+
+Keep it neat, executive-friendly, and professional.
+
+The dashboard should support:
+
+* Company/division filters
+* Date range filters
+* Sales KPI cards
+* Sales trend charts
+* Sales by item group
+* Sales by salesperson
+* Customer movement matrix
+* Drilldown from customer to product group to item
+* AI insights panel with charts
+* Predictive insight cards or sections where appropriate
+
+Avoid loading raw 1M-row data into the frontend.
+
+12. Cleanup
+
+After improvements are validated:
+
+* Identify legacy files/endpoints that are no longer needed.
+* Mark deprecated code clearly.
+* Only remove code when replacement is confirmed working.
+* Keep Alembic migration history safe.
+* Do not drop old data tables unless explicitly asked.
+
+Validation required:
+After implementation, provide test steps and SQL checks for:
+
+* Records by company/year
+* Invoice rows counted
+* Delivery rows counted
+* Order links found
+* Delivery rows enriched with salesperson from order
+* Unassigned salesperson count
+* Total tonnes by source type
+* Total tonnes by salesperson
+* Total tonnes by company/division
+* Customer movement output
+* AI insight endpoint response
+* Predictive insight output
+* Dashboard endpoint responses
+
+Work incrementally.
+
+Priority order:
+
+1. Preserve what works.
+2. Make multi-company refresh reliable.
+3. Correct sales tonnage and salesperson attribution.
+4. Make analytics data trustworthy.
+5. Improve dashboard filters and performance.
+6. Implement/improve AI insights safely.
+7. Add explainable predictive insights.
+8. Clean up legacy code only after replacement is validated.
+
+Focus on correctness, traceability, scalability, and production-grade maintainability.

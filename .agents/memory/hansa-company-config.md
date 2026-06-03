@@ -1,15 +1,23 @@
 ---
 name: Hansa company config
-description: HANSA_COMPANY_NO vs HANSA_MASTER_COMPANY_NO — must be set correctly or all fact_sales tonnes are zero
+description: Which company numbers to use for transactions vs master data, and how they're parameterized
 ---
 
+# Hansa Company Configuration
+
 ## Rule
-- `HANSA_COMPANY_NO=3` — used for ALL Hansa API calls (invoices, deliveries, master data endpoint path) and stored as the company_no on transaction tables (hansa_invoice_headers, fact_sales_lines, etc.)
-- `HANSA_MASTER_COMPANY_NO=1` (default) — used in the fact_sales JOIN to look up items/customers. Master data (items, customers, item_groups) is stored with company_no=1 (fetched from Hansa company 1).
+- `master_company_no` (env: HANSA_MASTER_COMPANY_NO, default "1") — used for items, customers, item_groups lookups
+- `company_no` (env: HANSA_COMPANY_NO) — used for transaction data (invoices, deliveries). Currently company "3" (Retail)
+- Setting master_company_no wrong causes all tonnes = 0 (no item/unit_coefficient lookups resolve)
 
-**Why:** Hansa company 3 holds transaction data; company 1 holds the shared master catalogue. The fact_sales_service SQL joins invoice lines → items using `item.company_no = :master_company_no`. If master_company_no doesn't match the company_no on stored items, the LEFT JOIN returns no rows → unit_coefficient = NULL → COALESCE = 0 → all tonnes = 0.
+## Multi-company support (added June 2026)
+- All service functions (`refresh_invoice_source`, `refresh_delivery_source`, `rebuild_fact_sales_lines`) now accept `company_no` as optional parameter
+- Refresh routes accept `company_no` in request body (defaults to HANSA_COMPANY_NO env var)
+- `HansaClient(company_no=...)` accepts per-call override
+- Companies 3,4,5,6 in the frontend dropdown; 3 is the only one with data currently
 
-**How to apply:** Before running fact-sales or customer-movement, confirm:
-1. items/customers have company_no='1'
-2. HANSA_MASTER_COMPANY_NO is unset (defaults to '1') or explicitly '1'
-3. hansa_invoice_headers have company_no='3'
+## Why
+Hansa ERP uses separate company numbers for different business divisions. The API path includes company_no: `api/{company_no}/IVVc`. Without parameterization you can't fetch multi-company data.
+
+## How to apply
+Pass `company_no` explicitly when calling any service function or the refresh API. Never hardcode `settings.hansa_company_no` in service logic.
