@@ -1,11 +1,15 @@
 """
 Stock status endpoints — serves data from item_stock_status table.
 Populated by the stock_service refresh.
+Supports company_nos (multi-select).
 """
+from typing import Optional
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.core.filters import build_company_filter
 from app.db.database import get_db
 from app.services.stock_service import COMPANY_LOCATIONS, refresh_stock_status
 from app.db.database import SessionLocal
@@ -13,25 +17,17 @@ from app.db.database import SessionLocal
 router = APIRouter(prefix="/api/stock", tags=["Stock"])
 
 
-def _co_frag(company_no: str, col: str = "company_no") -> tuple[str, dict]:
-    if company_no == "all":
-        return f"{col} IN ('3','4','5','6')", {}
-    return f"{col} = :company_no", {"company_no": company_no}
-
-
 @router.get("")
 def get_stock(
+    company_nos: Optional[list[str]] = Query(default=None),
     company_no: str = Query(default="all"),
-    group_code: str | None = Query(default=None),
-    search: str | None = Query(default=None),
-    min_instock: float | None = Query(default=None),
+    group_code: Optional[str] = Query(default=None),
+    search: Optional[str] = Query(default=None),
+    min_instock: Optional[float] = Query(default=None),
     db: Session = Depends(get_db),
 ):
-    """
-    Return stock snapshot rows with optional filters.
-    Enriched with item name and group from master data.
-    """
-    co_frag, co_params = _co_frag(company_no, "s.company_no")
+    resolved = company_nos or [company_no]
+    co_frag, co_params = build_company_filter(resolved, "s.company_no")
 
     group_filter = "AND s.item_group_code = :group_code" if group_code else ""
     search_filter = "AND (LOWER(s.art_code) LIKE :search OR LOWER(s.item_name) LIKE :search)" if search else ""
@@ -73,11 +69,12 @@ def get_stock(
 
 @router.get("/summary")
 def get_stock_summary(
+    company_nos: Optional[list[str]] = Query(default=None),
     company_no: str = Query(default="all"),
     db: Session = Depends(get_db),
 ):
-    """Aggregate KPIs for the stock snapshot."""
-    co_frag, co_params = _co_frag(company_no)
+    resolved = company_nos or [company_no]
+    co_frag, co_params = build_company_filter(resolved)
 
     row = db.execute(text(f"""
         SELECT
@@ -102,13 +99,15 @@ def get_stock_summary(
 
 @router.post("/refresh")
 async def trigger_stock_refresh(
+    company_nos: Optional[list[str]] = Query(default=None),
     company_no: str = Query(default="all"),
 ):
-    """
-    Trigger a live re-fetch of ItemStatusVc from Hansa for the given company.
-    Uses a fresh DB session per company to avoid Neon idle-connection timeouts.
-    """
-    companies = list(COMPANY_LOCATIONS.keys()) if company_no == "all" else [company_no]
+    resolved = company_nos or [company_no]
+    if not resolved or "all" in resolved:
+        companies = list(COMPANY_LOCATIONS.keys())
+    else:
+        companies = [c for c in resolved if c in COMPANY_LOCATIONS]
+
     results = []
     for co in companies:
         db = SessionLocal()
@@ -128,10 +127,6 @@ async def debug_stock_probe(
     company_no: str = Query(default="3"),
     location: str = Query(default="36RETAIL"),
 ):
-    """
-    Raw probe of the Hansa ItemStatusVc register — returns the first 3 records
-    so you can verify field names before a full refresh.
-    """
     from app.services.hansa_client import HansaClient
     client = HansaClient(company_no=company_no)
     try:

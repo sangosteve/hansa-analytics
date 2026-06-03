@@ -1,6 +1,14 @@
 const API_BASE_URL =
   import.meta.env.VITE_API_URL ?? "/api";
 
+function appendCompanyNos(params: URLSearchParams, companyNos: string[]) {
+  if (!companyNos.length || companyNos.includes("all")) {
+    params.append("company_nos", "all");
+  } else {
+    companyNos.forEach((c) => params.append("company_nos", c));
+  }
+}
+
 export type LegacyCustomerMovementRow = {
   id: number;
   customer_code: string;
@@ -24,6 +32,7 @@ export type LegacyCustomerMovementRow = {
 
 export type CustomerMovementResponse = {
   count: number;
+  sale_scope: string;
   data: LegacyCustomerMovementRow[];
 };
 
@@ -66,6 +75,8 @@ export type DivisionBreakdownRow = {
 
 export type SalesSummaryResponse = {
   company_no: string;
+  company_nos: string[];
+  sale_scope: string;
   date_from: string;
   date_to: string;
   monthly_sales: SalesSummaryMonthlyRow[];
@@ -76,44 +87,32 @@ export type SalesSummaryResponse = {
 export async function getSalesSummary(
   dateFrom: string,
   dateTo: string,
-  companyNo?: string
+  companyNos: string[] = ["all"],
+  saleScope: string = "all",
 ) {
-  const searchParams = new URLSearchParams();
-  searchParams.set("date_from", dateFrom);
-  searchParams.set("date_to", dateTo);
+  const params = new URLSearchParams();
+  params.set("date_from", dateFrom);
+  params.set("date_to", dateTo);
+  params.set("sale_scope", saleScope);
+  appendCompanyNos(params, companyNos);
 
-  if (companyNo) {
-    searchParams.set("company_no", companyNo);
-  }
-
-  const response = await fetch(
-    `${API_BASE_URL}/sales-summary?${searchParams.toString()}`
-  );
-
-  if (!response.ok) {
-    throw new Error("Failed to fetch sales summary");
-  }
-
+  const response = await fetch(`${API_BASE_URL}/sales-summary?${params}`);
+  if (!response.ok) throw new Error("Failed to fetch sales summary");
   return response.json() as Promise<SalesSummaryResponse>;
 }
 
 export async function getCustomerMovement(params?: {
   action_band?: string;
   buyer_status?: string;
+  sale_scope?: string;
 }) {
   const searchParams = new URLSearchParams();
-
   if (params?.action_band) searchParams.set("action_band", params.action_band);
   if (params?.buyer_status) searchParams.set("buyer_status", params.buyer_status);
+  if (params?.sale_scope) searchParams.set("sale_scope", params.sale_scope);
 
-  const response = await fetch(
-    `${API_BASE_URL}/customer-movement?${searchParams.toString()}`
-  );
-
-  if (!response.ok) {
-    throw new Error("Failed to fetch customer movement");
-  }
-
+  const response = await fetch(`${API_BASE_URL}/customer-movement?${searchParams}`);
+  if (!response.ok) throw new Error("Failed to fetch customer movement");
   return response.json() as Promise<CustomerMovementResponse>;
 }
 
@@ -124,11 +123,7 @@ export async function getCustomerProductGroupItems(
   const response = await fetch(
     `${API_BASE_URL}/customer-movement/${customerCode}/product-groups/${productGroupCode}/items`
   );
-
-  if (!response.ok) {
-    throw new Error("Failed to fetch customer product group items");
-  }
-
+  if (!response.ok) throw new Error("Failed to fetch customer product group items");
   return response.json() as Promise<CustomerProductGroupItemsResponse>;
 }
 
@@ -136,11 +131,7 @@ export async function rebuildCustomerMovement() {
   const response = await fetch(`${API_BASE_URL}/refresh/customer-movement`, {
     method: "POST",
   });
-
-  if (!response.ok) {
-    throw new Error("Failed to rebuild customer movement");
-  }
-
+  if (!response.ok) throw new Error("Failed to rebuild customer movement");
   return response.json();
 }
 
@@ -183,25 +174,17 @@ export async function askAIInsight(
     salesperson?: string;
     item_group_code?: string;
     customer_code?: string;
+    company_nos?: string[];
+    sale_scope?: string;
   }
 ): Promise<AIInsightResponse> {
-  const payload = {
-    message,
-    ...options,
-  };
-
+  const payload = { message, ...options };
   const response = await fetch(`${API_BASE_URL}/ai/insights`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
-
-  if (!response.ok) {
-    throw new Error("Failed to get AI insight");
-  }
-
+  if (!response.ok) throw new Error("Failed to get AI insight");
   return response.json() as Promise<AIInsightResponse>;
 }
 
@@ -270,34 +253,60 @@ export type GroupMonthlyRow = {
   items: number;
 };
 
-export async function getMovementSummary(companyNo = "3"): Promise<MovementSummary> {
-  const res = await fetch(`${API_BASE_URL}/movement/summary?company_no=${companyNo}`);
+export async function getMovementSummary(
+  companyNos: string[] = ["all"],
+  saleScope: string = "all",
+): Promise<MovementSummary> {
+  const params = new URLSearchParams({ sale_scope: saleScope });
+  appendCompanyNos(params, companyNos);
+  const res = await fetch(`${API_BASE_URL}/movement/summary?${params}`);
   if (!res.ok) throw new Error("Failed to fetch movement summary");
   return res.json();
 }
 
-export async function getProductGroupMovement(companyNo = "3"): Promise<ProductGroupMovementRow[]> {
-  const res = await fetch(`${API_BASE_URL}/movement/product-groups?company_no=${companyNo}`);
+export async function getProductGroupMovement(
+  companyNos: string[] = ["all"],
+  saleScope: string = "all",
+): Promise<ProductGroupMovementRow[]> {
+  const params = new URLSearchParams({ sale_scope: saleScope });
+  appendCompanyNos(params, companyNos);
+  const res = await fetch(`${API_BASE_URL}/movement/product-groups?${params}`);
   if (!res.ok) throw new Error("Failed to fetch product group movement");
   return res.json();
 }
 
-export async function getProductGroupMonthly(groupCode: string, companyNo = "3"): Promise<GroupMonthlyRow[]> {
-  const res = await fetch(`${API_BASE_URL}/movement/product-groups/${groupCode}/monthly?company_no=${companyNo}`);
+export async function getProductGroupMonthly(
+  groupCode: string,
+  companyNos: string[] = ["all"],
+  saleScope: string = "all",
+): Promise<GroupMonthlyRow[]> {
+  const params = new URLSearchParams({ sale_scope: saleScope });
+  appendCompanyNos(params, companyNos);
+  const res = await fetch(`${API_BASE_URL}/movement/product-groups/${groupCode}/monthly?${params}`);
   if (!res.ok) throw new Error("Failed to fetch group monthly");
   return res.json();
 }
 
-export async function getSlowMovingItems(companyNo = "3", groupCode?: string): Promise<SlowMovingItem[]> {
-  const params = new URLSearchParams({ company_no: companyNo });
+export async function getSlowMovingItems(
+  companyNos: string[] = ["all"],
+  saleScope: string = "all",
+  groupCode?: string,
+): Promise<SlowMovingItem[]> {
+  const params = new URLSearchParams({ sale_scope: saleScope });
+  appendCompanyNos(params, companyNos);
   if (groupCode) params.set("group_code", groupCode);
   const res = await fetch(`${API_BASE_URL}/movement/items?${params}`);
   if (!res.ok) throw new Error("Failed to fetch slow moving items");
   return res.json();
 }
 
-export async function getCustomerMovementAnalytics(companyNo = "3"): Promise<CustomerMovementRow[]> {
-  const res = await fetch(`${API_BASE_URL}/movement/customers?company_no=${companyNo}`);
+export async function getCustomerMovementAnalytics(
+  companyNos: string[] = ["all"],
+  saleScope: string = "all",
+): Promise<CustomerMovementRow[]> {
+  const params = new URLSearchParams({ sale_scope: saleScope });
+  appendCompanyNos(params, companyNos);
+  const res = await fetch(`${API_BASE_URL}/movement/customers?${params}`);
   if (!res.ok) throw new Error("Failed to fetch customer movement");
   return res.json();
 }
@@ -351,7 +360,8 @@ export type SalespersonTrend = {
 };
 
 export type PredictiveInsightsResponse = {
-  company_no: string;
+  company_nos: string[];
+  sale_scope: string;
   reference_date: string | null;
   mtd_projection: MtdProjection | null;
   product_group_trends: ProductGroupTrend[];
@@ -361,10 +371,11 @@ export type PredictiveInsightsResponse = {
 };
 
 export async function getPredictiveInsights(
-  companyNo?: string
+  companyNos: string[] = ["all"],
+  saleScope: string = "all",
 ): Promise<PredictiveInsightsResponse> {
-  const params = new URLSearchParams();
-  if (companyNo) params.set("company_no", companyNo);
+  const params = new URLSearchParams({ sale_scope: saleScope });
+  appendCompanyNos(params, companyNos);
   const res = await fetch(`${API_BASE_URL}/analytics/predictive?${params}`);
   if (!res.ok) throw new Error("Failed to fetch predictive insights");
   return res.json();
@@ -372,11 +383,7 @@ export async function getPredictiveInsights(
 
 export async function getAISuggestions(): Promise<AISuggestion[]> {
   const response = await fetch(`${API_BASE_URL}/ai/suggestions`);
-
-  if (!response.ok) {
-    throw new Error("Failed to fetch AI suggestions");
-  }
-
+  if (!response.ok) throw new Error("Failed to fetch AI suggestions");
   return response.json() as Promise<AISuggestion[]>;
 }
 
@@ -411,11 +418,12 @@ export type StockSummary = {
 };
 
 export async function getStockStatus(
-  companyNo: string = "all",
+  companyNos: string[] = ["all"],
   search?: string,
   groupCode?: string,
 ): Promise<StockRow[]> {
-  const params = new URLSearchParams({ company_no: companyNo });
+  const params = new URLSearchParams();
+  appendCompanyNos(params, companyNos);
   if (search) params.set("search", search);
   if (groupCode) params.set("group_code", groupCode);
   const res = await fetch(`${API_BASE_URL}/stock?${params}`);
@@ -423,15 +431,17 @@ export async function getStockStatus(
   return res.json();
 }
 
-export async function getStockSummary(companyNo: string = "all"): Promise<StockSummary> {
-  const params = new URLSearchParams({ company_no: companyNo });
+export async function getStockSummary(companyNos: string[] = ["all"]): Promise<StockSummary> {
+  const params = new URLSearchParams();
+  appendCompanyNos(params, companyNos);
   const res = await fetch(`${API_BASE_URL}/stock/summary?${params}`);
   if (!res.ok) throw new Error("Failed to fetch stock summary");
   return res.json();
 }
 
-export async function triggerStockRefresh(companyNo: string = "all"): Promise<{ results: any[] }> {
-  const params = new URLSearchParams({ company_no: companyNo });
+export async function triggerStockRefresh(companyNos: string[] = ["all"]): Promise<{ results: any[] }> {
+  const params = new URLSearchParams();
+  appendCompanyNos(params, companyNos);
   const res = await fetch(`${API_BASE_URL}/stock/refresh?${params}`, { method: "POST" });
   if (!res.ok) throw new Error("Stock refresh failed");
   return res.json();

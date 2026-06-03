@@ -179,7 +179,8 @@ def execute_tool(
     # Build full candidate params pool
     params_pool: dict[str, Any] = {
         "db": db,
-        "company_no": "3",
+        "company_nos": request.company_nos or ["all"],
+        "sale_scope": request.sale_scope or "all",
         **parameters,
     }
 
@@ -196,6 +197,10 @@ def execute_tool(
         params_pool.setdefault("item_group_code", request.item_group_code)
     if request.customer_code:
         params_pool.setdefault("customer_code", request.customer_code)
+    if request.company_nos:
+        params_pool.setdefault("company_nos", request.company_nos)
+    if request.sale_scope:
+        params_pool.setdefault("sale_scope", request.sale_scope)
 
     # Only pass params the function actually accepts — avoids unexpected keyword errors
     accepted = inspect.signature(fn).parameters

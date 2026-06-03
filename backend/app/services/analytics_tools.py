@@ -1,21 +1,54 @@
 """
 Safe analytics tools for AI insights.
 Uses parameterized SQL queries through SQLAlchemy.
+Supports company_nos (multi-select) and sale_scope (all/external/internal).
 """
 
 from datetime import date, timedelta
 from typing import Any, Optional
 
-from sqlalchemy import and_, func, select, text
+from sqlalchemy import and_, func, or_, select, text
 from sqlalchemy.orm import Session
 
+from app.core.filters import ACTIVE_COMPANIES, INTERNAL_CUSTOMER_CODES
 from app.db.models import FactSalesLine, CustomerProductGroupMovement
+
+
+def _company_clause(company_nos: "list[str] | None"):
+    """Build a SQLAlchemy company_no filter expression."""
+    if not company_nos or "all" in company_nos:
+        return FactSalesLine.company_no.in_(list(ACTIVE_COMPANIES))
+    valid = [c for c in company_nos if c in ACTIVE_COMPANIES]
+    if not valid:
+        return FactSalesLine.company_no.in_(list(ACTIVE_COMPANIES))
+    if len(valid) == 1:
+        return FactSalesLine.company_no == valid[0]
+    return FactSalesLine.company_no.in_(valid)
+
+
+def _scope_clause(sale_scope: "str | None"):
+    """Build SQLAlchemy customer_code scope filter expression (or None for 'all')."""
+    if not sale_scope or sale_scope == "all":
+        return None
+    if sale_scope == "internal":
+        return FactSalesLine.customer_code.in_(list(INTERNAL_CUSTOMER_CODES))
+    if sale_scope == "external":
+        return FactSalesLine.customer_code.notin_(list(INTERNAL_CUSTOMER_CODES))
+    return None
+
+
+def _max_date(db: Session, company_nos: "list[str] | None", sale_scope: str = "all") -> date:
+    q = select(func.max(FactSalesLine.transaction_date)).where(_company_clause(company_nos))
+    sc = _scope_clause(sale_scope)
+    if sc is not None:
+        q = q.where(sc)
+    return db.execute(q).scalar() or date.today()
 
 
 def get_sales_trend(
     db: Session,
-    dimension: str = "total",  # total | item_group | customer | salesperson | location
-    interval: str = "month",  # month | week | day
+    dimension: str = "total",
+    interval: str = "month",
     limit: int = 10,
     date_from: Optional[date] = None,
     date_to: Optional[date] = None,
@@ -23,21 +56,26 @@ def get_sales_trend(
     salesperson: Optional[str] = None,
     item_group_code: Optional[str] = None,
     customer_code: Optional[str] = None,
-    company_no: str = "3",
+    company_nos: Optional[list[str]] = None,
+    sale_scope: str = "all",
 ) -> dict[str, Any]:
     """Get sales trend data with specified dimension."""
 
-    # Get actual date range from DB if not provided
     if not date_to:
-        max_date = db.execute(
-            select(func.max(FactSalesLine.transaction_date)).where(
-                FactSalesLine.company_no == company_no
-            )
-        ).scalar()
-        date_to = max_date or date.today()
-
+        date_to = _max_date(db, company_nos, sale_scope)
     if not date_from:
         date_from = date_to - timedelta(days=180)
+
+    co_clause = _company_clause(company_nos)
+    sc_clause = _scope_clause(sale_scope)
+
+    base_where = [
+        co_clause,
+        FactSalesLine.transaction_date >= date_from,
+        FactSalesLine.transaction_date <= date_to,
+    ]
+    if sc_clause is not None:
+        base_where.append(sc_clause)
 
     query = select(
         FactSalesLine.transaction_date,
@@ -47,13 +85,7 @@ def get_sales_trend(
         FactSalesLine.salesperson,
         FactSalesLine.location,
         func.sum(FactSalesLine.tonnes).label("total_tonnes"),
-    ).where(
-        and_(
-            FactSalesLine.company_no == company_no,
-            FactSalesLine.transaction_date >= date_from,
-            FactSalesLine.transaction_date <= date_to,
-        )
-    )
+    ).where(and_(*base_where))
 
     if location:
         query = query.where(FactSalesLine.location == location)
@@ -99,32 +131,32 @@ def get_sales_by_item_group(
     date_to: Optional[date] = None,
     location: Optional[str] = None,
     salesperson: Optional[str] = None,
-    company_no: str = "3",
+    company_nos: Optional[list[str]] = None,
+    sale_scope: str = "all",
 ) -> dict[str, Any]:
     """Get sales aggregated by item group."""
 
     if not date_to:
-        max_date = db.execute(
-            select(func.max(FactSalesLine.transaction_date)).where(
-                FactSalesLine.company_no == company_no
-            )
-        ).scalar()
-        date_to = max_date or date.today()
-
+        date_to = _max_date(db, company_nos, sale_scope)
     if not date_from:
         date_from = date_to - timedelta(days=180)
+
+    co_clause = _company_clause(company_nos)
+    sc_clause = _scope_clause(sale_scope)
+
+    base_where = [
+        co_clause,
+        FactSalesLine.transaction_date >= date_from,
+        FactSalesLine.transaction_date <= date_to,
+        FactSalesLine.item_group_code.isnot(None),
+    ]
+    if sc_clause is not None:
+        base_where.append(sc_clause)
 
     query = select(
         FactSalesLine.item_group_code,
         func.sum(FactSalesLine.tonnes).label("total_tonnes"),
-    ).where(
-        and_(
-            FactSalesLine.company_no == company_no,
-            FactSalesLine.transaction_date >= date_from,
-            FactSalesLine.transaction_date <= date_to,
-            FactSalesLine.item_group_code.isnot(None),
-        )
-    )
+    ).where(and_(*base_where))
 
     if location:
         query = query.where(FactSalesLine.location == location)
@@ -158,33 +190,33 @@ def get_sales_by_customer(
     location: Optional[str] = None,
     item_group_code: Optional[str] = None,
     salesperson: Optional[str] = None,
-    company_no: str = "3",
+    company_nos: Optional[list[str]] = None,
+    sale_scope: str = "all",
 ) -> dict[str, Any]:
     """Get sales aggregated by customer."""
 
     if not date_to:
-        max_date = db.execute(
-            select(func.max(FactSalesLine.transaction_date)).where(
-                FactSalesLine.company_no == company_no
-            )
-        ).scalar()
-        date_to = max_date or date.today()
-
+        date_to = _max_date(db, company_nos, sale_scope)
     if not date_from:
         date_from = date_to - timedelta(days=180)
+
+    co_clause = _company_clause(company_nos)
+    sc_clause = _scope_clause(sale_scope)
+
+    base_where = [
+        co_clause,
+        FactSalesLine.transaction_date >= date_from,
+        FactSalesLine.transaction_date <= date_to,
+        FactSalesLine.customer_code.isnot(None),
+    ]
+    if sc_clause is not None:
+        base_where.append(sc_clause)
 
     query = select(
         FactSalesLine.customer_code,
         FactSalesLine.customer_name,
         func.sum(FactSalesLine.tonnes).label("total_tonnes"),
-    ).where(
-        and_(
-            FactSalesLine.company_no == company_no,
-            FactSalesLine.transaction_date >= date_from,
-            FactSalesLine.transaction_date <= date_to,
-            FactSalesLine.customer_code.isnot(None),
-        )
-    )
+    ).where(and_(*base_where))
 
     if location:
         query = query.where(FactSalesLine.location == location)
@@ -219,31 +251,31 @@ def get_sales_by_salesperson(
     date_to: Optional[date] = None,
     location: Optional[str] = None,
     item_group_code: Optional[str] = None,
-    company_no: str = "3",
+    company_nos: Optional[list[str]] = None,
+    sale_scope: str = "all",
 ) -> dict[str, Any]:
     """Get sales aggregated by salesperson."""
 
     if not date_to:
-        max_date = db.execute(
-            select(func.max(FactSalesLine.transaction_date)).where(
-                FactSalesLine.company_no == company_no
-            )
-        ).scalar()
-        date_to = max_date or date.today()
-
+        date_to = _max_date(db, company_nos, sale_scope)
     if not date_from:
         date_from = date_to - timedelta(days=180)
 
+    co_clause = _company_clause(company_nos)
+    sc_clause = _scope_clause(sale_scope)
+
+    base_where = [
+        co_clause,
+        FactSalesLine.transaction_date >= date_from,
+        FactSalesLine.transaction_date <= date_to,
+        FactSalesLine.salesperson.isnot(None),
+    ]
+    if sc_clause is not None:
+        base_where.append(sc_clause)
+
     query = select(
         FactSalesLine.salesperson, func.sum(FactSalesLine.tonnes).label("total_tonnes")
-    ).where(
-        and_(
-            FactSalesLine.company_no == company_no,
-            FactSalesLine.transaction_date >= date_from,
-            FactSalesLine.transaction_date <= date_to,
-            FactSalesLine.salesperson.isnot(None),
-        )
-    )
+    ).where(and_(*base_where))
 
     if location:
         query = query.where(FactSalesLine.location == location)
@@ -275,31 +307,31 @@ def get_sales_by_location(
     date_to: Optional[date] = None,
     item_group_code: Optional[str] = None,
     salesperson: Optional[str] = None,
-    company_no: str = "3",
+    company_nos: Optional[list[str]] = None,
+    sale_scope: str = "all",
 ) -> dict[str, Any]:
     """Get sales aggregated by location."""
 
     if not date_to:
-        max_date = db.execute(
-            select(func.max(FactSalesLine.transaction_date)).where(
-                FactSalesLine.company_no == company_no
-            )
-        ).scalar()
-        date_to = max_date or date.today()
-
+        date_to = _max_date(db, company_nos, sale_scope)
     if not date_from:
         date_from = date_to - timedelta(days=180)
 
+    co_clause = _company_clause(company_nos)
+    sc_clause = _scope_clause(sale_scope)
+
+    base_where = [
+        co_clause,
+        FactSalesLine.transaction_date >= date_from,
+        FactSalesLine.transaction_date <= date_to,
+        FactSalesLine.location.isnot(None),
+    ]
+    if sc_clause is not None:
+        base_where.append(sc_clause)
+
     query = select(
         FactSalesLine.location, func.sum(FactSalesLine.tonnes).label("total_tonnes")
-    ).where(
-        and_(
-            FactSalesLine.company_no == company_no,
-            FactSalesLine.transaction_date >= date_from,
-            FactSalesLine.transaction_date <= date_to,
-            FactSalesLine.location.isnot(None),
-        )
-    )
+    ).where(and_(*base_where))
 
     if item_group_code:
         query = query.where(FactSalesLine.item_group_code == item_group_code)
@@ -331,6 +363,7 @@ def get_customer_movement_insights(
     product_group_code: Optional[str] = None,
     location: Optional[str] = None,
     salesperson: Optional[str] = None,
+    sale_scope: str = "all",
     limit: int = 20,
 ) -> dict[str, Any]:
     """Get customer movement insights (declining, stopped, at-risk customers)."""
@@ -350,16 +383,19 @@ def get_customer_movement_insights(
     if location:
         query = query.where(CustomerProductGroupMovement.last_location == location)
     if salesperson:
-        query = query.where(
-            CustomerProductGroupMovement.last_salesperson == salesperson
-        )
+        query = query.where(CustomerProductGroupMovement.last_salesperson == salesperson)
+
+    if sale_scope == "internal":
+        query = query.where(CustomerProductGroupMovement.customer_code.in_(list(INTERNAL_CUSTOMER_CODES)))
+    elif sale_scope == "external":
+        query = query.where(CustomerProductGroupMovement.customer_code.notin_(list(INTERNAL_CUSTOMER_CODES)))
 
     query = query.order_by(
         CustomerProductGroupMovement.tonnage_gap.asc(),
         CustomerProductGroupMovement.current_month_tonnes.desc(),
     ).limit(limit)
 
-    rows = db.execute(query).fetchall()
+    rows = db.execute(query).scalars().all()
 
     return {
         "chart_type": "table",
@@ -381,30 +417,29 @@ def get_customer_movement_insights(
 
 def compare_current_vs_previous_month(
     db: Session,
-    dimension: str = "total",  # total | item_group | customer | salesperson | location
+    dimension: str = "total",
     location: Optional[str] = None,
     item_group_code: Optional[str] = None,
     salesperson: Optional[str] = None,
     customer_code: Optional[str] = None,
-    company_no: str = "3",
+    company_nos: Optional[list[str]] = None,
+    sale_scope: str = "all",
 ) -> dict[str, Any]:
     """Compare current month vs previous month."""
 
-    # Get max date from data
+    co_clause = _company_clause(company_nos)
+    sc_clause = _scope_clause(sale_scope)
+
     max_date = db.execute(
-        select(func.max(FactSalesLine.transaction_date)).where(
-            FactSalesLine.company_no == company_no
-        )
+        select(func.max(FactSalesLine.transaction_date)).where(co_clause)
     ).scalar()
 
     if not max_date:
         return {"rows": [], "chart_type": "bar"}
 
-    # Current month is the month of max_date
     current_month_start = date(max_date.year, max_date.month, 1)
     current_month_end = max_date
 
-    # Previous month
     if max_date.month == 1:
         prev_month_start = date(max_date.year - 1, 12, 1)
         prev_month_end = date(max_date.year - 1, 12, 31)
@@ -415,53 +450,23 @@ def compare_current_vs_previous_month(
         else:
             prev_month_end = date(max_date.year, max_date.month - 1, 28)
 
-    # Query current month
-    query_current = select(
-        func.sum(FactSalesLine.tonnes).label("tonnes"),
-    ).where(
-        and_(
-            FactSalesLine.company_no == company_no,
-            FactSalesLine.transaction_date >= current_month_start,
-            FactSalesLine.transaction_date <= current_month_end,
-        )
-    )
+    def build_query(start, end):
+        w = [co_clause, FactSalesLine.transaction_date >= start, FactSalesLine.transaction_date <= end]
+        if sc_clause is not None:
+            w.append(sc_clause)
+        q = select(func.sum(FactSalesLine.tonnes).label("tonnes")).where(and_(*w))
+        if location:
+            q = q.where(FactSalesLine.location == location)
+        if item_group_code:
+            q = q.where(FactSalesLine.item_group_code == item_group_code)
+        if salesperson:
+            q = q.where(FactSalesLine.salesperson == salesperson)
+        if customer_code:
+            q = q.where(FactSalesLine.customer_code == customer_code)
+        return q
 
-    if location:
-        query_current = query_current.where(FactSalesLine.location == location)
-    if item_group_code:
-        query_current = query_current.where(
-            FactSalesLine.item_group_code == item_group_code
-        )
-    if salesperson:
-        query_current = query_current.where(FactSalesLine.salesperson == salesperson)
-    if customer_code:
-        query_current = query_current.where(FactSalesLine.customer_code == customer_code)
-
-    current_tonnes = float(db.execute(query_current).scalar() or 0)
-
-    # Query previous month
-    query_previous = select(
-        func.sum(FactSalesLine.tonnes).label("tonnes"),
-    ).where(
-        and_(
-            FactSalesLine.company_no == company_no,
-            FactSalesLine.transaction_date >= prev_month_start,
-            FactSalesLine.transaction_date <= prev_month_end,
-        )
-    )
-
-    if location:
-        query_previous = query_previous.where(FactSalesLine.location == location)
-    if item_group_code:
-        query_previous = query_previous.where(
-            FactSalesLine.item_group_code == item_group_code
-        )
-    if salesperson:
-        query_previous = query_previous.where(FactSalesLine.salesperson == salesperson)
-    if customer_code:
-        query_previous = query_previous.where(FactSalesLine.customer_code == customer_code)
-
-    previous_tonnes = float(db.execute(query_previous).scalar() or 0)
+    current_tonnes = float(db.execute(build_query(current_month_start, current_month_end)).scalar() or 0)
+    previous_tonnes = float(db.execute(build_query(prev_month_start, prev_month_end)).scalar() or 0)
 
     growth_percent = (
         ((current_tonnes - previous_tonnes) / previous_tonnes * 100)
@@ -472,14 +477,8 @@ def compare_current_vs_previous_month(
     return {
         "chart_type": "bar",
         "rows": [
-            {
-                "month": "Current",
-                "tonnes": current_tonnes,
-            },
-            {
-                "month": "Previous",
-                "tonnes": previous_tonnes,
-            },
+            {"month": "Current", "tonnes": current_tonnes},
+            {"month": "Previous", "tonnes": previous_tonnes},
         ],
         "comparison": {
             "current_month_tonnes": current_tonnes,

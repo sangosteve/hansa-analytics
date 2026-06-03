@@ -1,8 +1,11 @@
+from typing import Optional
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import asc, desc, select
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from app.core.config import settings
+from app.core.filters import INTERNAL_CUSTOMER_CODES
 
 from app.db.database import get_db
 from app.db.models import CustomerProductGroupMovement
@@ -13,44 +16,42 @@ router = APIRouter(prefix="/api/customer-movement", tags=["Customer Movement"])
 @router.get("")
 def get_customer_movement(
     db: Session = Depends(get_db),
-    buyer_status: str | None = Query(default=None),
-    action_band: str | None = Query(default=None),
-    product_group_code: str | None = Query(default=None),
-    customer_code: str | None = Query(default=None),
-    salesperson: str | None = Query(default=None),
-   
+    buyer_status: Optional[str] = Query(default=None),
+    action_band: Optional[str] = Query(default=None),
+    product_group_code: Optional[str] = Query(default=None),
+    customer_code: Optional[str] = Query(default=None),
+    salesperson: Optional[str] = Query(default=None),
+    sale_scope: str = Query(default="all"),
 ):
     query = select(CustomerProductGroupMovement)
 
     if buyer_status:
         query = query.where(CustomerProductGroupMovement.buyer_status == buyer_status)
-
     if action_band:
         query = query.where(CustomerProductGroupMovement.action_band == action_band)
-
     if product_group_code:
         query = query.where(CustomerProductGroupMovement.product_group_code == product_group_code)
-
     if customer_code:
         query = query.where(CustomerProductGroupMovement.customer_code == customer_code)
-
     if salesperson:
         query = query.where(CustomerProductGroupMovement.last_salesperson == salesperson)
 
-    query = (
-        query
-        .order_by(
-            asc(CustomerProductGroupMovement.action_band),
-            asc(CustomerProductGroupMovement.tonnage_gap),
-            desc(CustomerProductGroupMovement.days_since_last_purchase),
-        )
-    
+    if sale_scope == "internal":
+        query = query.where(CustomerProductGroupMovement.customer_code.in_(INTERNAL_CUSTOMER_CODES))
+    elif sale_scope == "external":
+        query = query.where(CustomerProductGroupMovement.customer_code.notin_(INTERNAL_CUSTOMER_CODES))
+
+    query = query.order_by(
+        asc(CustomerProductGroupMovement.action_band),
+        asc(CustomerProductGroupMovement.tonnage_gap),
+        desc(CustomerProductGroupMovement.days_since_last_purchase),
     )
 
     rows = db.execute(query).scalars().all()
 
     return {
         "count": len(rows),
+        "sale_scope": sale_scope,
         "data": [
             {
                 "id": row.id,
@@ -75,6 +76,7 @@ def get_customer_movement(
             for row in rows
         ],
     }
+
 
 @router.get("/{customer_code}/product-groups/{product_group_code}/items")
 def get_customer_product_group_items(

@@ -30,6 +30,12 @@ class AIInsightRequest(BaseModel):
         default=None, description="Filter by item group code"
     )
     customer_code: Optional[str] = Field(default=None, description="Filter by customer code")
+    company_nos: Optional[list[str]] = Field(
+        default=None, description="Company numbers to filter (e.g. ['3', '5'])"
+    )
+    sale_scope: Optional[str] = Field(
+        default="all", description="Sale scope: all | external | internal"
+    )
 
 
 class AIChartConfig(BaseModel):

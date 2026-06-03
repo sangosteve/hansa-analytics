@@ -119,7 +119,7 @@ function GroupSparkline({ data }: { data: GroupMonthlyRow[] }) {
 // ── Product Groups tab ────────────────────────────────────────────────────────
 const GROUP_FILTERS = ["All", "Growing", "Declining", "Stable", "Dead", "New"];
 
-function ProductGroupsTab({ companyNo }: { companyNo: string }) {
+function ProductGroupsTab({ companyNos, saleScope }: { companyNos: string[]; saleScope: string }) {
   const [rows, setRows] = useState<ProductGroupMovementRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("All");
@@ -129,10 +129,11 @@ function ProductGroupsTab({ companyNo }: { companyNo: string }) {
 
   useEffect(() => {
     setLoading(true);
-    getProductGroupMovement(companyNo)
+    getProductGroupMovement(companyNos, saleScope)
       .then(setRows)
       .finally(() => setLoading(false));
-  }, [companyNo]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(companyNos), saleScope]);
 
   const filtered = useMemo(
     () => (filter === "All" ? rows : rows.filter((r) => r.status === filter)),
@@ -144,7 +145,7 @@ function ProductGroupsTab({ companyNo }: { companyNo: string }) {
     setSelected(code);
     setMonthlyLoading(true);
     try {
-      const data = await getProductGroupMonthly(code, companyNo);
+      const data = await getProductGroupMonthly(code, companyNos, saleScope);
       setMonthlyData(data);
     } finally {
       setMonthlyLoading(false);
@@ -289,7 +290,7 @@ function ProductGroupsTab({ companyNo }: { companyNo: string }) {
 // ── Items tab ─────────────────────────────────────────────────────────────────
 const ITEM_FILTERS = ["All", "Dead Stock", "Very Slow", "Slow Mover"];
 
-function ItemsTab({ companyNo }: { companyNo: string }) {
+function ItemsTab({ companyNos, saleScope }: { companyNos: string[]; saleScope: string }) {
   const [rows, setRows] = useState<SlowMovingItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("All");
@@ -297,10 +298,11 @@ function ItemsTab({ companyNo }: { companyNo: string }) {
 
   useEffect(() => {
     setLoading(true);
-    getSlowMovingItems(companyNo)
+    getSlowMovingItems(companyNos, saleScope)
       .then(setRows)
       .finally(() => setLoading(false));
-  }, [companyNo]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(companyNos), saleScope]);
 
   const filtered = useMemo(() => {
     let r = filter === "All" ? rows : rows.filter((x) => x.status === filter);
@@ -385,7 +387,7 @@ function ItemsTab({ companyNo }: { companyNo: string }) {
 // ── Customers tab ─────────────────────────────────────────────────────────────
 const CUST_FILTERS = ["All", "Stopped", "At Risk", "Declining", "Active", "Irregular"];
 
-function CustomersTab({ companyNo }: { companyNo: string }) {
+function CustomersTab({ companyNos, saleScope }: { companyNos: string[]; saleScope: string }) {
   const [rows, setRows] = useState<CustomerMovementRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("All");
@@ -393,10 +395,11 @@ function CustomersTab({ companyNo }: { companyNo: string }) {
 
   useEffect(() => {
     setLoading(true);
-    getCustomerMovementAnalytics(companyNo)
+    getCustomerMovementAnalytics(companyNos, saleScope)
       .then(setRows)
       .finally(() => setLoading(false));
-  }, [companyNo]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(companyNos), saleScope]);
 
   const filtered = useMemo(() => {
     let r = filter === "All" ? rows : rows.filter((x) => x.status === filter);
@@ -495,7 +498,7 @@ function StockKpi({ label, value, color = "text-foreground", sub }: {
 const fmt2 = new Intl.NumberFormat("en-AU", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 const fmtMoney = new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD", minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-function StockTab({ companyNo }: { companyNo: string }) {
+function StockTab({ companyNos, saleScope: _saleScope }: { companyNos: string[]; saleScope: string }) {
   const [rows, setRows] = useState<StockRow[]>([]);
   const [summary, setSummary] = useState<StockSummary | null>(null);
   const [loading, setLoading] = useState(true);
@@ -507,21 +510,22 @@ function StockTab({ companyNo }: { companyNo: string }) {
   const load = () => {
     setLoading(true);
     Promise.all([
-      getStockStatus(companyNo),
-      getStockSummary(companyNo),
+      getStockStatus(companyNos),
+      getStockSummary(companyNos),
     ]).then(([r, s]) => {
       setRows(r);
       setSummary(s);
     }).finally(() => setLoading(false));
   };
 
-  useEffect(() => { load(); }, [companyNo]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { load(); }, [JSON.stringify(companyNos)]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
     setRefreshMsg(null);
     try {
-      const result = await triggerStockRefresh(companyNo);
+      const result = await triggerStockRefresh(companyNos);
       const total = result.results?.reduce((acc: number, r: any) => acc + (r.records ?? 0), 0) ?? 0;
       setRefreshMsg(`Refreshed — ${total} records`);
       load();
@@ -680,16 +684,17 @@ const TABS: { id: TabId; label: string; icon: typeof Package }[] = [
 
 export default function Movement() {
   const [tab, setTab] = useState<TabId>("groups");
-  const { companyNo, companyLabel } = useCompany();
+  const { companyNos, saleScope, companyLabel } = useCompany();
   const [summary, setSummary] = useState<MovementSummary | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(true);
 
   useEffect(() => {
     setSummaryLoading(true);
-    getMovementSummary(companyNo)
+    getMovementSummary(companyNos, saleScope)
       .then(setSummary)
       .finally(() => setSummaryLoading(false));
-  }, [companyNo]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(companyNos), saleScope]);
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -751,10 +756,10 @@ export default function Movement() {
 
       {/* Tab content */}
       <div className="flex-1 overflow-y-auto p-5">
-        {tab === "groups" && <ProductGroupsTab companyNo={companyNo} />}
-        {tab === "items" && <ItemsTab companyNo={companyNo} />}
-        {tab === "customers" && <CustomersTab companyNo={companyNo} />}
-        {tab === "stock" && <StockTab companyNo={companyNo} />}
+        {tab === "groups" && <ProductGroupsTab companyNos={companyNos} saleScope={saleScope} />}
+        {tab === "items" && <ItemsTab companyNos={companyNos} saleScope={saleScope} />}
+        {tab === "customers" && <CustomersTab companyNos={companyNos} saleScope={saleScope} />}
+        {tab === "stock" && <StockTab companyNos={companyNos} saleScope={saleScope} />}
       </div>
     </div>
   );

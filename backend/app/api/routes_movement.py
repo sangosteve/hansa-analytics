@@ -1,34 +1,39 @@
 """
 Movement analytics routes — product groups, items, customers.
-Supports company_no = "all" to aggregate across all active companies (3,4,5,6).
-All time windows are computed relative to the data's max transaction date.
+Supports company_nos (multi-select) and sale_scope (all/external/internal).
 """
+
+from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
+from app.core.filters import build_company_filter, build_scope_sql
 from app.db.database import get_db
 
 router = APIRouter(prefix="/api/movement", tags=["movement"])
 
 
-def _co_frag(company_no: str, col: str = "company_no") -> tuple[str, dict]:
-    if company_no == "all":
-        return f"{col} IN ('3','4','5','6')", {}
-    return f"{col} = :company_no", {"company_no": company_no}
+def _resolve(company_nos, company_no):
+    return company_nos or ([company_no] if company_no else ["3"])
 
 
 @router.get("/product-groups")
 def product_group_movement(
+    company_nos: Optional[list[str]] = Query(default=None),
     company_no: str = Query(default="3"),
+    sale_scope: str = Query(default="all"),
     db: Session = Depends(get_db),
 ):
-    co_frag, co_params = _co_frag(company_no)
+    resolved = _resolve(company_nos, company_no)
+    co_frag, co_params = build_company_filter(resolved)
+    scope_frag = build_scope_sql(sale_scope)
+
     rows = db.execute(text(f"""
         WITH ref AS (
             SELECT MAX(transaction_date) AS max_d
-            FROM fact_sales_lines WHERE {co_frag}
+            FROM fact_sales_lines WHERE {co_frag} {scope_frag}
         ),
         base AS (
             SELECT
@@ -49,6 +54,7 @@ def product_group_movement(
                 COUNT(DISTINCT item_code) AS unique_items
             FROM fact_sales_lines
             WHERE {co_frag}
+              {scope_frag}
               AND item_group_code IS NOT NULL
             GROUP BY item_group_code
         )
@@ -75,10 +81,15 @@ def product_group_movement(
 @router.get("/product-groups/{group_code}/monthly")
 def product_group_monthly(
     group_code: str,
+    company_nos: Optional[list[str]] = Query(default=None),
     company_no: str = Query(default="3"),
+    sale_scope: str = Query(default="all"),
     db: Session = Depends(get_db),
 ):
-    co_frag, co_params = _co_frag(company_no)
+    resolved = _resolve(company_nos, company_no)
+    co_frag, co_params = build_company_filter(resolved)
+    scope_frag = build_scope_sql(sale_scope)
+
     rows = db.execute(text(f"""
         SELECT
             DATE_TRUNC('month', transaction_date)::date::text AS month,
@@ -87,6 +98,7 @@ def product_group_monthly(
             COUNT(DISTINCT item_code) AS items
         FROM fact_sales_lines
         WHERE {co_frag}
+          {scope_frag}
           AND item_group_code = :group_code
         GROUP BY DATE_TRUNC('month', transaction_date)
         ORDER BY month
@@ -96,16 +108,21 @@ def product_group_monthly(
 
 @router.get("/items")
 def slow_moving_items(
+    company_nos: Optional[list[str]] = Query(default=None),
     company_no: str = Query(default="3"),
-    group_code: str = Query(default=None, alias="group_code"),
+    sale_scope: str = Query(default="all"),
+    group_code: Optional[str] = Query(default=None, alias="group_code"),
     db: Session = Depends(get_db),
 ):
-    co_frag, co_params = _co_frag(company_no)
+    resolved = _resolve(company_nos, company_no)
+    co_frag, co_params = build_company_filter(resolved)
+    scope_frag = build_scope_sql(sale_scope)
     group_filter = "AND item_group_code = :group_code" if group_code else ""
+
     rows = db.execute(text(f"""
         WITH ref AS (
             SELECT MAX(transaction_date) AS max_d
-            FROM fact_sales_lines WHERE {co_frag}
+            FROM fact_sales_lines WHERE {co_frag} {scope_frag}
         ),
         base AS (
             SELECT
@@ -123,6 +140,7 @@ def slow_moving_items(
                 COUNT(DISTINCT customer_code) AS customers
             FROM fact_sales_lines
             WHERE {co_frag}
+              {scope_frag}
               AND item_code IS NOT NULL
               {group_filter}
             GROUP BY item_code
@@ -143,14 +161,19 @@ def slow_moving_items(
 
 @router.get("/customers")
 def customer_movement(
+    company_nos: Optional[list[str]] = Query(default=None),
     company_no: str = Query(default="3"),
+    sale_scope: str = Query(default="all"),
     db: Session = Depends(get_db),
 ):
-    co_frag, co_params = _co_frag(company_no)
+    resolved = _resolve(company_nos, company_no)
+    co_frag, co_params = build_company_filter(resolved)
+    scope_frag = build_scope_sql(sale_scope)
+
     rows = db.execute(text(f"""
         WITH ref AS (
             SELECT MAX(transaction_date) AS max_d
-            FROM fact_sales_lines WHERE {co_frag}
+            FROM fact_sales_lines WHERE {co_frag} {scope_frag}
         ),
         cust AS (
             SELECT
@@ -173,6 +196,7 @@ def customer_movement(
                 ) AS top_group
             FROM fact_sales_lines
             WHERE {co_frag}
+              {scope_frag}
               AND customer_code IS NOT NULL
             GROUP BY customer_code
         )
@@ -202,14 +226,19 @@ def customer_movement(
 
 @router.get("/summary")
 def movement_summary(
+    company_nos: Optional[list[str]] = Query(default=None),
     company_no: str = Query(default="3"),
+    sale_scope: str = Query(default="all"),
     db: Session = Depends(get_db),
 ):
-    co_frag, co_params = _co_frag(company_no)
+    resolved = _resolve(company_nos, company_no)
+    co_frag, co_params = build_company_filter(resolved)
+    scope_frag = build_scope_sql(sale_scope)
+
     row = db.execute(text(f"""
         WITH ref AS (
             SELECT MAX(transaction_date) AS max_d
-            FROM fact_sales_lines WHERE {co_frag}
+            FROM fact_sales_lines WHERE {co_frag} {scope_frag}
         ),
         grp AS (
             SELECT item_group_code,
@@ -218,7 +247,7 @@ def movement_summary(
                 SUM(CASE WHEN transaction_date >= (SELECT max_d FROM ref) - INTERVAL '6 months'
                          AND transaction_date < (SELECT max_d FROM ref) - INTERVAL '3 months'
                          THEN tonnes ELSE 0 END) AS p3m
-            FROM fact_sales_lines WHERE {co_frag} AND item_group_code IS NOT NULL
+            FROM fact_sales_lines WHERE {co_frag} {scope_frag} AND item_group_code IS NOT NULL
             GROUP BY item_group_code
         ),
         cust AS (
@@ -226,13 +255,13 @@ def movement_summary(
                 ((SELECT max_d FROM ref) - MAX(transaction_date))::int AS days_since,
                 SUM(CASE WHEN transaction_date >= (SELECT max_d FROM ref) - INTERVAL '3 months'
                          THEN tonnes ELSE 0 END) AS t3m
-            FROM fact_sales_lines WHERE {co_frag} AND customer_code IS NOT NULL
+            FROM fact_sales_lines WHERE {co_frag} {scope_frag} AND customer_code IS NOT NULL
             GROUP BY customer_code
         ),
         itm AS (
             SELECT item_code,
                 ((SELECT max_d FROM ref) - MAX(transaction_date))::int AS days_since
-            FROM fact_sales_lines WHERE {co_frag} AND item_code IS NOT NULL
+            FROM fact_sales_lines WHERE {co_frag} {scope_frag} AND item_code IS NOT NULL
             GROUP BY item_code
         )
         SELECT

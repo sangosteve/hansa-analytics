@@ -55,7 +55,7 @@ const darkChartBase = {
 };
 
 export default function Home() {
-  const { companyNo, companyLabel } = useCompany();
+  const { companyNos, saleScope, companyLabel } = useCompany();
   const [summary, setSummary] = useState<SalesSummaryResponse | null>(null);
   const [predictive, setPredictive] = useState<PredictiveInsightsResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -71,8 +71,8 @@ export default function Home() {
     setError(null);
     try {
       const [salesData, predData] = await Promise.all([
-        getSalesSummary(dateFrom, dateTo, companyNo),
-        getPredictiveInsights(companyNo),
+        getSalesSummary(dateFrom, dateTo, companyNos, saleScope),
+        getPredictiveInsights(companyNos, saleScope),
       ]);
       setSummary(salesData);
       setPredictive(predData);
@@ -88,7 +88,8 @@ export default function Home() {
   useEffect(() => {
     loadAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [companyNo, dateFrom, dateTo]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(companyNos), saleScope, dateFrom, dateTo]);
 
   const salesRows = summary?.monthly_sales ?? [];
 
@@ -508,7 +509,7 @@ export default function Home() {
             </div>
 
             {/* Division breakdown (all) OR product group trends table */}
-            {companyNo === "all" ? (
+            {(companyNos.includes("all") || companyNos.length > 1) ? (
               <div className="rounded-lg border border-border bg-card p-4">
                 <h3 className="text-xs font-semibold text-foreground mb-3">Sales by division</h3>
                 <div className="h-[260px]">
@@ -598,7 +599,7 @@ export default function Home() {
       </div>
 
       {/* ── Right: AI panel ── */}
-      <AIInsightsPanel companyNo={companyNo} dateFrom={dateFrom} dateTo={dateTo} />
+      <AIInsightsPanel companyNos={companyNos} saleScope={saleScope} dateFrom={dateFrom} dateTo={dateTo} />
     </div>
   );
 }

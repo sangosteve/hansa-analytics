@@ -18,7 +18,14 @@ const suggestions_fallback: AISuggestion[] = [
   { text: "Show salesperson performance this month", icon: "👤" },
 ];
 
-export default function AIInsightsPanel() {
+type AIInsightsPanelProps = {
+  companyNos?: string[];
+  saleScope?: string;
+  dateFrom?: string;
+  dateTo?: string;
+};
+
+export default function AIInsightsPanel({ companyNos, saleScope, dateFrom, dateTo }: AIInsightsPanelProps = {}) {
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [response, setResponse] = useState<AIInsightResponse | null>(null);
@@ -43,7 +50,12 @@ export default function AIInsightsPanel() {
     setError(null);
     setMessage("");
     try {
-      const result = await askAIInsight(text);
+      const result = await askAIInsight(text, {
+        company_nos: companyNos,
+        sale_scope: saleScope,
+        date_from: dateFrom,
+        date_to: dateTo,
+      });
       setResponse(result);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to get AI insight");
