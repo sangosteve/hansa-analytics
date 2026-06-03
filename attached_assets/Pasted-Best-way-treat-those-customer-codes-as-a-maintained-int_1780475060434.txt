@@ -1,0 +1,95 @@
+Best way: treat those customer codes as a maintained **internal customer list**, then classify every sales fact row as:
+
+```text
+sale_scope = "external" | "internal"
+```
+
+Then dashboards and AI can filter:
+
+```text
+All sales
+External sales only
+Internal sales only
+```
+
+For company filtering, change from single `company_no` to `company_nos: string[]`, so users can select one, many, or all.
+
+Use this short Replit prompt:
+
+Improve the existing Hansa Analytics filters.
+
+We now need to handle internal inter-company sales.
+
+Internal sales are identified by customer codes/names:
+
+* PSS-ENGINEERING
+* PSS-MINING
+* PSS-RETAIL
+* PSS-MANUFACTURING
+* PSS-HEADOFFICE
+* PSS-PROPERTY
+* PSS-CONSTRUCTION
+
+Business requirement:
+Users must be able to view:
+
+1. All sales
+2. External sales only
+3. Internal sales only
+
+Please implement this in a production-grade way.
+
+Suggested approach:
+
+* Add a maintained internal customer list/config/table.
+* Classify sales rows as internal or external based on whether the customer is in that list.
+* Add a field such as `sale_scope` or `sales_type` with values:
+
+  * `external`
+  * `internal`
+* Ensure this classification is available in the main analytics/fact sales dataset and all dashboard/AI analytics queries.
+* Add filters to dashboard APIs:
+
+  * `sale_scope=all`
+  * `sale_scope=external`
+  * `sale_scope=internal`
+* Default should be external sales only if management wants operational sales performance, but make this configurable. If unsure, default to all and expose the filter clearly.
+
+Also improve the company filter.
+
+Current issue:
+The dashboard only allows selecting one company or all companies.
+
+New requirement:
+Users must be able to select multiple companies/divisions at the same time.
+
+Companies:
+
+* 3 = Retail
+* 4 = Manufacturing
+* 5 = Engineering
+* 6 = Mining
+
+Implement:
+
+* Backend APIs should accept multiple company numbers, for example `company_nos=3,5` or `company_nos[]=3&company_nos[]=5`.
+* Frontend should use a multi-select company filter.
+* Support:
+
+  * All companies
+  * One company
+  * Multiple selected companies
+* Ensure all dashboard endpoints, customer movement, sales trends, sales by customer, item group, item, salesperson, AI insights, and predictive insights respect both:
+
+  * selected company numbers
+  * sale scope filter: all/internal/external
+
+Do not break existing filters.
+Keep implementation clean, scalable, and production-grade.
+Provide validation queries showing:
+
+* Total sales by sale_scope
+* Internal sales by internal customer
+* External sales total
+* Sales by selected company group
+* Dashboard API output with multiple companies selected
