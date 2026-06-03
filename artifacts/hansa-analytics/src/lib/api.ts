@@ -253,6 +253,29 @@ export type GroupMonthlyRow = {
   items: number;
 };
 
+export type GroupItemRow = {
+  item_code: string;
+  item_name: string;
+  total_tonnes: number;
+  t3m: number;
+  p3m: number;
+  last_sale: string | null;
+  days_since: number;
+  customers: number;
+  change_pct: number | null;
+};
+
+export type CustomerGroupRow = {
+  group_code: string;
+  group_name: string;
+  total_tonnes: number;
+  t3m: number;
+  p3m: number;
+  last_sale: string | null;
+  items: number;
+  change_pct: number | null;
+};
+
 export async function getMovementSummary(
   companyNos: string[] = ["all"],
   saleScope: string = "all",
@@ -297,6 +320,30 @@ export async function getSlowMovingItems(
   if (groupCode) params.set("group_code", groupCode);
   const res = await fetch(`${API_BASE_URL}/movement/items?${params}`);
   if (!res.ok) throw new Error("Failed to fetch slow moving items");
+  return res.json();
+}
+
+export async function getProductGroupItems(
+  groupCode: string,
+  companyNos: string[] = ["all"],
+  saleScope: string = "all",
+): Promise<GroupItemRow[]> {
+  const params = new URLSearchParams({ sale_scope: saleScope });
+  appendCompanyNos(params, companyNos);
+  const res = await fetch(`${API_BASE_URL}/movement/product-groups/${encodeURIComponent(groupCode)}/items?${params}`);
+  if (!res.ok) throw new Error("Failed to fetch group items");
+  return res.json();
+}
+
+export async function getCustomerGroups(
+  customerCode: string,
+  companyNos: string[] = ["all"],
+  saleScope: string = "all",
+): Promise<CustomerGroupRow[]> {
+  const params = new URLSearchParams({ sale_scope: saleScope });
+  appendCompanyNos(params, companyNos);
+  const res = await fetch(`${API_BASE_URL}/movement/customers/${encodeURIComponent(customerCode)}/groups?${params}`);
+  if (!res.ok) throw new Error("Failed to fetch customer groups");
   return res.json();
 }
 

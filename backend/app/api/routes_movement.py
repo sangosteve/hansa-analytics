@@ -170,6 +170,8 @@ def customer_movement(
     co_frag, co_params = build_company_filter(resolved)
     scope_frag = build_scope_sql(sale_scope)
 
+    co_frag_f2, _ = build_company_filter(resolved, col="f2.company_no")
+
     rows = db.execute(text(f"""
         WITH ref AS (
             SELECT MAX(transaction_date) AS max_d
@@ -191,7 +193,7 @@ def customer_movement(
                 MAX(salesperson) AS last_rep,
                 (SELECT item_group_code FROM fact_sales_lines f2
                  WHERE f2.customer_code = fact_sales_lines.customer_code
-                   AND f2.company_no = fact_sales_lines.company_no
+                   AND {co_frag_f2}
                  GROUP BY item_group_code ORDER BY SUM(tonnes) DESC LIMIT 1
                 ) AS top_group
             FROM fact_sales_lines
@@ -221,6 +223,100 @@ def customer_movement(
             END,
             days_since DESC
     """), co_params).mappings().fetchall()
+    return [dict(r) for r in rows]
+
+
+@router.get("/product-groups/{group_code}/items")
+def product_group_items(
+    group_code: str,
+    company_nos: Optional[list[str]] = Query(default=None),
+    company_no: str = Query(default="3"),
+    sale_scope: str = Query(default="all"),
+    db: Session = Depends(get_db),
+):
+    resolved = _resolve(company_nos, company_no)
+    co_frag, co_params = build_company_filter(resolved)
+    scope_frag = build_scope_sql(sale_scope)
+
+    rows = db.execute(text(f"""
+        WITH ref AS (
+            SELECT MAX(transaction_date) AS max_d
+            FROM fact_sales_lines WHERE {co_frag} {scope_frag}
+        ),
+        base AS (
+            SELECT
+                item_code,
+                COALESCE(MAX(item_name), item_code) AS item_name,
+                ROUND(SUM(tonnes)::numeric, 1) AS total_tonnes,
+                ROUND(SUM(CASE WHEN transaction_date >= (SELECT max_d FROM ref) - INTERVAL '3 months'
+                               THEN tonnes ELSE 0 END)::numeric, 1) AS t3m,
+                ROUND(SUM(CASE WHEN transaction_date >= (SELECT max_d FROM ref) - INTERVAL '6 months'
+                               AND transaction_date < (SELECT max_d FROM ref) - INTERVAL '3 months'
+                               THEN tonnes ELSE 0 END)::numeric, 1) AS p3m,
+                MAX(transaction_date)::text AS last_sale,
+                ((SELECT max_d FROM ref) - MAX(transaction_date))::int AS days_since,
+                COUNT(DISTINCT customer_code) AS customers
+            FROM fact_sales_lines
+            WHERE {co_frag}
+              {scope_frag}
+              AND item_group_code = :group_code
+              AND item_code IS NOT NULL
+            GROUP BY item_code
+        )
+        SELECT *,
+            CASE WHEN p3m > 0
+                 THEN ROUND(((t3m - p3m) / p3m * 100)::numeric, 1)
+                 ELSE NULL END AS change_pct
+        FROM base
+        ORDER BY total_tonnes DESC
+        LIMIT 200
+    """), {**co_params, "group_code": group_code}).mappings().fetchall()
+    return [dict(r) for r in rows]
+
+
+@router.get("/customers/{customer_code}/groups")
+def customer_groups(
+    customer_code: str,
+    company_nos: Optional[list[str]] = Query(default=None),
+    company_no: str = Query(default="3"),
+    sale_scope: str = Query(default="all"),
+    db: Session = Depends(get_db),
+):
+    resolved = _resolve(company_nos, company_no)
+    co_frag, co_params = build_company_filter(resolved)
+    scope_frag = build_scope_sql(sale_scope)
+
+    rows = db.execute(text(f"""
+        WITH ref AS (
+            SELECT MAX(transaction_date) AS max_d
+            FROM fact_sales_lines WHERE {co_frag} {scope_frag}
+        ),
+        base AS (
+            SELECT
+                COALESCE(item_group_code, 'UNKNOWN') AS group_code,
+                COALESCE(MAX(item_group_name), 'Unknown') AS group_name,
+                ROUND(SUM(tonnes)::numeric, 1) AS total_tonnes,
+                ROUND(SUM(CASE WHEN transaction_date >= (SELECT max_d FROM ref) - INTERVAL '3 months'
+                               THEN tonnes ELSE 0 END)::numeric, 1) AS t3m,
+                ROUND(SUM(CASE WHEN transaction_date >= (SELECT max_d FROM ref) - INTERVAL '6 months'
+                               AND transaction_date < (SELECT max_d FROM ref) - INTERVAL '3 months'
+                               THEN tonnes ELSE 0 END)::numeric, 1) AS p3m,
+                MAX(transaction_date)::text AS last_sale,
+                COUNT(DISTINCT item_code) AS items
+            FROM fact_sales_lines
+            WHERE {co_frag}
+              {scope_frag}
+              AND customer_code = :customer_code
+              AND item_group_code IS NOT NULL
+            GROUP BY item_group_code
+        )
+        SELECT *,
+            CASE WHEN p3m > 0
+                 THEN ROUND(((t3m - p3m) / p3m * 100)::numeric, 1)
+                 ELSE NULL END AS change_pct
+        FROM base
+        ORDER BY total_tonnes DESC
+    """), {**co_params, "customer_code": customer_code}).mappings().fetchall()
     return [dict(r) for r in rows]
 
 

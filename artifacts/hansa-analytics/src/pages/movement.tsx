@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, Fragment } from "react";
 import {
   TrendingUp, TrendingDown, AlertTriangle, Package,
   Users, Box, ArrowUpRight, ArrowDownRight, Minus, RefreshCw,
-  Warehouse, RotateCcw
+  Warehouse, RotateCcw, ChevronRight, ChevronDown
 } from "lucide-react";
 import { useCompany } from "@/lib/company-context";
 import ReactECharts from "echarts-for-react";
@@ -13,6 +13,8 @@ import {
   getSlowMovingItems,
   getCustomerMovementAnalytics,
   getProductGroupMonthly,
+  getProductGroupItems,
+  getCustomerGroups,
   getStockStatus,
   getStockSummary,
   triggerStockRefresh,
@@ -21,6 +23,8 @@ import {
   type SlowMovingItem,
   type CustomerMovementRow,
   type GroupMonthlyRow,
+  type GroupItemRow,
+  type CustomerGroupRow,
   type StockRow,
   type StockSummary,
 } from "@/lib/api";
@@ -124,8 +128,11 @@ function ProductGroupsTab({ companyNos, saleScope }: { companyNos: string[]; sal
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("All");
   const [selected, setSelected] = useState<string | null>(null);
+  const [drillTab, setDrillTab] = useState<"products" | "trend">("products");
   const [monthlyData, setMonthlyData] = useState<GroupMonthlyRow[]>([]);
   const [monthlyLoading, setMonthlyLoading] = useState(false);
+  const [drillItems, setDrillItems] = useState<GroupItemRow[]>([]);
+  const [drillItemsLoading, setDrillItemsLoading] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -143,12 +150,19 @@ function ProductGroupsTab({ companyNos, saleScope }: { companyNos: string[]; sal
   const handleSelect = async (code: string) => {
     if (selected === code) { setSelected(null); return; }
     setSelected(code);
+    setDrillTab("products");
     setMonthlyLoading(true);
+    setDrillItemsLoading(true);
     try {
-      const data = await getProductGroupMonthly(code, companyNos, saleScope);
-      setMonthlyData(data);
+      const [monthlyResult, itemsResult] = await Promise.all([
+        getProductGroupMonthly(code, companyNos, saleScope),
+        getProductGroupItems(code, companyNos, saleScope),
+      ]);
+      setMonthlyData(monthlyResult);
+      setDrillItems(itemsResult);
     } finally {
       setMonthlyLoading(false);
+      setDrillItemsLoading(false);
     }
   };
 
@@ -216,23 +230,82 @@ function ProductGroupsTab({ companyNos, saleScope }: { companyNos: string[]; sal
         ))}
       </div>
 
-      {/* Drilldown chart */}
+      {/* Drilldown panel */}
       {selected && selectedRow && (
         <div className="rounded-lg border border-primary/30 bg-card p-4">
           <div className="flex items-center justify-between mb-3">
             <div>
               <p className="text-sm font-semibold text-foreground">{selectedRow.group_name}</p>
               <p className="text-[10px] text-muted-foreground mt-0.5">
-                {selectedRow.unique_items} items · {selectedRow.unique_customers} customers
+                {selectedRow.unique_items} products · {selectedRow.unique_customers} customers
               </p>
             </div>
-            <button onClick={() => setSelected(null)} className="text-xs text-muted-foreground hover:text-foreground">✕</button>
+            <div className="flex items-center gap-2">
+              <div className="flex rounded-md border border-border overflow-hidden text-[10px]">
+                <button
+                  onClick={() => setDrillTab("products")}
+                  className={`px-2.5 py-1 transition-colors ${drillTab === "products" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                >
+                  Products
+                </button>
+                <button
+                  onClick={() => setDrillTab("trend")}
+                  className={`px-2.5 py-1 transition-colors border-l border-border ${drillTab === "trend" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                >
+                  Trend
+                </button>
+              </div>
+              <button onClick={() => setSelected(null)} className="text-xs text-muted-foreground hover:text-foreground">✕</button>
+            </div>
           </div>
-          {monthlyLoading ? (
-            <div className="h-36 flex items-center justify-center text-muted-foreground text-xs">Loading…</div>
-          ) : drilldownOptions ? (
-            <ReactECharts option={drilldownOptions} style={{ height: 180 }} notMerge lazyUpdate />
-          ) : null}
+
+          {drillTab === "trend" ? (
+            monthlyLoading ? (
+              <div className="h-36 flex items-center justify-center text-muted-foreground text-xs">Loading…</div>
+            ) : drilldownOptions ? (
+              <ReactECharts option={drilldownOptions} style={{ height: 180 }} notMerge lazyUpdate />
+            ) : null
+          ) : drillItemsLoading ? (
+            <div className="h-24 flex items-center justify-center text-muted-foreground text-xs">Loading products…</div>
+          ) : (
+            <div className="rounded border border-border overflow-hidden">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-border bg-secondary/40">
+                    <th className="text-left px-3 py-2 font-semibold text-muted-foreground">Product</th>
+                    <th className="text-right px-3 py-2 font-semibold text-muted-foreground">Total t</th>
+                    <th className="text-right px-3 py-2 font-semibold text-muted-foreground">Recent 3m</th>
+                    <th className="text-right px-3 py-2 font-semibold text-muted-foreground">Prior 3m</th>
+                    <th className="text-right px-3 py-2 font-semibold text-muted-foreground">3m Δ</th>
+                    <th className="text-right px-3 py-2 font-semibold text-muted-foreground">Last Sale</th>
+                    <th className="text-right px-3 py-2 font-semibold text-muted-foreground">Days Ago</th>
+                    <th className="text-right px-3 py-2 font-semibold text-muted-foreground">Customers</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {drillItems.length === 0 ? (
+                    <tr><td colSpan={8} className="px-3 py-4 text-center text-muted-foreground">No products found</td></tr>
+                  ) : drillItems.map((item) => (
+                    <tr key={item.item_code} className="border-b border-border/40 hover:bg-accent/20 transition-colors">
+                      <td className="px-3 py-2">
+                        <div className="font-medium text-foreground truncate max-w-[220px]">{item.item_name}</div>
+                        <div className="text-[10px] text-muted-foreground">{item.item_code}</div>
+                      </td>
+                      <td className="px-3 py-2 text-right text-foreground">{fmtT(item.total_tonnes)}</td>
+                      <td className="px-3 py-2 text-right text-foreground">{fmtT(item.t3m)}</td>
+                      <td className="px-3 py-2 text-right text-muted-foreground">{fmtT(item.p3m)}</td>
+                      <td className="px-3 py-2 text-right"><ChangeCell pct={item.change_pct} /></td>
+                      <td className="px-3 py-2 text-right text-muted-foreground">{item.last_sale?.slice(0, 10) ?? "—"}</td>
+                      <td className={`px-3 py-2 text-right font-medium ${item.days_since > 180 ? "text-red-400" : item.days_since > 90 ? "text-amber-400" : "text-muted-foreground"}`}>
+                        {item.days_since}
+                      </td>
+                      <td className="px-3 py-2 text-right text-muted-foreground">{item.customers}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 
@@ -392,6 +465,9 @@ function CustomersTab({ companyNos, saleScope }: { companyNos: string[]; saleSco
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("All");
   const [search, setSearch] = useState("");
+  const [expandedCust, setExpandedCust] = useState<string | null>(null);
+  const [custGroups, setCustGroups] = useState<Record<string, CustomerGroupRow[]>>({});
+  const [custGroupsLoading, setCustGroupsLoading] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     setLoading(true);
@@ -409,6 +485,20 @@ function CustomersTab({ companyNos, saleScope }: { companyNos: string[]; saleSco
     }
     return r;
   }, [rows, filter, search]);
+
+  const handleCustExpand = async (code: string) => {
+    if (expandedCust === code) { setExpandedCust(null); return; }
+    setExpandedCust(code);
+    if (!custGroups[code]) {
+      setCustGroupsLoading((prev) => ({ ...prev, [code]: true }));
+      try {
+        const groups = await getCustomerGroups(code, companyNos, saleScope);
+        setCustGroups((prev) => ({ ...prev, [code]: groups }));
+      } finally {
+        setCustGroupsLoading((prev) => ({ ...prev, [code]: false }));
+      }
+    }
+  };
 
   return (
     <div className="space-y-3">
@@ -454,23 +544,78 @@ function CustomersTab({ companyNos, saleScope }: { companyNos: string[]; saleSco
             {loading ? (
               <LoadingRows cols={10} />
             ) : filtered.map((r) => (
-              <tr key={r.customer_code} className="border-b border-border/40 hover:bg-accent/20 transition-colors">
-                <td className="px-3 py-2.5">
-                  <div className="font-medium text-foreground truncate max-w-[160px]">{r.customer_name}</div>
-                  <div className="text-[10px] text-muted-foreground">{r.customer_code}</div>
-                </td>
-                <td className="px-3 py-2.5"><StatusBadge status={r.status} /></td>
-                <td className="px-3 py-2.5 text-right text-muted-foreground">{r.last_purchase?.slice(0, 10) ?? "—"}</td>
-                <td className={`px-3 py-2.5 text-right font-medium ${r.days_since > 60 ? "text-red-400" : r.days_since > 30 ? "text-amber-400" : "text-emerald-400"}`}>
-                  {r.days_since}
-                </td>
-                <td className="px-3 py-2.5 text-right text-foreground">{fmtT(r.t3m)}</td>
-                <td className="px-3 py-2.5 text-right text-muted-foreground">{fmtT(r.p3m)}</td>
-                <td className="px-3 py-2.5 text-right"><ChangeCell pct={r.change_pct} /></td>
-                <td className="px-3 py-2.5 text-right text-muted-foreground">{fmtT(r.total_tonnes)}</td>
-                <td className="px-3 py-2.5 text-muted-foreground truncate max-w-[100px]">{r.top_group ?? "—"}</td>
-                <td className="px-3 py-2.5 text-muted-foreground truncate max-w-[90px]">{r.last_rep ?? "—"}</td>
-              </tr>
+              <Fragment key={r.customer_code}>
+                <tr
+                  onClick={() => handleCustExpand(r.customer_code)}
+                  className={`border-b border-border/40 cursor-pointer transition-colors hover:bg-accent/30 ${expandedCust === r.customer_code ? "bg-primary/5" : ""}`}
+                >
+                  <td className="px-3 py-2.5">
+                    <div className="flex items-center gap-1.5">
+                      {expandedCust === r.customer_code
+                        ? <ChevronDown className="h-3 w-3 text-primary flex-shrink-0" />
+                        : <ChevronRight className="h-3 w-3 text-muted-foreground flex-shrink-0" />}
+                      <div>
+                        <div className="font-medium text-foreground truncate max-w-[145px]">{r.customer_name}</div>
+                        <div className="text-[10px] text-muted-foreground">{r.customer_code}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-3 py-2.5"><StatusBadge status={r.status} /></td>
+                  <td className="px-3 py-2.5 text-right text-muted-foreground">{r.last_purchase?.slice(0, 10) ?? "—"}</td>
+                  <td className={`px-3 py-2.5 text-right font-medium ${r.days_since > 60 ? "text-red-400" : r.days_since > 30 ? "text-amber-400" : "text-emerald-400"}`}>
+                    {r.days_since}
+                  </td>
+                  <td className="px-3 py-2.5 text-right text-foreground">{fmtT(r.t3m)}</td>
+                  <td className="px-3 py-2.5 text-right text-muted-foreground">{fmtT(r.p3m)}</td>
+                  <td className="px-3 py-2.5 text-right"><ChangeCell pct={r.change_pct} /></td>
+                  <td className="px-3 py-2.5 text-right text-muted-foreground">{fmtT(r.total_tonnes)}</td>
+                  <td className="px-3 py-2.5 text-muted-foreground truncate max-w-[100px]">{r.top_group ?? "—"}</td>
+                  <td className="px-3 py-2.5 text-muted-foreground truncate max-w-[90px]">{r.last_rep ?? "—"}</td>
+                </tr>
+                {expandedCust === r.customer_code && (
+                  <tr className="border-b border-primary/20">
+                    <td colSpan={10} className="px-0 py-0 bg-primary/3">
+                      {custGroupsLoading[r.customer_code] ? (
+                        <div className="px-8 py-3 text-xs text-muted-foreground">Loading product groups…</div>
+                      ) : (
+                        <div className="px-6 py-2">
+                          <table className="w-full text-xs">
+                            <thead>
+                              <tr className="border-b border-border/40">
+                                <th className="text-left px-2 py-1.5 font-semibold text-muted-foreground">Product Group</th>
+                                <th className="text-right px-2 py-1.5 font-semibold text-muted-foreground">Total t</th>
+                                <th className="text-right px-2 py-1.5 font-semibold text-muted-foreground">Recent 3m</th>
+                                <th className="text-right px-2 py-1.5 font-semibold text-muted-foreground">Prior 3m</th>
+                                <th className="text-right px-2 py-1.5 font-semibold text-muted-foreground">3m Δ</th>
+                                <th className="text-right px-2 py-1.5 font-semibold text-muted-foreground">Last Sale</th>
+                                <th className="text-right px-2 py-1.5 font-semibold text-muted-foreground">Products</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {(custGroups[r.customer_code] ?? []).length === 0 ? (
+                                <tr><td colSpan={7} className="px-2 py-3 text-center text-muted-foreground">No product groups found</td></tr>
+                              ) : (custGroups[r.customer_code] ?? []).map((g) => (
+                                <tr key={g.group_code} className="border-b border-border/20 hover:bg-accent/10 transition-colors">
+                                  <td className="px-2 py-1.5">
+                                    <div className="font-medium text-foreground">{g.group_name}</div>
+                                    <div className="text-[10px] text-muted-foreground">{g.group_code}</div>
+                                  </td>
+                                  <td className="px-2 py-1.5 text-right text-foreground">{fmtT(g.total_tonnes)}</td>
+                                  <td className="px-2 py-1.5 text-right text-foreground">{fmtT(g.t3m)}</td>
+                                  <td className="px-2 py-1.5 text-right text-muted-foreground">{fmtT(g.p3m)}</td>
+                                  <td className="px-2 py-1.5 text-right"><ChangeCell pct={g.change_pct} /></td>
+                                  <td className="px-2 py-1.5 text-right text-muted-foreground">{g.last_sale?.slice(0, 10) ?? "—"}</td>
+                                  <td className="px-2 py-1.5 text-right text-muted-foreground">{g.items}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
             ))}
             {!loading && filtered.length === 0 && (
               <tr><td colSpan={10} className="px-3 py-6 text-center text-muted-foreground text-xs">No customers match</td></tr>
