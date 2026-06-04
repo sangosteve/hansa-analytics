@@ -6,7 +6,14 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { getRefreshJobStatus, type RefreshJob, type RefreshJobStep } from "@/lib/api";
-import { CheckCircle2, XCircle, Loader2, Clock, ChevronDown, ChevronRight } from "lucide-react";
+import {
+  CheckmarkCircle01Icon,
+  CancelCircleIcon,
+  Loading01Icon,
+  Clock01Icon,
+  ArrowDown01Icon,
+  ArrowRight01Icon,
+} from "hugeicons-react";
 
 const COMPANY_LABELS: Record<string, string> = {
   "3": "Retail",
@@ -27,12 +34,12 @@ const STEP_LABELS: Record<string, string> = {
 
 function StatusIcon({ status }: { status: string }) {
   if (status === "done" || status === "success" || status === "ok")
-    return <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 flex-shrink-0" />;
+    return <CheckmarkCircle01Icon size={14} className="text-emerald-400 flex-shrink-0" />;
   if (status === "error")
-    return <XCircle className="h-3.5 w-3.5 text-red-400 flex-shrink-0" />;
+    return <CancelCircleIcon size={14} className="text-red-400 flex-shrink-0" />;
   if (status === "running")
-    return <Loader2 className="h-3.5 w-3.5 text-primary animate-spin flex-shrink-0" />;
-  return <Clock className="h-3.5 w-3.5 text-muted-foreground/40 flex-shrink-0" />;
+    return <Loading01Icon size={14} className="text-primary animate-spin flex-shrink-0" />;
+  return <Clock01Icon size={14} className="text-muted-foreground/40 flex-shrink-0" />;
 }
 
 function formatDuration(started: string, finished: string | null) {
@@ -54,7 +61,7 @@ function CompanySection({
 }) {
   const [open, setOpen] = useState(true);
   const hasError = steps.some((s) => s.status === "error");
-  const allDone = steps.length > 0 && steps.every((s) => s.status === "done" || s.status === "success" || s.status === "ok");
+  const allDone = steps.length > 0 && steps.every((s) => s.status === "done" || s.status === "success");
 
   return (
     <div className="border border-border rounded-md overflow-hidden">
@@ -63,9 +70,9 @@ function CompanySection({
         className="w-full flex items-center gap-2 px-3 py-2 bg-card/60 hover:bg-accent/20 transition-colors text-left"
       >
         {open ? (
-          <ChevronDown className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+          <ArrowDown01Icon size={12} className="text-muted-foreground flex-shrink-0" />
         ) : (
-          <ChevronRight className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+          <ArrowRight01Icon size={12} className="text-muted-foreground flex-shrink-0" />
         )}
         <span className="text-xs font-medium text-foreground flex-1">
           {COMPANY_LABELS[company] ?? `Company ${company}`}
@@ -73,7 +80,7 @@ function CompanySection({
         {hasError && <span className="text-[10px] text-red-400 font-medium">Failed</span>}
         {!hasError && allDone && <span className="text-[10px] text-emerald-400 font-medium">Done</span>}
         {isRunning && !allDone && !hasError && (
-          <Loader2 className="h-3 w-3 text-primary animate-spin" />
+          <Loading01Icon size={12} className="text-primary animate-spin" />
         )}
       </button>
       {open && steps.length > 0 && (
@@ -104,7 +111,7 @@ function CompanySection({
       )}
       {open && steps.length === 0 && isRunning && (
         <div className="px-3 py-2 flex items-center gap-2">
-          <Loader2 className="h-3 w-3 text-primary animate-spin" />
+          <Loading01Icon size={12} className="text-primary animate-spin" />
           <span className="text-[11px] text-muted-foreground">Waiting...</span>
         </div>
       )}
@@ -162,7 +169,7 @@ export function RefreshProgressDrawer({ jobId, open, onClose, onDone }: Props) {
             .map((s) => [s.company, s.company])
         ).values()
       )
-    : job?.companies ?? [];
+    : [];
 
   const allSteps = job?.steps ?? [];
   const globalSteps = allSteps.filter((s) => s.company === "all");
@@ -176,12 +183,12 @@ export function RefreshProgressDrawer({ jobId, open, onClose, onDone }: Props) {
       <SheetContent side="right" className="w-[420px] sm:w-[480px] flex flex-col gap-0 p-0">
         <SheetHeader className="px-5 pt-5 pb-3 border-b border-border">
           <div className="flex items-center gap-2">
-            {isRunning && <Loader2 className="h-4 w-4 text-primary animate-spin" />}
+            {isRunning && <Loading01Icon size={16} className="text-primary animate-spin" />}
             {!isRunning && job?.status === "done" && !errorCount && (
-              <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+              <CheckmarkCircle01Icon size={16} className="text-emerald-400" />
             )}
             {!isRunning && (job?.status === "error" || !!errorCount) && (
-              <XCircle className="h-4 w-4 text-red-400" />
+              <CancelCircleIcon size={16} className="text-red-400" />
             )}
             <SheetTitle className="text-sm font-semibold">
               {isRunning ? "Refreshing Data..." : errorCount ? "Refresh Completed with Errors" : "Refresh Complete"}
@@ -212,7 +219,7 @@ export function RefreshProgressDrawer({ jobId, open, onClose, onDone }: Props) {
           {/* Current step indicator while running */}
           {isRunning && job?.current_step && (
             <div className="flex items-center gap-2 text-[11px] text-primary bg-primary/5 border border-primary/20 rounded-md px-3 py-2">
-              <Loader2 className="h-3 w-3 animate-spin flex-shrink-0" />
+              <Loading01Icon size={12} className="animate-spin flex-shrink-0" />
               {job.current_step}
             </div>
           )}
@@ -260,7 +267,7 @@ export function RefreshProgressDrawer({ jobId, open, onClose, onDone }: Props) {
           {/* Placeholder when no steps yet */}
           {!job && (
             <div className="flex flex-col items-center justify-center py-12 gap-3 text-center">
-              <Loader2 className="h-6 w-6 text-primary animate-spin" />
+              <Loading01Icon size={24} className="text-primary animate-spin" />
               <p className="text-xs text-muted-foreground">Starting refresh...</p>
             </div>
           )}
@@ -276,12 +283,12 @@ export function RefreshProgressDrawer({ jobId, open, onClose, onDone }: Props) {
             >
               {errorCount ? (
                 <>
-                  <XCircle className="h-3.5 w-3.5 flex-shrink-0" />
+                  <CancelCircleIcon size={14} className="flex-shrink-0" />
                   {errorCount} step{errorCount > 1 ? "s" : ""} failed. Dashboard data may be partial.
                 </>
               ) : (
                 <>
-                  <CheckCircle2 className="h-3.5 w-3.5 flex-shrink-0" />
+                  <CheckmarkCircle01Icon size={14} className="flex-shrink-0" />
                   All steps completed. Dashboard data updated.
                 </>
               )}

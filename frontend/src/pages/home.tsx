@@ -1,5 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import { RefreshCw, TrendingUp, Building2, AlertTriangle, TrendingDown, Activity, Package } from "lucide-react";
+import {
+  ArrowReloadHorizontalIcon,
+  ChartUpIcon,
+  Building01Icon,
+  Alert01Icon,
+  ChartDownIcon,
+  Activity01Icon,
+  Package01Icon,
+} from "hugeicons-react";
 import ReactECharts from "echarts-for-react";
 
 import {
@@ -42,9 +50,9 @@ function pctBadge(pct: number | null) {
 }
 
 function trendIcon(trend: string) {
-  if (trend === "growing" || trend === "new") return <TrendingUp className="h-3 w-3 text-emerald-400" />;
-  if (trend === "declining" || trend === "stopped") return <TrendingDown className="h-3 w-3 text-red-400" />;
-  return <Activity className="h-3 w-3 text-yellow-400" />;
+  if (trend === "growing" || trend === "new") return <ChartUpIcon size={12} className="text-emerald-400" />;
+  if (trend === "declining" || trend === "stopped") return <ChartDownIcon size={12} className="text-red-400" />;
+  return <Activity01Icon size={12} className="text-yellow-400" />;
 }
 
 const darkChartBase = {
@@ -54,7 +62,7 @@ const darkChartBase = {
 };
 
 export default function Home() {
-  const { companyNos, saleScope, companyLabel, dateFrom, dateTo, datePreset, isCustom } = useCompany();
+  const { companyNos, saleScope, companyLabel, dateFrom, dateTo, isAllTime } = useCompany();
   const [summary, setSummary] = useState<SalesSummaryResponse | null>(null);
   const [momSummary, setMomSummary] = useState<SalesSummaryResponse | null>(null);
   const [predictive, setPredictive] = useState<PredictiveInsightsResponse | null>(null);
@@ -309,7 +317,7 @@ export default function Home() {
             </div>
             <Button size="sm" variant="outline" onClick={handleRefresh} disabled={refreshing || loading}
               className="gap-1.5 text-xs h-8 border-border bg-secondary hover:bg-accent">
-              <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
+              <ArrowReloadHorizontalIcon size={14} className={refreshing ? "animate-spin" : ""} />
               {refreshing ? "Refreshing…" : "Refresh"}
             </Button>
           </div>
@@ -317,7 +325,7 @@ export default function Home() {
           {/* Date range display */}
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-md border border-border bg-secondary text-xs text-muted-foreground">
             <span className="font-medium text-foreground uppercase tracking-wider text-[10px]">
-              {isCustom ? "Custom" : datePreset === "all" ? "All time" : datePreset.toUpperCase()}
+              {isAllTime ? "All time" : "Custom range"}
             </span>
             <span className="text-border">·</span>
             {formatDateLabel(dateFrom)} — {formatDateLabel(dateTo)}
@@ -328,7 +336,7 @@ export default function Home() {
             {/* Total Tonnes */}
             <div className="rounded-lg border border-border bg-card p-3.5">
               <div className="flex items-center gap-2 mb-1.5">
-                <TrendingUp className="h-3.5 w-3.5 text-primary" />
+                <ChartUpIcon size={14} className="text-primary" />
                 <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Total tonnes</span>
               </div>
               <div className="text-2xl font-bold text-foreground">{formatTonnes(totalTonnes)}</div>
@@ -337,7 +345,7 @@ export default function Home() {
             {/* Top Product Group (replaces Top Rep) */}
             <div className="rounded-lg border border-border bg-card p-3.5">
               <div className="flex items-center gap-2 mb-1.5">
-                <Package className="h-3.5 w-3.5 text-primary" />
+                <Package01Icon size={14} className="text-primary" />
                 <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Top group (3m)</span>
               </div>
               {predictiveLoading ? (
@@ -358,7 +366,7 @@ export default function Home() {
             {/* MTD projection */}
             <div className="rounded-lg border border-border bg-card p-3.5">
               <div className="flex items-center gap-2 mb-1.5">
-                <Activity className="h-3.5 w-3.5 text-primary" />
+                <Activity01Icon size={14} className="text-primary" />
                 <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
                   {mtd ? mtd.month : "MTD projection"}
                 </span>
@@ -382,7 +390,7 @@ export default function Home() {
             {/* Company / scope */}
             <div className="rounded-lg border border-border bg-card p-3.5">
               <div className="flex items-center gap-2 mb-1.5">
-                <Building2 className="h-3.5 w-3.5 text-primary" />
+                <Building01Icon size={14} className="text-primary" />
                 <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Scope</span>
               </div>
               <div className="text-sm font-bold text-foreground leading-tight">{companyLabel}</div>
@@ -400,7 +408,7 @@ export default function Home() {
               {/* Customer lapse risk */}
               <div className="rounded-lg border border-border bg-card p-3.5">
                 <div className="flex items-center gap-2 mb-2">
-                  <AlertTriangle className="h-3.5 w-3.5 text-amber-400" />
+                  <Alert01Icon size={14} className="text-amber-400" />
                   <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
                     At-risk customers
                   </span>
@@ -433,7 +441,7 @@ export default function Home() {
               {/* Products to push */}
               <div className="rounded-lg border border-border bg-card p-3.5">
                 <div className="flex items-center gap-2 mb-2">
-                  <TrendingDown className="h-3.5 w-3.5 text-blue-400" />
+                  <ChartDownIcon size={14} className="text-blue-400" />
                   <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
                     Products to push
                   </span>
@@ -461,7 +469,7 @@ export default function Home() {
               {/* Growing product groups (replaces Rep Trends) */}
               <div className="rounded-lg border border-border bg-card p-3.5">
                 <div className="flex items-center gap-2 mb-2">
-                  <TrendingUp className="h-3.5 w-3.5 text-emerald-400" />
+                  <ChartUpIcon size={14} className="text-emerald-400" />
                   <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
                     Growing groups (3m)
                   </span>

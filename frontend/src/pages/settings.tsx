@@ -6,7 +6,13 @@ import {
   type RefreshSettings,
   type RefreshHistoryRow,
 } from "@/lib/api";
-import { CheckCircle2, XCircle, Clock, Settings2, History } from "lucide-react";
+import {
+  CheckmarkCircle01Icon,
+  CancelCircleIcon,
+  Clock01Icon,
+  Settings01Icon,
+  Clock04Icon,
+} from "hugeicons-react";
 
 const ALL_COMPANIES = [
   { value: "3", label: "Retail (Co. 3)" },
@@ -47,18 +53,18 @@ function StatusBadge({ status }: { status: string }) {
   if (s === "success" || s === "ok" || s === "done")
     return (
       <span className="inline-flex items-center gap-1 text-[10px] font-medium text-emerald-400">
-        <CheckCircle2 className="h-3 w-3" /> {status}
+        <CheckmarkCircle01Icon size={12} /> {status}
       </span>
     );
   if (s === "error" || s === "failed")
     return (
       <span className="inline-flex items-center gap-1 text-[10px] font-medium text-red-400">
-        <XCircle className="h-3 w-3" /> {status}
+        <CancelCircleIcon size={12} /> {status}
       </span>
     );
   return (
     <span className="inline-flex items-center gap-1 text-[10px] font-medium text-muted-foreground">
-      <Clock className="h-3 w-3" /> {status}
+      <Clock01Icon size={12} /> {status}
     </span>
   );
 }
@@ -184,11 +190,11 @@ export default function SettingsPage() {
           <span className="text-xs font-semibold text-foreground">Settings</span>
         </div>
         <button className={tabCls("config")} onClick={() => setTab("config")}>
-          <Settings2 className="h-3.5 w-3.5" />
+          <Settings01Icon size={14} />
           Data Refresh
         </button>
         <button className={tabCls("history")} onClick={() => setTab("history")}>
-          <History className="h-3.5 w-3.5" />
+          <Clock04Icon size={14} />
           Refresh History
         </button>
       </div>
@@ -405,7 +411,7 @@ export default function SettingsPage() {
                   </button>
                   {saved && (
                     <span className="text-xs text-emerald-400 flex items-center gap-1">
-                      <CheckCircle2 className="h-3.5 w-3.5" /> Saved
+                      <CheckmarkCircle01Icon size={14} /> Saved
                     </span>
                   )}
                   {!isDirty && !saved && (

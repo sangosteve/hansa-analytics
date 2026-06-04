@@ -11,7 +11,8 @@
   },
   "dependencies": {
     "echarts": "^5.5.1",
-    "echarts-for-react": "^3.0.2"
+    "echarts-for-react": "^3.0.2",
+    "hugeicons-react": "^0.4.0"
   },
   "devDependencies": {
     "@hookform/resolvers": "^3.10.0",

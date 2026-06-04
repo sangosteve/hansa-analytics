@@ -1,14 +1,13 @@
 import { useState, useCallback } from "react";
 import {
-  Sparkles,
-  X,
-  Maximize2,
-  Minimize2,
-  Pin,
-  PinOff,
-  ChevronDown,
-  ChevronUp,
-} from "lucide-react";
+  SparklesIcon,
+  Cancel01Icon,
+  Maximize01Icon,
+  Minimize01Icon,
+  Pin02Icon,
+  ArrowDown01Icon,
+  ArrowUp01Icon,
+} from "hugeicons-react";
 import ReactECharts from "echarts-for-react";
 
 import AIInsightsPanel, { type LargeViewPayload, type PinnedTurn } from "./ai-insights-panel";
@@ -136,7 +135,7 @@ function LargeViewModal({
             onClick={onClose}
             className="ml-4 flex-shrink-0 h-7 w-7 flex items-center justify-center rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
           >
-            <X className="h-4 w-4" />
+            <Cancel01Icon size={16} />
           </button>
         </div>
 
@@ -185,12 +184,12 @@ function PinnedCard({
           onClick={() => setCollapsed((c) => !c)}
           className="flex-1 text-left flex items-center gap-2 min-w-0"
         >
-          <Pin className="h-3 w-3 text-primary flex-shrink-0" />
+          <Pin02Icon size={12} className="text-primary flex-shrink-0" />
           <span className="text-[11px] font-medium text-foreground truncate">{item.question}</span>
           {collapsed ? (
-            <ChevronDown className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+            <ArrowDown01Icon size={12} className="text-muted-foreground flex-shrink-0" />
           ) : (
-            <ChevronUp className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+            <ArrowUp01Icon size={12} className="text-muted-foreground flex-shrink-0" />
           )}
         </button>
         <button
@@ -198,7 +197,7 @@ function PinnedCard({
           className="ml-2 flex-shrink-0 h-5 w-5 flex items-center justify-center rounded hover:bg-secondary text-muted-foreground hover:text-foreground"
           title="Unpin"
         >
-          <PinOff className="h-3 w-3" />
+          <Pin02Icon size={12} />
         </button>
       </div>
 
@@ -219,7 +218,7 @@ function PinnedCard({
               }
               className="text-[10px] text-primary hover:underline flex items-center gap-1"
             >
-              <Maximize2 className="h-3 w-3" />
+              <Maximize01Icon size={12} />
               View chart / table
             </button>
           )}
@@ -272,7 +271,7 @@ export default function AIFloatingDrawer({ companyNos, saleScope, dateFrom, date
             transition-all duration-150 text-[13px] font-semibold select-none"
           aria-label="Open AI Insights"
         >
-          <Sparkles className="h-4 w-4" />
+          <SparklesIcon size={16} />
           AI Insights
           {pinned.length > 0 && (
             <span className="ml-1 flex h-4 w-4 items-center justify-center rounded-full bg-white/20 text-[9px] font-bold">
@@ -304,7 +303,7 @@ export default function AIFloatingDrawer({ companyNos, saleScope, dateFrom, date
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <div className="flex h-6 w-6 items-center justify-center rounded-md bg-primary/15 flex-shrink-0">
-                  <Sparkles className="h-3.5 w-3.5 text-primary" />
+                  <SparklesIcon size={14} className="text-primary" />
                 </div>
                 <span className="text-sm font-semibold text-foreground">AI Sales Insights</span>
               </div>
@@ -322,7 +321,7 @@ export default function AIFloatingDrawer({ companyNos, saleScope, dateFrom, date
                   className={`flex items-center gap-1 h-7 px-2 rounded-md text-[10px] font-medium transition-colors
                     ${showPinned ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-secondary"}`}
                 >
-                  <Pin className="h-3 w-3" />
+                  <Pin02Icon size={12} />
                   {pinned.length}
                 </button>
               )}
@@ -335,9 +334,9 @@ export default function AIFloatingDrawer({ companyNos, saleScope, dateFrom, date
                   text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
               >
                 {isExpanded ? (
-                  <Minimize2 className="h-3.5 w-3.5" />
+                  <Minimize01Icon size={14} />
                 ) : (
-                  <Maximize2 className="h-3.5 w-3.5" />
+                  <Maximize01Icon size={14} />
                 )}
               </button>
 
@@ -348,7 +347,7 @@ export default function AIFloatingDrawer({ companyNos, saleScope, dateFrom, date
                 className="h-7 w-7 flex items-center justify-center rounded-md
                   text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
               >
-                <X className="h-3.5 w-3.5" />
+                <Cancel01Icon size={14} />
               </button>
             </div>
           </div>

@@ -1,9 +1,20 @@
-import { useEffect, useMemo, useState, Fragment } from "react";
+import React, { useEffect, useMemo, useState, Fragment } from "react";
 import {
-  TrendingUp, TrendingDown, AlertTriangle, Package,
-  Users, Box, ArrowUpRight, ArrowDownRight, Minus, RefreshCw,
-  Warehouse, RotateCcw, ChevronRight, ChevronDown
-} from "lucide-react";
+  ChartUpIcon,
+  ChartDownIcon,
+  Alert01Icon,
+  Package01Icon,
+  UserGroupIcon,
+  Package02Icon,
+  ArrowUpRight01Icon,
+  ArrowDownRight01Icon,
+  MinusSignIcon,
+  ArrowReloadHorizontalIcon,
+  Building04Icon,
+  ArrowReloadVerticalIcon,
+  ArrowRight01Icon,
+  ArrowDown01Icon,
+} from "hugeicons-react";
 import { useCompany } from "@/lib/company-context";
 import ReactECharts from "echarts-for-react";
 
@@ -66,7 +77,7 @@ function ChangeCell({ pct }: { pct: number | null | undefined }) {
   const isFlat = Math.abs(pct) < 3;
   return (
     <span className={`flex items-center gap-0.5 font-medium ${isFlat ? "text-muted-foreground" : isUp ? "text-emerald-400" : "text-red-400"}`}>
-      {isFlat ? <Minus className="h-3 w-3" /> : isUp ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
+      {isFlat ? <MinusSignIcon size={12} /> : isUp ? <ArrowUpRight01Icon size={12} /> : <ArrowDownRight01Icon size={12} />}
       {fmtPct(pct)}
     </span>
   );
@@ -552,8 +563,8 @@ function CustomersTab({ companyNos, saleScope }: { companyNos: string[]; saleSco
                   <td className="px-3 py-2.5">
                     <div className="flex items-center gap-1.5">
                       {expandedCust === r.customer_code
-                        ? <ChevronDown className="h-3 w-3 text-primary flex-shrink-0" />
-                        : <ChevronRight className="h-3 w-3 text-muted-foreground flex-shrink-0" />}
+                        ? <ArrowDown01Icon size={12} className="text-primary flex-shrink-0" />
+                        : <ArrowRight01Icon size={12} className="text-muted-foreground flex-shrink-0" />}
                       <div>
                         <div className="font-medium text-foreground truncate max-w-[145px]">{r.customer_name}</div>
                         <div className="text-[10px] text-muted-foreground">{r.customer_code}</div>
@@ -752,7 +763,7 @@ function StockTab({ companyNos, saleScope: _saleScope }: { companyNos: string[];
           disabled={refreshing}
           className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary/10 border border-primary/30 text-xs text-primary hover:bg-primary/20 transition-colors disabled:opacity-50"
         >
-          <RotateCcw className={`h-3 w-3 ${refreshing ? "animate-spin" : ""}`} />
+          <ArrowReloadVerticalIcon size={12} className={refreshing ? "animate-spin" : ""} />
           {refreshing ? "Refreshing…" : "Refresh from Hansa"}
         </button>
         {refreshMsg && <span className="text-[10px] text-muted-foreground">{refreshMsg}</span>}
@@ -820,11 +831,11 @@ function StockTab({ companyNos, saleScope: _saleScope }: { companyNos: string[];
 }
 
 // ── Main page ─────────────────────────────────────────────────────────────────
-const TABS: { id: TabId; label: string; icon: typeof Package }[] = [
-  { id: "groups", label: "Product Groups", icon: Package },
-  { id: "items", label: "Slow-Moving Items", icon: Box },
-  { id: "customers", label: "Customers", icon: Users },
-  { id: "stock", label: "Stock Status", icon: Warehouse },
+const TABS: { id: TabId; label: string; icon: React.ComponentType<{ size?: number; className?: string }> }[] = [
+  { id: "groups", label: "Product Groups", icon: Package01Icon },
+  { id: "items", label: "Slow-Moving Items", icon: Package02Icon },
+  { id: "customers", label: "Customers", icon: UserGroupIcon },
+  { id: "stock", label: "Stock Status", icon: Building04Icon },
 ];
 
 export default function Movement() {
