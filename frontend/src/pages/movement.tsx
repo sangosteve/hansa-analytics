@@ -14,6 +14,10 @@ import {
   ArrowReloadVerticalIcon,
   ArrowRight01Icon,
   ArrowDown01Icon,
+  SortByUp01Icon,
+  SortByDown01Icon,
+  Sorting05Icon,
+  Download01Icon,
 } from "hugeicons-react";
 import { useCompany } from "@/lib/company-context";
 import ReactECharts from "echarts-for-react";
@@ -172,26 +176,52 @@ function SortableHeader({
   onToggle: (k: string) => void; align?: "left" | "right"; className?: string;
 }) {
   const active = sort.key === sortKey;
+  const SortIcon = active
+    ? sort.dir === "asc" ? SortByUp01Icon : SortByDown01Icon
+    : Sorting05Icon;
   return (
     <th
       onClick={() => onToggle(sortKey)}
       aria-sort={active ? (sort.dir === "asc" ? "ascending" : "descending") : "none"}
-      className={`px-3 py-2.5 text-xs font-semibold select-none group transition-colors hover:text-foreground whitespace-nowrap
+      className={`px-3 py-2.5 text-xs font-semibold select-none group transition-colors hover:text-foreground whitespace-nowrap cursor-pointer
         ${align === "right" ? "text-right" : "text-left"}
         ${active ? "text-foreground" : "text-muted-foreground"}
         ${className ?? ""}`}
     >
       <span className={`inline-flex items-center gap-1 ${align === "right" ? "justify-end" : "justify-start"}`}>
         {label}
-        <span className="w-3 text-[10px] flex-shrink-0 leading-none">
-          {active
-            ? sort.dir === "asc" ? "↑" : "↓"
-            : <span className="opacity-25 group-hover:opacity-60">↕</span>
-          }
-        </span>
+        <SortIcon
+          size={12}
+          className={`flex-shrink-0 transition-opacity ${
+            active ? "opacity-100" : "opacity-20 group-hover:opacity-50"
+          }`}
+        />
       </span>
     </th>
   );
+}
+
+function exportCSV(data: Record<string, any>[], filename: string) {
+  if (!data.length) return;
+  const headers = Object.keys(data[0]);
+  const rows = data.map((row) =>
+    headers.map((h) => {
+      const v = row[h];
+      if (v == null) return "";
+      const s = String(v);
+      return s.includes(",") || s.includes('"') || s.includes("\n")
+        ? `"${s.replace(/"/g, '""')}"`
+        : s;
+    }).join(",")
+  );
+  const csv = [headers.join(","), ...rows].join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 // ── Product Groups tab ────────────────────────────────────────────────────────
@@ -289,7 +319,7 @@ function ProductGroupsTab({ companyNos, saleScope }: { companyNos: string[]; sal
   return (
     <div className="space-y-3">
       {/* Filter chips */}
-      <div className="flex gap-1.5 flex-wrap">
+      <div className="flex gap-1.5 flex-wrap items-center">
         {GROUP_FILTERS.map((f) => (
           <button
             key={f}
@@ -308,6 +338,14 @@ function ProductGroupsTab({ companyNos, saleScope }: { companyNos: string[]; sal
             )}
           </button>
         ))}
+        <button
+          onClick={() => exportCSV(groupSorted, `product-groups-${new Date().toISOString().slice(0,10)}.csv`)}
+          disabled={groupSorted.length === 0}
+          className="ml-auto flex items-center gap-1.5 h-7 px-2.5 rounded-md border border-border bg-secondary text-[11px] text-muted-foreground hover:text-foreground hover:bg-accent/30 transition-colors disabled:opacity-40"
+        >
+          <Download01Icon size={12} />
+          Export CSV
+        </button>
       </div>
 
       {/* Drilldown panel */}
@@ -501,6 +539,14 @@ function ItemsTab({ companyNos, saleScope }: { companyNos: string[]; saleScope: 
           onChange={(e) => setSearch(e.target.value)}
           className="ml-auto h-7 px-3 rounded-md border border-border bg-secondary text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
         />
+        <button
+          onClick={() => exportCSV(itemSorted, `slow-moving-items-${new Date().toISOString().slice(0,10)}.csv`)}
+          disabled={itemSorted.length === 0}
+          className="flex items-center gap-1.5 h-7 px-2.5 rounded-md border border-border bg-secondary text-[11px] text-muted-foreground hover:text-foreground hover:bg-accent/30 transition-colors disabled:opacity-40"
+        >
+          <Download01Icon size={12} />
+          Export CSV
+        </button>
       </div>
 
       <div className="rounded-lg border border-border overflow-hidden">
@@ -621,6 +667,14 @@ function CustomersTab({ companyNos, saleScope }: { companyNos: string[]; saleSco
           onChange={(e) => setSearch(e.target.value)}
           className="ml-auto h-7 px-3 rounded-md border border-border bg-secondary text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
         />
+        <button
+          onClick={() => exportCSV(custSorted, `customers-${new Date().toISOString().slice(0,10)}.csv`)}
+          disabled={custSorted.length === 0}
+          className="flex items-center gap-1.5 h-7 px-2.5 rounded-md border border-border bg-secondary text-[11px] text-muted-foreground hover:text-foreground hover:bg-accent/30 transition-colors disabled:opacity-40"
+        >
+          <Download01Icon size={12} />
+          Export CSV
+        </button>
       </div>
 
       <div className="rounded-lg border border-border overflow-hidden">
@@ -860,6 +914,14 @@ function StockTab({ companyNos, saleScope: _saleScope }: { companyNos: string[];
         >
           <ArrowReloadVerticalIcon size={12} className={refreshing ? "animate-spin" : ""} />
           {refreshing ? "Refreshing…" : "Refresh from Hansa"}
+        </button>
+        <button
+          onClick={() => exportCSV(stockSorted, `stock-status-${new Date().toISOString().slice(0,10)}.csv`)}
+          disabled={stockSorted.length === 0}
+          className="flex items-center gap-1.5 h-7 px-2.5 rounded-md border border-border bg-secondary text-[11px] text-muted-foreground hover:text-foreground hover:bg-accent/30 transition-colors disabled:opacity-40"
+        >
+          <Download01Icon size={12} />
+          Export CSV
         </button>
         {refreshMsg && <span className="text-[10px] text-muted-foreground">{refreshMsg}</span>}
       </div>

@@ -19,6 +19,28 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.db.database import Base
 
 
+class HansaOAuthToken(Base):
+    """Single-row OAuth token store per provider (provider='hansa')."""
+    __tablename__ = "hansa_oauth_tokens"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    provider: Mapped[str] = mapped_column(String(50), nullable=False, unique=True, index=True)
+    access_token_enc: Mapped[str] = mapped_column(Text, nullable=False)
+    refresh_token_enc: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    token_type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    scope: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+
 class RefreshSettings(Base):
     """Singleton settings row (id=1). Created on first GET if missing."""
     __tablename__ = "refresh_settings"

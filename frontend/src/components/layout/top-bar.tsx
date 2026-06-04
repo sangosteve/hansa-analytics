@@ -40,7 +40,7 @@ function DateRangePicker() {
   const { dateFrom, dateTo, setDateRange, resetDateRange, isAllTime } = useCompany();
   const [open, setOpen] = useState(false);
 
-  // Local range tracks in-progress selection — only committed once both ends are picked
+  // Local range tracks in-progress selection; only committed when both ends are picked
   const contextRange: DateRange = {
     from: dateFrom ? new Date(dateFrom + "T00:00:00") : undefined,
     to:   dateTo   ? new Date(dateTo   + "T00:00:00") : undefined,
@@ -56,7 +56,7 @@ function DateRangePicker() {
   const handleSelect = useCallback((range: DateRange | undefined) => {
     if (!range) return;
     setLocalRange(range);
-    // Only commit + close when the user has picked BOTH ends of the range
+    // Only commit + close when the user has picked BOTH ends
     if (range.from && range.to) {
       setDateRange(
         format(range.from, "yyyy-MM-dd"),
@@ -87,22 +87,23 @@ function DateRangePicker() {
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-auto p-0" align="start">
+          {/* Single-month calendar with nav arrows — user can freely navigate to any month/year */}
           <Calendar
             mode="range"
             selected={localRange}
             onSelect={handleSelect}
             defaultMonth={defaultMonth}
-            numberOfMonths={2}
-            captionLayout="dropdown"
-            fromYear={2020}
-            toYear={new Date().getFullYear() + 1}
+            numberOfMonths={1}
+            captionLayout="label"
+            fromYear={2018}
+            toYear={new Date().getFullYear() + 2}
           />
           <div className="border-t border-border px-3 py-2 flex justify-between items-center gap-3">
             <span className="text-[10px] text-muted-foreground flex-1">
               {localRange.from && localRange.to
                 ? `${format(localRange.from, "dd MMM yyyy")} – ${format(localRange.to, "dd MMM yyyy")}`
                 : localRange.from
-                  ? `From ${format(localRange.from, "dd MMM yyyy")} — pick an end date`
+                  ? `From ${format(localRange.from, "dd MMM yyyy")} — navigate & pick end date`
                   : "Pick a start date"}
             </span>
             <Button
@@ -171,15 +172,13 @@ export default function TopBar() {
   return (
     <>
       <header className="flex-shrink-0 h-[60px] border-b border-border bg-card flex items-center px-5 gap-4">
-        {/* Page title */}
         <h1 className="font-semibold text-sm text-foreground mr-auto truncate">{pageTitle}</h1>
 
-        {/* ── Date Range Picker ── */}
         <DateRangePicker />
 
         <div className="h-6 w-px bg-border/60 flex-shrink-0" />
 
-        {/* ── Sale Type ── */}
+        {/* Sale Type */}
         <div className="flex items-center rounded-lg border border-border bg-secondary overflow-hidden h-8">
           {SCOPE_OPTIONS.map((opt, i) => (
             <button
@@ -201,7 +200,7 @@ export default function TopBar() {
 
         <div className="h-6 w-px bg-border/60 flex-shrink-0" />
 
-        {/* ── Company ── */}
+        {/* Company */}
         <Popover open={companyOpen} onOpenChange={setCompanyOpen}>
           <PopoverTrigger asChild>
             <Button
@@ -249,7 +248,7 @@ export default function TopBar() {
 
         <div className="h-6 w-px bg-border/60 flex-shrink-0" />
 
-        {/* ── Refresh Data ── */}
+        {/* Refresh Data */}
         <div className="flex items-stretch rounded-lg overflow-hidden border border-primary/60 h-8">
           <button
             onClick={handleDefaultRefresh}

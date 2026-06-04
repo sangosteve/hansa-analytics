@@ -118,97 +118,39 @@ export async function getCustomerMovement(params?: {
 
 export async function getCustomerProductGroupItems(
   customerCode: string,
-  productGroupCode: string
-) {
+  productGroupCode: string,
+): Promise<CustomerProductGroupItemsResponse> {
   const response = await fetch(
-    `${API_BASE_URL}/customer-movement/${customerCode}/product-groups/${productGroupCode}/items`
+    `${API_BASE_URL}/customer-movement/${customerCode}/product-groups/${productGroupCode}/items`,
   );
   if (!response.ok) throw new Error("Failed to fetch customer product group items");
-  return response.json() as Promise<CustomerProductGroupItemsResponse>;
-}
-
-export async function rebuildCustomerMovement() {
-  const response = await fetch(`${API_BASE_URL}/refresh/customer-movement`, {
-    method: "POST",
-  });
-  if (!response.ok) throw new Error("Failed to rebuild customer movement");
   return response.json();
 }
 
-export type AIChatMessage = {
-  role: "user" | "assistant";
-  content: string;
+export type MovementSummary = {
+  growing_groups: number;
+  declining_groups: number;
+  dead_groups: number;
+  stopped_customers: number;
+  at_risk_customers: number;
+  slow_items: number;
+  dead_items: number;
+  data_as_of: string | null;
 };
-
-export type AIChartConfig = {
-  type: "bar" | "line" | "pie" | "none";
-  title: string;
-  option: Record<string, unknown>;
-};
-
-export type AITableResult = {
-  columns: string[];
-  rows: Array<Record<string, unknown>>;
-};
-
-export type AIInsightResponse = {
-  answer: string;
-  chart?: AIChartConfig;
-  table?: AITableResult;
-  follow_up_questions: string[];
-  tool_used?: string;
-  tools_used: string[];
-  intent?: string;
-  company_scope?: string;
-  assumptions: string[];
-  warnings: string[];
-};
-
-export type AISuggestion = {
-  text: string;
-  icon?: string;
-};
-
-export async function askAIInsight(
-  message: string,
-  options?: {
-    date_from?: string;
-    date_to?: string;
-    location?: string;
-    salesperson?: string;
-    item_group_code?: string;
-    customer_code?: string;
-    company_nos?: string[];
-    sale_scope?: string;
-    history?: AIChatMessage[];
-  }
-): Promise<AIInsightResponse> {
-  const payload = { message, ...options };
-  const response = await fetch(`${API_BASE_URL}/ai/insights`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  if (!response.ok) throw new Error("Failed to get AI insight");
-  return response.json() as Promise<AIInsightResponse>;
-}
-
-// ── Movement analytics types ──────────────────────────────────────────────
 
 export type ProductGroupMovementRow = {
   group_code: string;
   group_name: string;
+  status: string;
   total_tonnes: number;
   t3m: number;
   p3m: number;
+  change_pct: number | null;
   ytd: number;
-  lytd: number;
-  last_sale: string | null;
+  yoy_pct: number | null;
   unique_customers: number;
   unique_items: number;
-  status: "Growing" | "Declining" | "Stable" | "Dead" | "New";
-  change_pct: number | null;
-  yoy_pct: number | null;
+  last_sale: string | null;
 };
 
 export type SlowMovingItem = {
@@ -216,247 +158,70 @@ export type SlowMovingItem = {
   item_name: string;
   group_code: string;
   group_name: string;
-  total_tonnes: number;
-  t3m: number;
-  ytd: number;
+  status: string;
   last_sale: string | null;
   days_since: number;
+  ytd: number;
+  total_tonnes: number;
   customers: number;
-  status: "Dead Stock" | "Very Slow" | "Slow Mover";
 };
 
 export type CustomerMovementRow = {
   customer_code: string;
-  customer_name: string;
-  total_tonnes: number;
-  t3m: number;
-  p3m: number;
+  customer_name: string | null;
+  status: string;
   last_purchase: string | null;
   days_since: number;
-  product_groups: number;
-  last_rep: string | null;
-  top_group: string | null;
-  status: "Active" | "At Risk" | "Stopped" | "Declining" | "Irregular";
+  t3m: number;
+  p3m: number;
   change_pct: number | null;
-};
-
-export type MovementSummary = {
-  data_as_of: string;
-  growing_groups: number;
-  dead_groups: number;
-  declining_groups: number;
-  stopped_customers: number;
-  at_risk_customers: number;
-  slow_items: number;
-  dead_items: number;
+  total_tonnes: number;
+  top_group: string | null;
+  last_rep: string | null;
 };
 
 export type GroupMonthlyRow = {
   month: string;
   tonnes: number;
-  customers: number;
-  items: number;
 };
 
 export type GroupItemRow = {
   item_code: string;
-  item_name: string;
+  item_name: string | null;
   total_tonnes: number;
+  qty_bought: number | null;
+  qty_on_hand: number | null;
   t3m: number;
   p3m: number;
-  qty_bought: number;
-  qty_on_hand: number | null;
+  change_pct: number | null;
   last_sale: string | null;
   days_since: number;
   customers: number;
-  change_pct: number | null;
 };
 
 export type CustomerGroupRow = {
   group_code: string;
-  group_name: string;
+  group_name: string | null;
   total_tonnes: number;
   t3m: number;
   p3m: number;
+  change_pct: number | null;
   last_sale: string | null;
   items: number;
-  change_pct: number | null;
 };
-
-export async function getMovementSummary(
-  companyNos: string[] = ["all"],
-  saleScope: string = "all",
-): Promise<MovementSummary> {
-  const params = new URLSearchParams({ sale_scope: saleScope });
-  appendCompanyNos(params, companyNos);
-  const res = await fetch(`${API_BASE_URL}/movement/summary?${params}`);
-  if (!res.ok) throw new Error("Failed to fetch movement summary");
-  return res.json();
-}
-
-export async function getProductGroupMovement(
-  companyNos: string[] = ["all"],
-  saleScope: string = "all",
-): Promise<ProductGroupMovementRow[]> {
-  const params = new URLSearchParams({ sale_scope: saleScope });
-  appendCompanyNos(params, companyNos);
-  const res = await fetch(`${API_BASE_URL}/movement/product-groups?${params}`);
-  if (!res.ok) throw new Error("Failed to fetch product group movement");
-  return res.json();
-}
-
-export async function getProductGroupMonthly(
-  groupCode: string,
-  companyNos: string[] = ["all"],
-  saleScope: string = "all",
-): Promise<GroupMonthlyRow[]> {
-  const params = new URLSearchParams({ sale_scope: saleScope });
-  appendCompanyNos(params, companyNos);
-  const res = await fetch(`${API_BASE_URL}/movement/product-groups/${groupCode}/monthly?${params}`);
-  if (!res.ok) throw new Error("Failed to fetch group monthly");
-  return res.json();
-}
-
-export async function getSlowMovingItems(
-  companyNos: string[] = ["all"],
-  saleScope: string = "all",
-  groupCode?: string,
-): Promise<SlowMovingItem[]> {
-  const params = new URLSearchParams({ sale_scope: saleScope });
-  appendCompanyNos(params, companyNos);
-  if (groupCode) params.set("group_code", groupCode);
-  const res = await fetch(`${API_BASE_URL}/movement/items?${params}`);
-  if (!res.ok) throw new Error("Failed to fetch slow moving items");
-  return res.json();
-}
-
-export async function getProductGroupItems(
-  groupCode: string,
-  companyNos: string[] = ["all"],
-  saleScope: string = "all",
-): Promise<GroupItemRow[]> {
-  const params = new URLSearchParams({ sale_scope: saleScope });
-  appendCompanyNos(params, companyNos);
-  const res = await fetch(`${API_BASE_URL}/movement/product-groups/${encodeURIComponent(groupCode)}/items?${params}`);
-  if (!res.ok) throw new Error("Failed to fetch group items");
-  return res.json();
-}
-
-export async function getCustomerGroups(
-  customerCode: string,
-  companyNos: string[] = ["all"],
-  saleScope: string = "all",
-): Promise<CustomerGroupRow[]> {
-  const params = new URLSearchParams({ sale_scope: saleScope });
-  appendCompanyNos(params, companyNos);
-  const res = await fetch(`${API_BASE_URL}/movement/customers/${encodeURIComponent(customerCode)}/groups?${params}`);
-  if (!res.ok) throw new Error("Failed to fetch customer groups");
-  return res.json();
-}
-
-export async function getCustomerMovementAnalytics(
-  companyNos: string[] = ["all"],
-  saleScope: string = "all",
-): Promise<CustomerMovementRow[]> {
-  const params = new URLSearchParams({ sale_scope: saleScope });
-  appendCompanyNos(params, companyNos);
-  const res = await fetch(`${API_BASE_URL}/movement/customers?${params}`);
-  if (!res.ok) throw new Error("Failed to fetch customer movement");
-  return res.json();
-}
-
-// ── Predictive analytics types ────────────────────────────────────────────
-
-export type MtdProjection = {
-  month: string;
-  days_elapsed: number;
-  days_in_month: number;
-  actual_tonnes: number;
-  projected_eom_tonnes: number;
-  same_period_last_year_tonnes: number;
-  yoy_pct_change: number | null;
-};
-
-export type ProductGroupTrend = {
-  code: string;
-  name: string;
-  current_3m_tonnes: number;
-  prior_3m_tonnes: number;
-  pct_change: number | null;
-  trend: "growing" | "declining" | "stable" | "new" | "stopped";
-};
-
-export type CustomerLapseRisk = {
-  customer_code: string;
-  customer_name: string | null;
-  tonnes_6m_prior: number;
-  last_purchase_date: string | null;
-  days_since_purchase: number | null;
-  active_months_before: number;
-  revenue_tier: "high" | "medium" | "low";
-};
-
-export type ProductToPush = {
-  item_code: string;
-  item_name: string | null;
-  item_group_name: string | null;
-  recent_3m_tonnes: number;
-  prior_3m_tonnes: number;
-  pct_change: number | null;
-};
-
-export type SalespersonTrend = {
-  salesperson: string;
-  current_3m_tonnes: number;
-  prior_3m_tonnes: number;
-  pct_change: number | null;
-  trend: "growing" | "declining" | "stable" | "new";
-};
-
-export type PredictiveInsightsResponse = {
-  company_nos: string[];
-  sale_scope: string;
-  reference_date: string | null;
-  mtd_projection: MtdProjection | null;
-  product_group_trends: ProductGroupTrend[];
-  customer_lapse_risk: CustomerLapseRisk[];
-  products_to_push: ProductToPush[];
-  salesperson_trends: SalespersonTrend[];
-};
-
-export async function getPredictiveInsights(
-  companyNos: string[] = ["all"],
-  saleScope: string = "all",
-): Promise<PredictiveInsightsResponse> {
-  const params = new URLSearchParams({ sale_scope: saleScope });
-  appendCompanyNos(params, companyNos);
-  const res = await fetch(`${API_BASE_URL}/analytics/predictive?${params}`);
-  if (!res.ok) throw new Error("Failed to fetch predictive insights");
-  return res.json();
-}
-
-export async function getAISuggestions(): Promise<AISuggestion[]> {
-  const response = await fetch(`${API_BASE_URL}/ai/suggestions`);
-  if (!response.ok) throw new Error("Failed to fetch AI suggestions");
-  return response.json() as Promise<AISuggestion[]>;
-}
-
-// ── Stock status types ────────────────────────────────────────────────────────
 
 export type StockRow = {
-  company_no: string;
   art_code: string;
   location: string;
-  item_name: string | null;
-  item_group_code: string | null;
-  item_group_name: string | null;
   instock: number;
   ord_out: number;
   po_qty: number;
   rsrv_qty: number;
   in_shipment: number;
   weighed_av_price: number | null;
-  fetched_at: string | null;
+  item_name: string | null;
+  item_group_code: string | null;
+  item_group_name: string | null;
 };
 
 export type StockSummary = {
@@ -467,25 +232,74 @@ export type StockSummary = {
   total_instock: number;
   total_ord_out: number;
   total_po_qty: number;
-  total_in_shipment: number;
   last_fetched_at: string | null;
 };
 
-export async function getStockStatus(
-  companyNos: string[] = ["all"],
-  search?: string,
-  groupCode?: string,
-): Promise<StockRow[]> {
+export async function getMovementSummary(companyNos: string[], saleScope: string): Promise<MovementSummary> {
+  const params = new URLSearchParams({ sale_scope: saleScope });
+  appendCompanyNos(params, companyNos);
+  const res = await fetch(`${API_BASE_URL}/movement/summary?${params}`);
+  if (!res.ok) throw new Error("Failed to fetch movement summary");
+  return res.json();
+}
+
+export async function getProductGroupMovement(companyNos: string[], saleScope: string): Promise<ProductGroupMovementRow[]> {
+  const params = new URLSearchParams({ sale_scope: saleScope });
+  appendCompanyNos(params, companyNos);
+  const res = await fetch(`${API_BASE_URL}/movement/product-groups?${params}`);
+  if (!res.ok) throw new Error("Failed to fetch product group movement");
+  return res.json();
+}
+
+export async function getSlowMovingItems(companyNos: string[], saleScope: string): Promise<SlowMovingItem[]> {
+  const params = new URLSearchParams({ sale_scope: saleScope });
+  appendCompanyNos(params, companyNos);
+  const res = await fetch(`${API_BASE_URL}/movement/slow-items?${params}`);
+  if (!res.ok) throw new Error("Failed to fetch slow-moving items");
+  return res.json();
+}
+
+export async function getCustomerMovementAnalytics(companyNos: string[], saleScope: string): Promise<CustomerMovementRow[]> {
+  const params = new URLSearchParams({ sale_scope: saleScope });
+  appendCompanyNos(params, companyNos);
+  const res = await fetch(`${API_BASE_URL}/movement/customers?${params}`);
+  if (!res.ok) throw new Error("Failed to fetch customer movement analytics");
+  return res.json();
+}
+
+export async function getProductGroupMonthly(groupCode: string, companyNos: string[], saleScope: string): Promise<GroupMonthlyRow[]> {
+  const params = new URLSearchParams({ sale_scope: saleScope });
+  appendCompanyNos(params, companyNos);
+  const res = await fetch(`${API_BASE_URL}/movement/product-groups/${encodeURIComponent(groupCode)}/monthly?${params}`);
+  if (!res.ok) throw new Error("Failed to fetch group monthly trend");
+  return res.json();
+}
+
+export async function getProductGroupItems(groupCode: string, companyNos: string[], saleScope: string): Promise<GroupItemRow[]> {
+  const params = new URLSearchParams({ sale_scope: saleScope });
+  appendCompanyNos(params, companyNos);
+  const res = await fetch(`${API_BASE_URL}/movement/product-groups/${encodeURIComponent(groupCode)}/items?${params}`);
+  if (!res.ok) throw new Error("Failed to fetch group items");
+  return res.json();
+}
+
+export async function getCustomerGroups(customerCode: string, companyNos: string[], saleScope: string): Promise<CustomerGroupRow[]> {
+  const params = new URLSearchParams({ sale_scope: saleScope });
+  appendCompanyNos(params, companyNos);
+  const res = await fetch(`${API_BASE_URL}/movement/customers/${encodeURIComponent(customerCode)}/groups?${params}`);
+  if (!res.ok) throw new Error("Failed to fetch customer groups");
+  return res.json();
+}
+
+export async function getStockStatus(companyNos: string[]): Promise<StockRow[]> {
   const params = new URLSearchParams();
   appendCompanyNos(params, companyNos);
-  if (search) params.set("search", search);
-  if (groupCode) params.set("group_code", groupCode);
-  const res = await fetch(`${API_BASE_URL}/stock?${params}`);
+  const res = await fetch(`${API_BASE_URL}/stock/status?${params}`);
   if (!res.ok) throw new Error("Failed to fetch stock status");
   return res.json();
 }
 
-export async function getStockSummary(companyNos: string[] = ["all"]): Promise<StockSummary> {
+export async function getStockSummary(companyNos: string[]): Promise<StockSummary> {
   const params = new URLSearchParams();
   appendCompanyNos(params, companyNos);
   const res = await fetch(`${API_BASE_URL}/stock/summary?${params}`);
@@ -493,7 +307,7 @@ export async function getStockSummary(companyNos: string[] = ["all"]): Promise<S
   return res.json();
 }
 
-export async function triggerStockRefresh(companyNos: string[] = ["all"]): Promise<{ results: any[] }> {
+export async function triggerStockRefresh(companyNos: string[]): Promise<{ results: any[] }> {
   const params = new URLSearchParams();
   appendCompanyNos(params, companyNos);
   const res = await fetch(`${API_BASE_URL}/stock/refresh?${params}`, { method: "POST" });
@@ -607,5 +421,184 @@ export async function getRefreshJobStatus(jobId: string): Promise<RefreshJob> {
 export async function getRefreshHistory(limit = 50): Promise<RefreshHistoryRow[]> {
   const res = await fetch(`${API_BASE_URL}/refresh/history?limit=${limit}`);
   if (!res.ok) throw new Error("Failed to fetch refresh history");
+  return res.json();
+}
+
+// ── AI Insights ───────────────────────────────────────────────────────────────
+
+export type AIChartConfig = {
+  type: string;
+  title: string;
+  option: Record<string, unknown>;
+};
+
+export type AITableResult = {
+  columns: string[];
+  rows: Record<string, unknown>[];
+};
+
+export type AISuggestion = {
+  text: string;
+  icon?: string | null;
+};
+
+export type AIInsightResponse = {
+  answer: string;
+  chart?: AIChartConfig | null;
+  table?: AITableResult | null;
+  follow_up_questions: string[];
+  tools_used: string[];
+  intent?: string | null;
+  company_scope?: string | null;
+  assumptions: string[];
+  warnings: string[];
+};
+
+export type PredictiveInsightsResponse = {
+  company_nos: string[];
+  sale_scope: string;
+  reference_date: string | null;
+  mtd_projection: {
+    month: string;
+    days_elapsed: number;
+    days_in_month: number;
+    actual_tonnes: number;
+    projected_eom_tonnes: number;
+    same_period_last_year_tonnes: number;
+    yoy_pct_change: number | null;
+  } | null;
+  product_group_trends: {
+    code: string;
+    name: string;
+    current_3m_tonnes: number;
+    prior_3m_tonnes: number;
+    pct_change: number | null;
+    trend: "growing" | "declining" | "stable" | "new" | "stopped";
+  }[];
+  customer_lapse_risk: {
+    customer_code: string;
+    customer_name: string | null;
+    tonnes_6m_prior: number;
+    last_purchase_date: string | null;
+    days_since_purchase: number | null;
+    active_months_before: number;
+    revenue_tier: "high" | "medium" | "low";
+  }[];
+  products_to_push: {
+    item_code: string;
+    item_name: string | null;
+    item_group_name: string | null;
+    recent_3m_tonnes: number;
+    prior_3m_tonnes: number;
+    pct_change: number | null;
+  }[];
+  salesperson_trends: {
+    salesperson: string;
+    current_3m_tonnes: number;
+    prior_3m_tonnes: number;
+    pct_change: number | null;
+    trend: "growing" | "declining" | "stable";
+  }[];
+};
+
+export async function askAIInsight(
+  message: string,
+  opts: {
+    company_nos?: string[];
+    sale_scope?: string;
+    date_from?: Date | string | null;
+    date_to?: Date | string | null;
+    history?: { role: string; content: string }[];
+    location?: string;
+    salesperson?: string;
+    item_group_code?: string;
+    customer_code?: string;
+  } = {}
+): Promise<AIInsightResponse> {
+  const body = {
+    message,
+    company_nos: opts.company_nos,
+    sale_scope: opts.sale_scope ?? "all",
+    date_from: opts.date_from instanceof Date ? opts.date_from.toISOString().slice(0, 10) : (opts.date_from ?? null),
+    date_to: opts.date_to instanceof Date ? opts.date_to.toISOString().slice(0, 10) : (opts.date_to ?? null),
+    history: opts.history ?? [],
+    location: opts.location,
+    salesperson: opts.salesperson,
+    item_group_code: opts.item_group_code,
+    customer_code: opts.customer_code,
+  };
+  const res = await fetch(`${API_BASE_URL}/ai/insights`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error("AI insight request failed");
+  return res.json();
+}
+
+export async function getAISuggestions(): Promise<AISuggestion[]> {
+  const res = await fetch(`${API_BASE_URL}/ai/suggestions`);
+  if (!res.ok) throw new Error("Failed to fetch AI suggestions");
+  return res.json();
+}
+
+export async function getPredictiveInsights(
+  companyNos: string[],
+  saleScope: string
+): Promise<PredictiveInsightsResponse> {
+  const params = new URLSearchParams({ sale_scope: saleScope });
+  appendCompanyNos(params, companyNos);
+  const res = await fetch(`${API_BASE_URL}/analytics/predictive?${params}`);
+  if (!res.ok) throw new Error("Failed to fetch predictive insights");
+  return res.json();
+}
+
+// ── Hansa OAuth ───────────────────────────────────────────────────────────────
+
+export type OAuthStatus = {
+  connected: boolean;
+  status: "not_connected" | "connected" | "expired" | "error" | "not_configured";
+  auth_mode: string;
+  token_type?: string;
+  scope?: string | null;
+  expires_at?: string | null;
+  last_connected?: string | null;
+  has_refresh?: boolean;
+  message?: string;
+};
+
+export type ConnectionTestResult = {
+  ok: boolean;
+  auth_mode: string;
+  status: string;
+  http_status?: number;
+  message: string;
+};
+
+export async function getOAuthStatus(): Promise<OAuthStatus> {
+  const res = await fetch(`${API_BASE_URL}/hansa/oauth/status`);
+  if (!res.ok) throw new Error("Failed to fetch OAuth status");
+  return res.json();
+}
+
+export async function getOAuthStartUrl(returnUrl: string): Promise<{ auth_url: string; state: string }> {
+  const params = new URLSearchParams({ return_url: returnUrl });
+  const res = await fetch(`${API_BASE_URL}/hansa/oauth/start?${params}`);
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.detail ?? "Failed to start OAuth flow");
+  }
+  return res.json();
+}
+
+export async function disconnectOAuth(): Promise<{ status: string; message: string }> {
+  const res = await fetch(`${API_BASE_URL}/hansa/oauth/disconnect`, { method: "POST" });
+  if (!res.ok) throw new Error("Failed to disconnect");
+  return res.json();
+}
+
+export async function testHansaConnection(): Promise<ConnectionTestResult> {
+  const res = await fetch(`${API_BASE_URL}/hansa/test-connection`);
+  if (!res.ok) throw new Error("Test request failed");
   return res.json();
 }

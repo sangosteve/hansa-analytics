@@ -3,8 +3,14 @@ import {
   getRefreshSettings,
   updateRefreshSettings,
   getRefreshHistory,
+  getOAuthStatus,
+  getOAuthStartUrl,
+  disconnectOAuth,
+  testHansaConnection,
   type RefreshSettings,
   type RefreshHistoryRow,
+  type OAuthStatus,
+  type ConnectionTestResult,
 } from "@/lib/api";
 import {
   CheckmarkCircle01Icon,
@@ -12,6 +18,9 @@ import {
   Clock01Icon,
   Settings01Icon,
   Clock04Icon,
+  Plug01Icon as PlugInIcon,
+  LinkSquare01Icon,
+  AlertCircleIcon,
 } from "hugeicons-react";
 
 const ALL_COMPANIES = [
@@ -46,7 +55,7 @@ const REFRESH_MODES = [
 
 const BUFFER_OPTIONS = [2, 7, 14, 30];
 
-type Tab = "config" | "history";
+type Tab = "config" | "history" | "integrations";
 
 function StatusBadge({ status }: { status: string }) {
   const s = status?.toLowerCase();
@@ -117,6 +126,271 @@ function Toggle({
     </label>
   );
 }
+
+// ── Integrations Tab ──────────────────────────────────────────────────────────
+
+function OAuthStatusPill({ status }: { status: OAuthStatus["status"] }) {
+  if (status === "connected")
+    return <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-400"><CheckmarkCircle01Icon size={11} />Connected</span>;
+  if (status === "expired")
+    return <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-400"><AlertCircleIcon size={11} />Token Expired</span>;
+  if (status === "not_connected")
+    return <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-muted-foreground"><CancelCircleIcon size={11} />Not Connected</span>;
+  if (status === "error")
+    return <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-red-400"><CancelCircleIcon size={11} />Error</span>;
+  return <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-muted-foreground"><Clock01Icon size={11} />{status}</span>;
+}
+
+function IntegrationsTab() {
+  const [oauthStatus, setOauthStatus]     = useState<OAuthStatus | null>(null);
+  const [statusLoading, setStatusLoading] = useState(true);
+  const [connecting, setConnecting]       = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
+  const [testing, setTesting]             = useState(false);
+  const [testResult, setTestResult]       = useState<ConnectionTestResult | null>(null);
+  const [actionError, setActionError]     = useState<string | null>(null);
+
+  const loadStatus = async () => {
+    setStatusLoading(true);
+    setActionError(null);
+    try {
+      const s = await getOAuthStatus();
+      setOauthStatus(s);
+    } catch (e: any) {
+      setActionError(e.message ?? "Failed to load status");
+    } finally {
+      setStatusLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadStatus();
+    // Handle redirect back from OAuth (e.g. ?oauth_connected=1)
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("oauth_connected")) {
+      window.history.replaceState({}, "", window.location.pathname);
+      loadStatus();
+    }
+    if (params.get("oauth_error")) {
+      setActionError(`OAuth error: ${params.get("oauth_error")}`);
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, []);
+
+  const handleConnect = async () => {
+    setConnecting(true);
+    setActionError(null);
+    setTestResult(null);
+    try {
+      const returnUrl = window.location.href.split("?")[0];
+      const { auth_url } = await getOAuthStartUrl(returnUrl);
+      window.location.href = auth_url;
+    } catch (e: any) {
+      setActionError(e.message ?? "Failed to start OAuth");
+      setConnecting(false);
+    }
+  };
+
+  const handleDisconnect = async () => {
+    if (!confirm("This will remove the stored Hansa OAuth token. Refresh jobs will fail until you reconnect.")) return;
+    setDisconnecting(true);
+    setActionError(null);
+    setTestResult(null);
+    try {
+      await disconnectOAuth();
+      await loadStatus();
+    } catch (e: any) {
+      setActionError(e.message ?? "Disconnect failed");
+    } finally {
+      setDisconnecting(false);
+    }
+  };
+
+  const handleTest = async () => {
+    setTesting(true);
+    setTestResult(null);
+    setActionError(null);
+    try {
+      const result = await testHansaConnection();
+      setTestResult(result);
+    } catch (e: any) {
+      setActionError(e.message ?? "Test failed");
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  const isOAuth = oauthStatus?.auth_mode === "oauth";
+  const isConnected = oauthStatus?.status === "connected";
+  const isExpired = oauthStatus?.status === "expired";
+
+  return (
+    <div className="max-w-2xl mx-auto px-6 py-6 space-y-6">
+      <div>
+        <h2 className="text-xs font-semibold text-foreground">Integrations</h2>
+        <p className="text-[11px] text-muted-foreground mt-0.5">
+          Manage connections to external systems used for data sync.
+        </p>
+      </div>
+
+      {actionError && (
+        <div className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded px-3 py-2 flex items-start gap-2">
+          <CancelCircleIcon size={14} className="flex-shrink-0 mt-0.5" />
+          {actionError}
+        </div>
+      )}
+
+      {/* Hansa ERP card */}
+      <div className="rounded-lg border border-border bg-card overflow-hidden">
+        {/* Card header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-secondary/30">
+          <div className="flex items-center gap-2.5">
+            <div className="h-8 w-8 rounded-md bg-primary/10 border border-primary/20 flex items-center justify-center flex-shrink-0">
+              <LinkSquare01Icon size={16} className="text-primary" />
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-foreground">Hansa ERP / StandardID</p>
+              <p className="text-[10px] text-muted-foreground">HansaWorld Standard ERP — OAuth2 via standard-id.hansaworld.com</p>
+            </div>
+          </div>
+          {statusLoading ? (
+            <span className="text-[10px] text-muted-foreground animate-pulse">Loading…</span>
+          ) : oauthStatus ? (
+            <OAuthStatusPill status={oauthStatus.status} />
+          ) : null}
+        </div>
+
+        {/* Card body */}
+        <div className="px-4 py-4 space-y-4">
+          {/* Auth mode info */}
+          {oauthStatus && (
+            <div className="flex gap-4 text-[11px]">
+              <div>
+                <span className="text-muted-foreground">Auth mode: </span>
+                <span className="font-medium text-foreground">
+                  {oauthStatus.auth_mode === "oauth" ? "OAuth 2.0" : "Basic Auth"}
+                </span>
+              </div>
+              {isConnected && oauthStatus.expires_at && (
+                <div>
+                  <span className="text-muted-foreground">Token expires: </span>
+                  <span className="font-medium text-foreground">{formatDt(oauthStatus.expires_at)}</span>
+                </div>
+              )}
+              {isConnected && oauthStatus.last_connected && (
+                <div>
+                  <span className="text-muted-foreground">Last connected: </span>
+                  <span className="font-medium text-foreground">{formatDt(oauthStatus.last_connected)}</span>
+                </div>
+              )}
+              {isConnected && oauthStatus.scope && (
+                <div>
+                  <span className="text-muted-foreground">Scope: </span>
+                  <span className="font-medium text-foreground">{oauthStatus.scope}</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Non-OAuth mode note */}
+          {oauthStatus && !isOAuth && (
+            <div className="text-[11px] text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded px-3 py-2">
+              Currently using Basic Auth (<code>HANSA_AUTH_MODE=basic</code>). Set <code>HANSA_AUTH_MODE=oauth</code> to enable OAuth2 sign-in.
+            </div>
+          )}
+
+          {/* Status description */}
+          {oauthStatus?.message && (
+            <p className="text-[11px] text-muted-foreground">{oauthStatus.message}</p>
+          )}
+
+          {/* Test result */}
+          {testResult && (
+            <div className={`text-[11px] rounded px-3 py-2 border ${testResult.ok ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/20" : "text-red-400 bg-red-500/10 border-red-500/20"}`}>
+              <div className="flex items-center gap-1.5 font-semibold">
+                {testResult.ok ? <CheckmarkCircle01Icon size={13} /> : <CancelCircleIcon size={13} />}
+                {testResult.ok ? "Connection successful" : "Connection failed"}
+              </div>
+              <p className="mt-1 opacity-80">{testResult.message}</p>
+            </div>
+          )}
+
+          {/* Action buttons */}
+          <div className="flex items-center gap-2 pt-1">
+            {isOAuth && !isConnected && !isExpired && (
+              <button
+                onClick={handleConnect}
+                disabled={connecting}
+                className="flex items-center gap-1.5 h-8 px-4 rounded-md bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
+              >
+                <PlugInIcon size={13} />
+                {connecting ? "Redirecting…" : "Connect Hansa"}
+              </button>
+            )}
+
+            {isOAuth && (isConnected || isExpired) && (
+              <>
+                <button
+                  onClick={handleConnect}
+                  disabled={connecting}
+                  className="flex items-center gap-1.5 h-8 px-4 rounded-md bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
+                >
+                  <PlugInIcon size={13} />
+                  {connecting ? "Redirecting…" : "Reconnect"}
+                </button>
+                <button
+                  onClick={handleDisconnect}
+                  disabled={disconnecting}
+                  className="flex items-center gap-1.5 h-8 px-3 rounded-md border border-border bg-secondary text-xs text-muted-foreground hover:text-foreground hover:bg-accent/30 transition-colors disabled:opacity-50"
+                >
+                  {disconnecting ? "Disconnecting…" : "Disconnect"}
+                </button>
+              </>
+            )}
+
+            <button
+              onClick={handleTest}
+              disabled={testing}
+              className="flex items-center gap-1.5 h-8 px-3 rounded-md border border-border bg-secondary text-xs text-muted-foreground hover:text-foreground hover:bg-accent/30 transition-colors disabled:opacity-50"
+            >
+              {testing ? "Testing…" : "Test Connection"}
+            </button>
+
+            <button
+              onClick={loadStatus}
+              disabled={statusLoading}
+              className="flex items-center gap-1.5 h-8 px-3 rounded-md border border-border bg-secondary text-xs text-muted-foreground hover:text-foreground hover:bg-accent/30 transition-colors disabled:opacity-50"
+            >
+              Refresh Status
+            </button>
+          </div>
+        </div>
+
+        {/* Setup instructions (collapsed when connected) */}
+        {!isConnected && isOAuth && (
+          <details className="group">
+            <summary className="px-4 py-2.5 text-[11px] text-muted-foreground hover:text-foreground cursor-pointer select-none border-t border-border bg-secondary/20 list-none flex items-center gap-1.5">
+              <span className="group-open:rotate-90 transition-transform inline-block">▶</span>
+              Setup instructions
+            </summary>
+            <div className="px-4 py-3 border-t border-border bg-secondary/10 text-[11px] text-muted-foreground space-y-2">
+              <p>To connect Hansa ERP via OAuth2:</p>
+              <ol className="list-decimal list-inside space-y-1.5 pl-2">
+                <li>Register a Developer App at <strong>MyStandard</strong> (standard-id.hansaworld.com) with the redirect URI set to your backend callback URL</li>
+                <li>Set environment variables: <code className="bg-secondary px-1 rounded">HANSA_AUTH_MODE=oauth</code>, <code className="bg-secondary px-1 rounded">HANSA_OAUTH_CLIENT_ID</code>, <code className="bg-secondary px-1 rounded">HANSA_OAUTH_CLIENT_SECRET</code>, <code className="bg-secondary px-1 rounded">HANSA_OAUTH_REDIRECT_URI</code></li>
+                <li>Click <strong>Connect Hansa</strong> above and sign in via StandardID</li>
+                <li>After authorizing, you will be redirected back here automatically</li>
+              </ol>
+              <p className="text-[10px]">The callback URL to register is: <code className="bg-secondary px-1 rounded">{window.location.origin}/api/hansa/oauth/callback</code></p>
+            </div>
+          </details>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function SettingsPage() {
   const [tab, setTab] = useState<Tab>("config");
@@ -196,6 +470,10 @@ export default function SettingsPage() {
         <button className={tabCls("history")} onClick={() => setTab("history")}>
           <Clock04Icon size={14} />
           Refresh History
+        </button>
+        <button className={tabCls("integrations")} onClick={() => setTab("integrations")}>
+          <PlugInIcon size={14} />
+          Integrations
         </button>
       </div>
 
@@ -488,6 +766,9 @@ export default function SettingsPage() {
             )}
           </div>
         )}
+
+        {/* Integrations Tab */}
+        {tab === "integrations" && <IntegrationsTab />}
       </div>
     </div>
   );

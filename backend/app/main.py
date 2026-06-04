@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes_ai import router as ai_router
+from app.api.routes_oauth import router as oauth_router
 from app.api.routes_analytics import router as analytics_router
 from app.api.routes_customer_movement import router as customer_movement_router
 from app.api.routes_hansa import router as hansa_router
@@ -33,6 +34,7 @@ app.add_middleware(
 )
 
 app.include_router(hansa_router)
+app.include_router(oauth_router)
 app.include_router(refresh_router)
 app.include_router(analytics_router)
 app.include_router(sales_summary_router)

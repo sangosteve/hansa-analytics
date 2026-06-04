@@ -15,6 +15,16 @@ class Settings(BaseSettings):
     hansa_company_no: str = "1"
     hansa_master_company_no: str = "1"
 
+    # OAuth2 settings
+    hansa_auth_mode: str = "basic"  # "oauth" | "basic"
+    hansa_oauth_client_id: Optional[str] = None
+    hansa_oauth_client_secret: Optional[str] = None
+    hansa_oauth_redirect_uri: Optional[str] = None
+    hansa_authorize_url: str = "https://standard-id.hansaworld.com/oauth-authorize"
+    hansa_token_url: str = "https://standard-id.hansaworld.com/oauth-token"
+    # 32-byte URL-safe base64 Fernet key; auto-derived from client_secret if absent
+    hansa_oauth_encryption_key: Optional[str] = None
+
     openai_api_key: Optional[str] = None
     openai_model: str = "gpt-4o"
 
