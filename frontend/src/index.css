@@ -130,6 +130,19 @@
   html {
     @apply font-sans;
   }
+  button,
+  [role="button"],
+  [role="tab"],
+  [role="option"],
+  [role="menuitem"],
+  [role="checkbox"],
+  [role="radio"],
+  label,
+  select,
+  summary,
+  a[href] {
+    cursor: pointer;
+  }
 }
 
 /* ── Scrollbar ── */

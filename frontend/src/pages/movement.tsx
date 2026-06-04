@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState, Fragment } from "react";
+import React, { useCallback, useEffect, useMemo, useState, Fragment } from "react";
 import {
   ChartUpIcon,
   ChartDownIcon,
@@ -43,17 +43,17 @@ import {
 type TabId = "groups" | "items" | "customers" | "stock";
 
 const STATUS_BADGE: Record<string, string> = {
-  Growing:    "bg-emerald-500/15 text-emerald-400 border border-emerald-500/25",
-  Stable:     "bg-sky-500/15 text-sky-400 border border-sky-500/25",
-  Declining:  "bg-amber-500/15 text-amber-400 border border-amber-500/25",
-  Dead:       "bg-red-500/15 text-red-400 border border-red-500/25",
-  New:        "bg-purple-500/15 text-purple-400 border border-purple-500/25",
-  Active:     "bg-emerald-500/15 text-emerald-400 border border-emerald-500/25",
-  "At Risk":  "bg-amber-500/15 text-amber-400 border border-amber-500/25",
-  Stopped:    "bg-red-500/15 text-red-400 border border-red-500/25",
-  Irregular:  "bg-slate-500/15 text-slate-400 border border-slate-500/25",
+  Growing:     "bg-emerald-500/15 text-emerald-400 border border-emerald-500/25",
+  Stable:      "bg-sky-500/15 text-sky-400 border border-sky-500/25",
+  Declining:   "bg-amber-500/15 text-amber-400 border border-amber-500/25",
+  Dead:        "bg-red-500/15 text-red-400 border border-red-500/25",
+  New:         "bg-purple-500/15 text-purple-400 border border-purple-500/25",
+  Active:      "bg-emerald-500/15 text-emerald-400 border border-emerald-500/25",
+  "At Risk":   "bg-amber-500/15 text-amber-400 border border-amber-500/25",
+  Stopped:     "bg-red-500/15 text-red-400 border border-red-500/25",
+  Irregular:   "bg-slate-500/15 text-slate-400 border border-slate-500/25",
   "Dead Stock":"bg-red-500/15 text-red-400 border border-red-500/25",
-  "Very Slow":"bg-amber-500/15 text-amber-400 border border-amber-500/25",
+  "Very Slow": "bg-amber-500/15 text-amber-400 border border-amber-500/25",
   "Slow Mover":"bg-yellow-500/15 text-yellow-400 border border-yellow-500/25",
 };
 
@@ -131,18 +131,81 @@ function GroupSparkline({ data }: { data: GroupMonthlyRow[] }) {
   );
 }
 
+// ── Production-grade sort utilities ──────────────────────────────────────────
+type SortDir = "asc" | "desc";
+interface SortState { key: string; dir: SortDir }
+
+function useSortableData<T extends Record<string, any>>(data: T[], initial: SortState) {
+  const [sort, setSort] = useState<SortState>(initial);
+
+  const sorted = useMemo(() => {
+    return [...data].sort((a, b) => {
+      const va = a[sort.key];
+      const vb = b[sort.key];
+      // nulls always sink to bottom regardless of direction
+      if (va == null && vb == null) return 0;
+      if (va == null) return 1;
+      if (vb == null) return -1;
+      const cmp =
+        typeof va === "string" && typeof vb === "string"
+          ? va.localeCompare(vb, undefined, { sensitivity: "base" })
+          : Number(va) - Number(vb);
+      return sort.dir === "asc" ? cmp : -cmp;
+    });
+  }, [data, sort]);
+
+  const toggle = useCallback((key: string) => {
+    setSort((prev) =>
+      prev.key === key
+        ? { key, dir: prev.dir === "asc" ? "desc" : "asc" }
+        : { key, dir: "desc" }
+    );
+  }, []);
+
+  return { sorted, sort, toggle };
+}
+
+function SortableHeader({
+  label, sortKey, sort, onToggle, align = "right", className,
+}: {
+  label: string; sortKey: string; sort: SortState;
+  onToggle: (k: string) => void; align?: "left" | "right"; className?: string;
+}) {
+  const active = sort.key === sortKey;
+  return (
+    <th
+      onClick={() => onToggle(sortKey)}
+      aria-sort={active ? (sort.dir === "asc" ? "ascending" : "descending") : "none"}
+      className={`px-3 py-2.5 text-xs font-semibold select-none group transition-colors hover:text-foreground whitespace-nowrap
+        ${align === "right" ? "text-right" : "text-left"}
+        ${active ? "text-foreground" : "text-muted-foreground"}
+        ${className ?? ""}`}
+    >
+      <span className={`inline-flex items-center gap-1 ${align === "right" ? "justify-end" : "justify-start"}`}>
+        {label}
+        <span className="w-3 text-[10px] flex-shrink-0 leading-none">
+          {active
+            ? sort.dir === "asc" ? "↑" : "↓"
+            : <span className="opacity-25 group-hover:opacity-60">↕</span>
+          }
+        </span>
+      </span>
+    </th>
+  );
+}
+
 // ── Product Groups tab ────────────────────────────────────────────────────────
 const GROUP_FILTERS = ["All", "Growing", "Declining", "Stable", "Dead", "New"];
 
 function ProductGroupsTab({ companyNos, saleScope }: { companyNos: string[]; saleScope: string }) {
-  const [rows, setRows] = useState<ProductGroupMovementRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState("All");
-  const [selected, setSelected] = useState<string | null>(null);
-  const [drillTab, setDrillTab] = useState<"products" | "trend">("products");
-  const [monthlyData, setMonthlyData] = useState<GroupMonthlyRow[]>([]);
-  const [monthlyLoading, setMonthlyLoading] = useState(false);
-  const [drillItems, setDrillItems] = useState<GroupItemRow[]>([]);
+  const [rows, setRows]                       = useState<ProductGroupMovementRow[]>([]);
+  const [loading, setLoading]                 = useState(true);
+  const [filter, setFilter]                   = useState("All");
+  const [selected, setSelected]               = useState<string | null>(null);
+  const [drillTab, setDrillTab]               = useState<"products" | "trend">("products");
+  const [monthlyData, setMonthlyData]         = useState<GroupMonthlyRow[]>([]);
+  const [monthlyLoading, setMonthlyLoading]   = useState(false);
+  const [drillItems, setDrillItems]           = useState<GroupItemRow[]>([]);
   const [drillItemsLoading, setDrillItemsLoading] = useState(false);
 
   useEffect(() => {
@@ -157,6 +220,12 @@ function ProductGroupsTab({ companyNos, saleScope }: { companyNos: string[]; sal
     () => (filter === "All" ? rows : rows.filter((r) => r.status === filter)),
     [rows, filter]
   );
+
+  const { sorted: groupSorted, sort: groupSort, toggle: groupToggle } =
+    useSortableData(filtered, { key: "total_tonnes", dir: "desc" });
+
+  const { sorted: drillSorted, sort: drillSort, toggle: drillToggle } =
+    useSortableData(drillItems, { key: "total_tonnes", dir: "desc" });
 
   const handleSelect = async (code: string) => {
     if (selected === code) { setSelected(null); return; }
@@ -283,22 +352,22 @@ function ProductGroupsTab({ companyNos, saleScope }: { companyNos: string[]; sal
               <table className="w-full text-xs">
                 <thead>
                   <tr className="border-b border-border bg-secondary/40">
-                    <th className="text-left px-3 py-2 font-semibold text-muted-foreground">Product</th>
-                    <th className="text-right px-3 py-2 font-semibold text-muted-foreground">Total t</th>
-                    <th className="text-right px-3 py-2 font-semibold text-muted-foreground">Qty Bought</th>
-                    <th className="text-right px-3 py-2 font-semibold text-muted-foreground">Qty On Hand</th>
-                    <th className="text-right px-3 py-2 font-semibold text-muted-foreground">Recent 3m</th>
-                    <th className="text-right px-3 py-2 font-semibold text-muted-foreground">Prior 3m</th>
-                    <th className="text-right px-3 py-2 font-semibold text-muted-foreground">3m Δ</th>
-                    <th className="text-right px-3 py-2 font-semibold text-muted-foreground">Last Sale</th>
-                    <th className="text-right px-3 py-2 font-semibold text-muted-foreground">Days Ago</th>
-                    <th className="text-right px-3 py-2 font-semibold text-muted-foreground">Customers</th>
+                    <SortableHeader label="Product"     sortKey="item_name"     sort={drillSort} onToggle={drillToggle} align="left" />
+                    <SortableHeader label="Total t"     sortKey="total_tonnes"  sort={drillSort} onToggle={drillToggle} />
+                    <SortableHeader label="Qty Bought"  sortKey="qty_bought"    sort={drillSort} onToggle={drillToggle} />
+                    <SortableHeader label="Qty On Hand" sortKey="qty_on_hand"   sort={drillSort} onToggle={drillToggle} />
+                    <SortableHeader label="Recent 3m"   sortKey="t3m"           sort={drillSort} onToggle={drillToggle} />
+                    <SortableHeader label="Prior 3m"    sortKey="p3m"           sort={drillSort} onToggle={drillToggle} />
+                    <SortableHeader label="3m Δ"        sortKey="change_pct"    sort={drillSort} onToggle={drillToggle} />
+                    <SortableHeader label="Last Sale"   sortKey="last_sale"     sort={drillSort} onToggle={drillToggle} />
+                    <SortableHeader label="Days Ago"    sortKey="days_since"    sort={drillSort} onToggle={drillToggle} />
+                    <SortableHeader label="Customers"   sortKey="customers"     sort={drillSort} onToggle={drillToggle} />
                   </tr>
                 </thead>
                 <tbody>
-                  {drillItems.length === 0 ? (
+                  {drillSorted.length === 0 ? (
                     <tr><td colSpan={10} className="px-3 py-4 text-center text-muted-foreground">No products found</td></tr>
-                  ) : drillItems.map((item) => (
+                  ) : drillSorted.map((item) => (
                     <tr key={item.item_code} className="border-b border-border/40 hover:bg-accent/20 transition-colors">
                       <td className="px-3 py-2">
                         <div className="font-medium text-foreground truncate max-w-[220px]">{item.item_name}</div>
@@ -326,27 +395,27 @@ function ProductGroupsTab({ companyNos, saleScope }: { companyNos: string[]; sal
         </div>
       )}
 
-      {/* Table */}
+      {/* Main table */}
       <div className="rounded-lg border border-border overflow-hidden">
         <table className="w-full text-xs">
           <thead>
             <tr className="border-b border-border bg-secondary/60">
-              <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground w-40">Group</th>
-              <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground">Status</th>
-              <th className="text-right px-3 py-2.5 font-semibold text-muted-foreground">Total t</th>
-              <th className="text-right px-3 py-2.5 font-semibold text-muted-foreground">Recent 3m</th>
-              <th className="text-right px-3 py-2.5 font-semibold text-muted-foreground">Prior 3m</th>
-              <th className="text-right px-3 py-2.5 font-semibold text-muted-foreground">3m Δ</th>
-              <th className="text-right px-3 py-2.5 font-semibold text-muted-foreground">YTD</th>
-              <th className="text-right px-3 py-2.5 font-semibold text-muted-foreground">YoY Δ</th>
-              <th className="text-right px-3 py-2.5 font-semibold text-muted-foreground">Custs</th>
-              <th className="text-right px-3 py-2.5 font-semibold text-muted-foreground">Last Sale</th>
+              <SortableHeader label="Group"     sortKey="group_name"       sort={groupSort} onToggle={groupToggle} align="left" className="w-40" />
+              <SortableHeader label="Status"    sortKey="status"           sort={groupSort} onToggle={groupToggle} align="left" />
+              <SortableHeader label="Total t"   sortKey="total_tonnes"     sort={groupSort} onToggle={groupToggle} />
+              <SortableHeader label="Recent 3m" sortKey="t3m"              sort={groupSort} onToggle={groupToggle} />
+              <SortableHeader label="Prior 3m"  sortKey="p3m"              sort={groupSort} onToggle={groupToggle} />
+              <SortableHeader label="3m Δ"      sortKey="change_pct"       sort={groupSort} onToggle={groupToggle} />
+              <SortableHeader label="YTD"       sortKey="ytd"              sort={groupSort} onToggle={groupToggle} />
+              <SortableHeader label="YoY Δ"     sortKey="yoy_pct"          sort={groupSort} onToggle={groupToggle} />
+              <SortableHeader label="Custs"     sortKey="unique_customers" sort={groupSort} onToggle={groupToggle} />
+              <SortableHeader label="Last Sale" sortKey="last_sale"        sort={groupSort} onToggle={groupToggle} />
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <LoadingRows cols={10} />
-            ) : filtered.map((r) => (
+            ) : groupSorted.map((r) => (
               <tr
                 key={r.group_code}
                 onClick={() => handleSelect(r.group_code)}
@@ -381,10 +450,10 @@ function ProductGroupsTab({ companyNos, saleScope }: { companyNos: string[]; sal
 const ITEM_FILTERS = ["All", "Dead Stock", "Very Slow", "Slow Mover"];
 
 function ItemsTab({ companyNos, saleScope }: { companyNos: string[]; saleScope: string }) {
-  const [rows, setRows] = useState<SlowMovingItem[]>([]);
+  const [rows, setRows]   = useState<SlowMovingItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState("All");
-  const [search, setSearch] = useState("");
+  const [filter, setFilter]   = useState("All");
+  const [search, setSearch]   = useState("");
 
   useEffect(() => {
     setLoading(true);
@@ -398,10 +467,17 @@ function ItemsTab({ companyNos, saleScope }: { companyNos: string[]; saleScope: 
     let r = filter === "All" ? rows : rows.filter((x) => x.status === filter);
     if (search.trim()) {
       const q = search.toLowerCase();
-      r = r.filter((x) => x.item_name.toLowerCase().includes(q) || x.item_code.toLowerCase().includes(q) || x.group_name.toLowerCase().includes(q));
+      r = r.filter((x) =>
+        x.item_name.toLowerCase().includes(q) ||
+        x.item_code.toLowerCase().includes(q) ||
+        x.group_name.toLowerCase().includes(q)
+      );
     }
     return r;
   }, [rows, filter, search]);
+
+  const { sorted: itemSorted, sort: itemSort, toggle: itemToggle } =
+    useSortableData(filtered, { key: "days_since", dir: "desc" });
 
   return (
     <div className="space-y-3">
@@ -431,20 +507,20 @@ function ItemsTab({ companyNos, saleScope }: { companyNos: string[]; saleScope: 
         <table className="w-full text-xs">
           <thead>
             <tr className="border-b border-border bg-secondary/60">
-              <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground">Item</th>
-              <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground">Group</th>
-              <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground">Status</th>
-              <th className="text-right px-3 py-2.5 font-semibold text-muted-foreground">Last Sale</th>
-              <th className="text-right px-3 py-2.5 font-semibold text-muted-foreground">Days Ago</th>
-              <th className="text-right px-3 py-2.5 font-semibold text-muted-foreground">YTD t</th>
-              <th className="text-right px-3 py-2.5 font-semibold text-muted-foreground">Total t</th>
-              <th className="text-right px-3 py-2.5 font-semibold text-muted-foreground">Custs</th>
+              <SortableHeader label="Item"      sortKey="item_name"    sort={itemSort} onToggle={itemToggle} align="left" />
+              <SortableHeader label="Group"     sortKey="group_name"   sort={itemSort} onToggle={itemToggle} align="left" />
+              <SortableHeader label="Status"    sortKey="status"       sort={itemSort} onToggle={itemToggle} align="left" />
+              <SortableHeader label="Last Sale" sortKey="last_sale"    sort={itemSort} onToggle={itemToggle} />
+              <SortableHeader label="Days Ago"  sortKey="days_since"   sort={itemSort} onToggle={itemToggle} />
+              <SortableHeader label="YTD t"     sortKey="ytd"          sort={itemSort} onToggle={itemToggle} />
+              <SortableHeader label="Total t"   sortKey="total_tonnes" sort={itemSort} onToggle={itemToggle} />
+              <SortableHeader label="Custs"     sortKey="customers"    sort={itemSort} onToggle={itemToggle} />
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <LoadingRows cols={8} />
-            ) : filtered.slice(0, 200).map((r) => (
+            ) : itemSorted.slice(0, 200).map((r) => (
               <tr key={r.item_code} className="border-b border-border/40 hover:bg-accent/20 transition-colors">
                 <td className="px-3 py-2.5">
                   <div className="font-medium text-foreground truncate max-w-[200px]">{r.item_name}</div>
@@ -478,12 +554,12 @@ function ItemsTab({ companyNos, saleScope }: { companyNos: string[]; saleScope: 
 const CUST_FILTERS = ["All", "Stopped", "At Risk", "Declining", "Active", "Irregular"];
 
 function CustomersTab({ companyNos, saleScope }: { companyNos: string[]; saleScope: string }) {
-  const [rows, setRows] = useState<CustomerMovementRow[]>([]);
+  const [rows, setRows]       = useState<CustomerMovementRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState("All");
-  const [search, setSearch] = useState("");
+  const [filter, setFilter]   = useState("All");
+  const [search, setSearch]   = useState("");
   const [expandedCust, setExpandedCust] = useState<string | null>(null);
-  const [custGroups, setCustGroups] = useState<Record<string, CustomerGroupRow[]>>({});
+  const [custGroups, setCustGroups]     = useState<Record<string, CustomerGroupRow[]>>({});
   const [custGroupsLoading, setCustGroupsLoading] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
@@ -498,10 +574,16 @@ function CustomersTab({ companyNos, saleScope }: { companyNos: string[]; saleSco
     let r = filter === "All" ? rows : rows.filter((x) => x.status === filter);
     if (search.trim()) {
       const q = search.toLowerCase();
-      r = r.filter((x) => (x.customer_name ?? "").toLowerCase().includes(q) || x.customer_code.toLowerCase().includes(q));
+      r = r.filter((x) =>
+        (x.customer_name ?? "").toLowerCase().includes(q) ||
+        x.customer_code.toLowerCase().includes(q)
+      );
     }
     return r;
   }, [rows, filter, search]);
+
+  const { sorted: custSorted, sort: custSort, toggle: custToggle } =
+    useSortableData(filtered, { key: "days_since", dir: "desc" });
 
   const handleCustExpand = async (code: string) => {
     if (expandedCust === code) { setExpandedCust(null); return; }
@@ -545,22 +627,22 @@ function CustomersTab({ companyNos, saleScope }: { companyNos: string[]; saleSco
         <table className="w-full text-xs">
           <thead>
             <tr className="border-b border-border bg-secondary/60">
-              <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground">Customer</th>
-              <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground">Status</th>
-              <th className="text-right px-3 py-2.5 font-semibold text-muted-foreground">Last Purchase</th>
-              <th className="text-right px-3 py-2.5 font-semibold text-muted-foreground">Days</th>
-              <th className="text-right px-3 py-2.5 font-semibold text-muted-foreground">Recent 3m</th>
-              <th className="text-right px-3 py-2.5 font-semibold text-muted-foreground">Prior 3m</th>
-              <th className="text-right px-3 py-2.5 font-semibold text-muted-foreground">3m Δ</th>
-              <th className="text-right px-3 py-2.5 font-semibold text-muted-foreground">Total t</th>
-              <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground">Top Group</th>
-              <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground">Rep</th>
+              <SortableHeader label="Customer"      sortKey="customer_name"  sort={custSort} onToggle={custToggle} align="left" />
+              <SortableHeader label="Status"        sortKey="status"         sort={custSort} onToggle={custToggle} align="left" />
+              <SortableHeader label="Last Purchase" sortKey="last_purchase"  sort={custSort} onToggle={custToggle} />
+              <SortableHeader label="Days"          sortKey="days_since"     sort={custSort} onToggle={custToggle} />
+              <SortableHeader label="Recent 3m"     sortKey="t3m"            sort={custSort} onToggle={custToggle} />
+              <SortableHeader label="Prior 3m"      sortKey="p3m"            sort={custSort} onToggle={custToggle} />
+              <SortableHeader label="3m Δ"          sortKey="change_pct"     sort={custSort} onToggle={custToggle} />
+              <SortableHeader label="Total t"       sortKey="total_tonnes"   sort={custSort} onToggle={custToggle} />
+              <SortableHeader label="Top Group"     sortKey="top_group"      sort={custSort} onToggle={custToggle} align="left" />
+              <SortableHeader label="Rep"           sortKey="last_rep"       sort={custSort} onToggle={custToggle} align="left" />
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <LoadingRows cols={10} />
-            ) : filtered.map((r) => (
+            ) : custSorted.map((r) => (
               <Fragment key={r.customer_code}>
                 <tr
                   onClick={() => handleCustExpand(r.customer_code)}
@@ -661,13 +743,13 @@ const fmt2 = new Intl.NumberFormat("en-AU", { minimumFractionDigits: 0, maximumF
 const fmtMoney = new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD", minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 function StockTab({ companyNos, saleScope: _saleScope }: { companyNos: string[]; saleScope: string }) {
-  const [rows, setRows] = useState<StockRow[]>([]);
+  const [rows, setRows]       = useState<StockRow[]>([]);
   const [summary, setSummary] = useState<StockSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [search, setSearch] = useState("");
+  const [search, setSearch]   = useState("");
   const [stockFilter, setStockFilter] = useState<"all" | "instock" | "zero" | "alert">("all");
-  const [refreshMsg, setRefreshMsg] = useState<string | null>(null);
+  const [refreshMsg, setRefreshMsg]   = useState<string | null>(null);
 
   const load = () => {
     setLoading(true);
@@ -701,14 +783,21 @@ function StockTab({ companyNos, saleScope: _saleScope }: { companyNos: string[];
   const filtered = useMemo(() => {
     let r = rows;
     if (stockFilter === "instock") r = r.filter((x) => x.instock > 0);
-    if (stockFilter === "zero") r = r.filter((x) => x.instock === 0);
-    if (stockFilter === "alert") r = r.filter((x) => x.instock === 0 && x.ord_out > 0);
+    if (stockFilter === "zero")    r = r.filter((x) => x.instock === 0);
+    if (stockFilter === "alert")   r = r.filter((x) => x.instock === 0 && x.ord_out > 0);
     if (search.trim()) {
       const q = search.toLowerCase();
-      r = r.filter((x) => x.art_code.toLowerCase().includes(q) || (x.item_name ?? "").toLowerCase().includes(q) || (x.item_group_code ?? "").toLowerCase().includes(q));
+      r = r.filter((x) =>
+        x.art_code.toLowerCase().includes(q) ||
+        (x.item_name ?? "").toLowerCase().includes(q) ||
+        (x.item_group_code ?? "").toLowerCase().includes(q)
+      );
     }
     return r;
   }, [rows, stockFilter, search]);
+
+  const { sorted: stockSorted, sort: stockSort, toggle: stockToggle } =
+    useSortableData(filtered, { key: "instock", dir: "asc" });
 
   const stockBand = (row: StockRow) => {
     if (row.instock === 0 && row.ord_out > 0) return "bg-red-500/8 hover:bg-red-500/14";
@@ -727,23 +816,23 @@ function StockTab({ companyNos, saleScope: _saleScope }: { companyNos: string[];
       {/* KPI row */}
       {summary && (
         <div className="grid grid-cols-4 gap-2 sm:grid-cols-7">
-          <StockKpi label="Total Items" value={fmt2.format(summary.total_items)} />
-          <StockKpi label="In Stock" value={fmt2.format(summary.items_in_stock)} color="text-emerald-400" sub={`${summary.total_items ? Math.round((summary.items_in_stock / summary.total_items) * 100) : 0}% of items`} />
-          <StockKpi label="Zero Stock" value={fmt2.format(summary.items_zero_stock)} color="text-amber-400" />
+          <StockKpi label="Total Items"       value={fmt2.format(summary.total_items)} />
+          <StockKpi label="In Stock"          value={fmt2.format(summary.items_in_stock)} color="text-emerald-400" sub={`${summary.total_items ? Math.round((summary.items_in_stock / summary.total_items) * 100) : 0}% of items`} />
+          <StockKpi label="Zero Stock"        value={fmt2.format(summary.items_zero_stock)} color="text-amber-400" />
           <StockKpi label="Stockout + Orders" value={fmt2.format(summary.stockout_with_orders)} color="text-red-400" sub="Selling but empty" />
-          <StockKpi label="Total On Hand" value={fmt2.format(summary.total_instock)} sub="units" />
-          <StockKpi label="On Order (out)" value={fmt2.format(summary.total_ord_out)} sub="customer orders" />
-          <StockKpi label="Incoming (PO)" value={fmt2.format(summary.total_po_qty)} sub="purchase orders" color="text-sky-400" />
+          <StockKpi label="Total On Hand"     value={fmt2.format(summary.total_instock)} sub="units" />
+          <StockKpi label="On Order (out)"    value={fmt2.format(summary.total_ord_out)} sub="customer orders" />
+          <StockKpi label="Incoming (PO)"     value={fmt2.format(summary.total_po_qty)} sub="purchase orders" color="text-sky-400" />
         </div>
       )}
 
       {/* Controls */}
       <div className="flex items-center gap-2 flex-wrap">
         {[
-          { key: "all", label: "All" },
+          { key: "all",     label: "All" },
           { key: "instock", label: "In Stock" },
-          { key: "zero", label: "Zero Stock" },
-          { key: "alert", label: "⚠ Stockout + Orders" },
+          { key: "zero",    label: "Zero Stock" },
+          { key: "alert",   label: "⚠ Stockout + Orders" },
         ].map((f) => (
           <button
             key={f.key}
@@ -787,21 +876,21 @@ function StockTab({ companyNos, saleScope: _saleScope }: { companyNos: string[];
         <table className="w-full text-xs">
           <thead>
             <tr className="border-b border-border bg-secondary/60">
-              <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground">Item</th>
-              <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground">Group</th>
-              <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground">Location</th>
-              <th className="text-right px-3 py-2.5 font-semibold text-muted-foreground">In Stock</th>
-              <th className="text-right px-3 py-2.5 font-semibold text-muted-foreground">On Order</th>
-              <th className="text-right px-3 py-2.5 font-semibold text-muted-foreground">PO Qty</th>
-              <th className="text-right px-3 py-2.5 font-semibold text-muted-foreground">Reserved</th>
-              <th className="text-right px-3 py-2.5 font-semibold text-muted-foreground">In Transit</th>
-              <th className="text-right px-3 py-2.5 font-semibold text-muted-foreground">Avg Cost</th>
+              <SortableHeader label="Item"       sortKey="item_name"        sort={stockSort} onToggle={stockToggle} align="left" />
+              <SortableHeader label="Group"      sortKey="item_group_code"  sort={stockSort} onToggle={stockToggle} align="left" />
+              <SortableHeader label="Location"   sortKey="location"         sort={stockSort} onToggle={stockToggle} align="left" />
+              <SortableHeader label="In Stock"   sortKey="instock"          sort={stockSort} onToggle={stockToggle} />
+              <SortableHeader label="On Order"   sortKey="ord_out"          sort={stockSort} onToggle={stockToggle} />
+              <SortableHeader label="PO Qty"     sortKey="po_qty"           sort={stockSort} onToggle={stockToggle} />
+              <SortableHeader label="Reserved"   sortKey="rsrv_qty"         sort={stockSort} onToggle={stockToggle} />
+              <SortableHeader label="In Transit" sortKey="in_shipment"      sort={stockSort} onToggle={stockToggle} />
+              <SortableHeader label="Avg Cost"   sortKey="weighed_av_price" sort={stockSort} onToggle={stockToggle} />
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <LoadingRows cols={9} />
-            ) : filtered.slice(0, 500).map((r, i) => (
+            ) : stockSorted.slice(0, 500).map((r, i) => (
               <tr key={`${r.art_code}-${r.location}-${i}`} className={`border-b border-border/40 transition-colors ${stockBand(r)}`}>
                 <td className="px-3 py-2">
                   <div className="font-medium text-foreground truncate max-w-[200px]">{r.item_name ?? r.art_code}</div>
@@ -838,16 +927,16 @@ function StockTab({ companyNos, saleScope: _saleScope }: { companyNos: string[];
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 const TABS: { id: TabId; label: string; icon: React.ComponentType<{ size?: number; className?: string }> }[] = [
-  { id: "groups", label: "Product Groups", icon: Package01Icon },
-  { id: "items", label: "Slow-Moving Items", icon: Package02Icon },
-  { id: "customers", label: "Customers", icon: UserGroupIcon },
-  { id: "stock", label: "Stock Status", icon: Building04Icon },
+  { id: "groups",    label: "Product Groups",    icon: Package01Icon },
+  { id: "items",     label: "Slow-Moving Items", icon: Package02Icon },
+  { id: "customers", label: "Customers",         icon: UserGroupIcon },
+  { id: "stock",     label: "Stock Status",      icon: Building04Icon },
 ];
 
 export default function Movement() {
   const [tab, setTab] = useState<TabId>("groups");
   const { companyNos, saleScope, companyLabel } = useCompany();
-  const [summary, setSummary] = useState<MovementSummary | null>(null);
+  const [summary, setSummary]           = useState<MovementSummary | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(true);
 
   useEffect(() => {
@@ -878,21 +967,21 @@ export default function Movement() {
       {/* KPI summary */}
       <div className="flex-shrink-0 px-5 py-3 border-b border-border">
         <div className="grid grid-cols-8 gap-2">
-          <KpiCard label="Growing Groups" value={summaryLoading ? "…" : summary?.growing_groups ?? 0} color="text-emerald-400" />
+          <KpiCard label="Growing Groups"  value={summaryLoading ? "…" : summary?.growing_groups ?? 0}   color="text-emerald-400" />
           <KpiCard label="Declining Groups" value={summaryLoading ? "…" : summary?.declining_groups ?? 0} color="text-amber-400" />
-          <KpiCard label="Dead Groups" value={summaryLoading ? "…" : summary?.dead_groups ?? 0} color="text-red-400" />
-          <KpiCard label="Stopped Custs" value={summaryLoading ? "…" : summary?.stopped_customers ?? 0} sub="No purchase > 60d" color="text-red-400" />
-          <KpiCard label="At-Risk Custs" value={summaryLoading ? "…" : summary?.at_risk_customers ?? 0} sub="No purchase 30–60d" color="text-amber-400" />
-          <KpiCard label="Slow Items" value={summaryLoading ? "…" : summary?.slow_items ?? 0} sub="> 90d inactive" color="text-amber-400" />
-          <KpiCard label="Dead Stock Items" value={summaryLoading ? "…" : summary?.dead_items ?? 0} sub="> 180d inactive" color="text-red-400" />
+          <KpiCard label="Dead Groups"     value={summaryLoading ? "…" : summary?.dead_groups ?? 0}       color="text-red-400" />
+          <KpiCard label="Stopped Custs"  value={summaryLoading ? "…" : summary?.stopped_customers ?? 0} sub="No purchase > 60d" color="text-red-400" />
+          <KpiCard label="At-Risk Custs"  value={summaryLoading ? "…" : summary?.at_risk_customers ?? 0} sub="No purchase 30–60d" color="text-amber-400" />
+          <KpiCard label="Slow Items"      value={summaryLoading ? "…" : summary?.slow_items ?? 0}        sub="> 90d inactive" color="text-amber-400" />
+          <KpiCard label="Dead Stock Items" value={summaryLoading ? "…" : summary?.dead_items ?? 0}       sub="> 180d inactive" color="text-red-400" />
           <div className="rounded-lg border border-border bg-card p-3.5 flex flex-col gap-2">
             <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Legend</p>
             <div className="space-y-2">
               {[
-                { status: "Growing",  desc: "↑ 15%+ more volume vs prior 3 months" },
-                { status: "Stable",   desc: "Volume within ±15% of prior 3 months" },
-                { status: "Declining",desc: "↓ 15%+ less volume vs prior 3 months" },
-                { status: "Dead",     desc: "No sales recorded in last 3 months" },
+                { status: "Growing",   desc: "↑ 15%+ more volume vs prior 3 months" },
+                { status: "Stable",    desc: "Volume within ±15% of prior 3 months" },
+                { status: "Declining", desc: "↓ 15%+ less volume vs prior 3 months" },
+                { status: "Dead",      desc: "No sales recorded in last 3 months" },
               ].map(({ status, desc }) => (
                 <div key={status} className="flex flex-col gap-0.5">
                   <StatusBadge status={status} />
@@ -924,10 +1013,10 @@ export default function Movement() {
 
       {/* Tab content */}
       <div className="flex-1 overflow-y-auto p-5">
-        {tab === "groups" && <ProductGroupsTab companyNos={companyNos} saleScope={saleScope} />}
-        {tab === "items" && <ItemsTab companyNos={companyNos} saleScope={saleScope} />}
-        {tab === "customers" && <CustomersTab companyNos={companyNos} saleScope={saleScope} />}
-        {tab === "stock" && <StockTab companyNos={companyNos} saleScope={saleScope} />}
+        {tab === "groups"    && <ProductGroupsTab companyNos={companyNos} saleScope={saleScope} />}
+        {tab === "items"     && <ItemsTab         companyNos={companyNos} saleScope={saleScope} />}
+        {tab === "customers" && <CustomersTab     companyNos={companyNos} saleScope={saleScope} />}
+        {tab === "stock"     && <StockTab         companyNos={companyNos} saleScope={saleScope} />}
       </div>
     </div>
   );

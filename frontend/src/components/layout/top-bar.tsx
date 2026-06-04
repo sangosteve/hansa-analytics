@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useLocation } from "wouter";
 import {
   Building01Icon,
@@ -40,22 +40,38 @@ function DateRangePicker() {
   const { dateFrom, dateTo, setDateRange, resetDateRange, isAllTime } = useCompany();
   const [open, setOpen] = useState(false);
 
-  const selected: DateRange = {
-    from: dateFrom ? new Date(dateFrom) : undefined,
-    to:   dateTo   ? new Date(dateTo)   : undefined,
+  // Local range tracks in-progress selection — only committed once both ends are picked
+  const contextRange: DateRange = {
+    from: dateFrom ? new Date(dateFrom + "T00:00:00") : undefined,
+    to:   dateTo   ? new Date(dateTo   + "T00:00:00") : undefined,
   };
+  const [localRange, setLocalRange] = useState<DateRange>(contextRange);
+
+  // Sync local range from context whenever the popover opens
+  useEffect(() => {
+    if (open) setLocalRange(contextRange);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   const handleSelect = useCallback((range: DateRange | undefined) => {
     if (!range) return;
-    const from = range.from ? format(range.from, "yyyy-MM-dd") : dateFrom;
-    const to   = range.to   ? format(range.to,   "yyyy-MM-dd") : dateTo;
-    setDateRange(from, to);
-    if (range.from && range.to) setOpen(false);
-  }, [dateFrom, dateTo, setDateRange]);
+    setLocalRange(range);
+    // Only commit + close when the user has picked BOTH ends of the range
+    if (range.from && range.to) {
+      setDateRange(
+        format(range.from, "yyyy-MM-dd"),
+        format(range.to,   "yyyy-MM-dd"),
+      );
+      setOpen(false);
+    }
+  }, [setDateRange]);
 
   const label = isAllTime
     ? "All Time"
-    : `${selected.from ? format(selected.from, "dd MMM yyyy") : "—"}  –  ${selected.to ? format(selected.to, "dd MMM yyyy") : "—"}`;
+    : `${contextRange.from ? format(contextRange.from, "dd MMM yyyy") : "—"}  –  ${contextRange.to ? format(contextRange.to, "dd MMM yyyy") : "—"}`;
+
+  // Calendar opens on the month that contains the current `from` date
+  const defaultMonth = localRange.from ?? new Date();
 
   return (
     <div className="flex items-center gap-1.5">
@@ -65,7 +81,7 @@ function DateRangePicker() {
           <Button
             variant="outline"
             size="sm"
-            className="h-8 px-3 text-xs font-normal min-w-[200px] justify-start gap-2"
+            className="h-8 px-3 text-xs font-normal min-w-[210px] justify-start gap-2"
           >
             {label}
           </Button>
@@ -73,21 +89,26 @@ function DateRangePicker() {
         <PopoverContent className="w-auto p-0" align="start">
           <Calendar
             mode="range"
-            selected={selected}
+            selected={localRange}
             onSelect={handleSelect}
+            defaultMonth={defaultMonth}
             numberOfMonths={2}
             captionLayout="dropdown"
+            fromYear={2020}
+            toYear={new Date().getFullYear() + 1}
           />
-          <div className="border-t border-border px-3 py-2 flex justify-between items-center">
-            <span className="text-[10px] text-muted-foreground">
-              {selected.from && selected.to
-                ? `${format(selected.from, "dd MMM yyyy")} – ${format(selected.to, "dd MMM yyyy")}`
-                : "Pick a start and end date"}
+          <div className="border-t border-border px-3 py-2 flex justify-between items-center gap-3">
+            <span className="text-[10px] text-muted-foreground flex-1">
+              {localRange.from && localRange.to
+                ? `${format(localRange.from, "dd MMM yyyy")} – ${format(localRange.to, "dd MMM yyyy")}`
+                : localRange.from
+                  ? `From ${format(localRange.from, "dd MMM yyyy")} — pick an end date`
+                  : "Pick a start date"}
             </span>
             <Button
               variant="ghost"
               size="sm"
-              className="h-6 px-2 text-[10px]"
+              className="h-6 px-2 text-[10px] flex-shrink-0"
               onClick={() => { resetDateRange(); setOpen(false); }}
             >
               All Time
@@ -108,11 +129,11 @@ export default function TopBar() {
     companyLabel,
   } = useCompany();
 
-  const [companyOpen, setCompanyOpen]       = useState(false);
-  const [refreshing, setRefreshing]         = useState(false);
-  const [jobId, setJobId]                   = useState<string | null>(null);
-  const [drawerOpen, setDrawerOpen]         = useState(false);
-  const [advancedOpen, setAdvancedOpen]     = useState(false);
+  const [companyOpen, setCompanyOpen]         = useState(false);
+  const [refreshing, setRefreshing]           = useState(false);
+  const [jobId, setJobId]                     = useState<string | null>(null);
+  const [drawerOpen, setDrawerOpen]           = useState(false);
+  const [advancedOpen, setAdvancedOpen]       = useState(false);
   const [refreshMenuOpen, setRefreshMenuOpen] = useState(false);
 
   const isAll = companyNos.includes("all") || companyNos.length === ALL_VALUES.length || companyNos.length === 0;
@@ -165,7 +186,7 @@ export default function TopBar() {
               key={opt.value}
               onClick={() => setSaleScope(opt.value as SaleScope)}
               className={`
-                px-3 h-full text-xs font-medium transition-colors
+                px-3 h-full text-xs font-medium transition-colors cursor-pointer
                 ${i < SCOPE_OPTIONS.length - 1 ? "border-r border-border" : ""}
                 ${saleScope === opt.value
                   ? "bg-primary text-primary-foreground"
@@ -233,7 +254,7 @@ export default function TopBar() {
           <button
             onClick={handleDefaultRefresh}
             disabled={refreshing}
-            className="flex items-center gap-1.5 px-3 text-xs font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex items-center gap-1.5 px-3 text-xs font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
           >
             <ArrowReloadHorizontalIcon size={13} className={refreshing ? "animate-spin" : ""} />
             {refreshing ? "Starting…" : "Refresh Data"}
@@ -241,7 +262,7 @@ export default function TopBar() {
           <Popover open={refreshMenuOpen} onOpenChange={setRefreshMenuOpen}>
             <PopoverTrigger asChild>
               <button
-                className="flex items-center px-1.5 border-l border-primary/40 bg-primary text-primary-foreground hover:opacity-80 transition-opacity"
+                className="flex items-center px-1.5 border-l border-primary/40 bg-primary text-primary-foreground hover:opacity-80 transition-opacity cursor-pointer"
                 aria-label="Refresh options"
               >
                 <ArrowDown01Icon size={12} />
