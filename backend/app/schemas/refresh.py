@@ -1,5 +1,5 @@
 from datetime import date
-from typing import Optional
+from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -28,3 +28,31 @@ class MasterDataRefreshRequest(BaseModel):
 
     def resolved_company_no(self) -> str:
         return self.company_no or settings.hansa_master_company_no
+
+
+class RefreshSettingsSchema(BaseModel):
+    active_companies: List[str] = Field(default=["3", "4", "5", "6"])
+    refresh_mode: str = Field(
+        default="last_success_buffer",
+        description="last_success_buffer | last_n_days | current_month | ytd",
+    )
+    safety_buffer_days: int = Field(default=2, ge=0, le=90)
+    last_n_days: int = Field(default=30, ge=1, le=730)
+    include_master: bool = Field(default=True)
+    include_invoices: bool = Field(default=True)
+    include_deliveries: bool = Field(default=True)
+    rebuild_facts: bool = Field(default=True)
+    rebuild_movement: bool = Field(default=True)
+    rebuild_stock: bool = Field(default=True)
+
+
+class CustomRefreshRequest(BaseModel):
+    company_nos: List[str] = Field(default=["3", "4", "5", "6"])
+    date_from: date = Field(..., description="Start date")
+    date_to: date = Field(..., description="End date")
+    include_master: bool = Field(default=False)
+    include_invoices: bool = Field(default=True)
+    include_deliveries: bool = Field(default=True)
+    rebuild_facts: bool = Field(default=True)
+    rebuild_movement: bool = Field(default=True)
+    rebuild_stock: bool = Field(default=False)

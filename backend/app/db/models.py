@@ -3,9 +3,11 @@ from decimal import Decimal
 from typing import Optional
 
 from sqlalchemy import (
+    Boolean,
     Date,
     DateTime,
     Integer,
+    JSON,
     Numeric,
     String,
     Text,
@@ -15,6 +17,28 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.database import Base
+
+
+class RefreshSettings(Base):
+    """Singleton settings row (id=1). Created on first GET if missing."""
+    __tablename__ = "refresh_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    active_companies: Mapped[list] = mapped_column(JSON, nullable=False, default=lambda: ["3", "4", "5", "6"])
+    refresh_mode: Mapped[str] = mapped_column(String(50), nullable=False, default="last_success_buffer")
+    safety_buffer_days: Mapped[int] = mapped_column(Integer, nullable=False, default=2)
+    last_n_days: Mapped[int] = mapped_column(Integer, nullable=False, default=30)
+    include_master: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    include_invoices: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    include_deliveries: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    rebuild_facts: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    rebuild_movement: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    rebuild_stock: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
 
 
 class RefreshRun(Base):

@@ -5,6 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import NavBar from "@/components/layout/nav";
 import Home from "@/pages/home";
 import Movement from "@/pages/movement";
+import Settings from "@/pages/settings";
 import NotFound from "@/pages/not-found";
 import { CompanyProvider } from "@/lib/company-context";
 
@@ -15,6 +16,7 @@ function Router() {
     <Switch>
       <Route path="/" component={Home} />
       <Route path="/movement" component={Movement} />
+      <Route path="/settings" component={Settings} />
       <Route component={NotFound} />
     </Switch>
   );

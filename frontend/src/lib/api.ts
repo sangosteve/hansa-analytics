@@ -498,3 +498,112 @@ export async function triggerStockRefresh(companyNos: string[] = ["all"]): Promi
   if (!res.ok) throw new Error("Stock refresh failed");
   return res.json();
 }
+
+// ── Refresh settings & job types ──────────────────────────────────────────────
+
+export type RefreshSettings = {
+  active_companies: string[];
+  refresh_mode: "last_success_buffer" | "last_n_days" | "current_month" | "ytd";
+  safety_buffer_days: number;
+  last_n_days: number;
+  include_master: boolean;
+  include_invoices: boolean;
+  include_deliveries: boolean;
+  rebuild_facts: boolean;
+  rebuild_movement: boolean;
+  rebuild_stock: boolean;
+  updated_at: string | null;
+};
+
+export type RefreshJobStep = {
+  company: string;
+  company_label: string;
+  step: string;
+  status: "pending" | "running" | "done" | "error" | "success";
+  records: number;
+  message: string;
+  timestamp: string;
+};
+
+export type RefreshJob = {
+  job_id: string;
+  status: "queued" | "running" | "done" | "error";
+  mode: string;
+  companies: string[];
+  date_from: string;
+  date_to: string;
+  current_step: string;
+  steps: RefreshJobStep[];
+  log: string[];
+  started_at: string;
+  finished_at: string | null;
+  error: string | null;
+};
+
+export type RefreshHistoryRow = {
+  id: number;
+  company_no: string;
+  status: string;
+  message: string | null;
+  records_processed: number;
+  date_from: string | null;
+  date_to: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+};
+
+export type CustomRefreshPayload = {
+  company_nos: string[];
+  date_from: string;
+  date_to: string;
+  include_master?: boolean;
+  include_invoices?: boolean;
+  include_deliveries?: boolean;
+  rebuild_facts?: boolean;
+  rebuild_movement?: boolean;
+  rebuild_stock?: boolean;
+};
+
+export async function getRefreshSettings(): Promise<RefreshSettings> {
+  const res = await fetch(`${API_BASE_URL}/refresh/settings`);
+  if (!res.ok) throw new Error("Failed to fetch refresh settings");
+  return res.json();
+}
+
+export async function updateRefreshSettings(settings: Partial<RefreshSettings>): Promise<{ status: string }> {
+  const res = await fetch(`${API_BASE_URL}/refresh/settings`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(settings),
+  });
+  if (!res.ok) throw new Error("Failed to save refresh settings");
+  return res.json();
+}
+
+export async function triggerDefaultRefresh(): Promise<RefreshJob> {
+  const res = await fetch(`${API_BASE_URL}/refresh/default`, { method: "POST" });
+  if (!res.ok) throw new Error("Failed to start default refresh");
+  return res.json();
+}
+
+export async function triggerCustomRefresh(payload: CustomRefreshPayload): Promise<RefreshJob> {
+  const res = await fetch(`${API_BASE_URL}/refresh/custom`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error("Failed to start custom refresh");
+  return res.json();
+}
+
+export async function getRefreshJobStatus(jobId: string): Promise<RefreshJob> {
+  const res = await fetch(`${API_BASE_URL}/refresh/status/${jobId}`);
+  if (!res.ok) throw new Error("Failed to fetch job status");
+  return res.json();
+}
+
+export async function getRefreshHistory(limit = 50): Promise<RefreshHistoryRow[]> {
+  const res = await fetch(`${API_BASE_URL}/refresh/history?limit=${limit}`);
+  if (!res.ok) throw new Error("Failed to fetch refresh history");
+  return res.json();
+}

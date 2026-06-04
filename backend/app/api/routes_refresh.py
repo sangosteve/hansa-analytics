@@ -1,35 +1,53 @@
 """
 Refresh routes — trigger Hansa data pulls and fact rebuilds.
 
-All transaction endpoints accept an optional company_no in the request body,
-defaulting to the HANSA_COMPANY_NO environment variable when omitted.
-This enables multi-company refresh (3, 4, 5, 6) without separate deployments.
+Endpoints:
+  GET  /api/refresh/settings          — get refresh configuration
+  PUT  /api/refresh/settings          — update refresh configuration
+  POST /api/refresh/default           — run default refresh (all active companies, smart date range)
+  POST /api/refresh/custom            — run custom refresh with full payload control
+  GET  /api/refresh/status/{job_id}   — poll job progress
+  GET  /api/refresh/status            — list recent jobs
+  GET  /api/refresh/history           — recent RefreshRun rows from DB
+
+  (legacy endpoints kept for backward compatibility)
 """
 
 import asyncio
 import uuid
-from datetime import date, datetime, timezone
-from typing import Optional
+from datetime import date, datetime, timedelta, timezone
+from typing import List, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends
+from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from app.db.database import SessionLocal, get_db
-from app.schemas.refresh import MasterDataRefreshRequest, TransactionRefreshRequest
+from app.db.models import RefreshRun, RefreshSettings
+from app.schemas.refresh import (
+    CustomRefreshRequest,
+    MasterDataRefreshRequest,
+    RefreshSettingsSchema,
+    TransactionRefreshRequest,
+)
 from app.services.fact_sales_service import rebuild_fact_sales_lines
 from app.services.master_data_service import refresh_master_data
 from app.services.movement_service import rebuild_customer_product_group_movement
 from app.services.source_delivery_service import refresh_delivery_source
 from app.services.source_invoice_service import refresh_invoice_source
-from app.services.stock_service import refresh_stock_status, COMPANY_LOCATIONS
+from app.services.stock_service import COMPANY_LOCATIONS, refresh_stock_status
 from app.services.transaction_service import refresh_transactions
-
-# ── In-memory job tracker ─────────────────────────────────────────────────────
-# Simple dict so the polling endpoint can report progress.
-_jobs: dict[str, dict] = {}
 
 router = APIRouter(prefix="/api/refresh", tags=["Refresh"])
 
+# ── In-memory job tracker ─────────────────────────────────────────────────────
+_jobs: dict[str, dict] = {}
+
+ALL_COMPANIES = ["3", "4", "5", "6"]
+COMPANY_LABELS = {"3": "Retail", "4": "Manufacturing", "5": "Engineering", "6": "Mining"}
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
 
 def serialize_refresh_run(refresh_run):
     return {
@@ -38,12 +56,400 @@ def serialize_refresh_run(refresh_run):
         "status": refresh_run.status,
         "message": refresh_run.message,
         "records_processed": refresh_run.records_processed,
-        "date_from": refresh_run.date_from,
-        "date_to": refresh_run.date_to,
-        "started_at": refresh_run.started_at,
-        "finished_at": refresh_run.finished_at,
+        "date_from": str(refresh_run.date_from) if refresh_run.date_from else None,
+        "date_to": str(refresh_run.date_to) if refresh_run.date_to else None,
+        "started_at": refresh_run.started_at.isoformat() if refresh_run.started_at else None,
+        "finished_at": refresh_run.finished_at.isoformat() if refresh_run.finished_at else None,
     }
 
+
+def _get_or_create_settings(db: Session) -> RefreshSettings:
+    row = db.get(RefreshSettings, 1)
+    if row is None:
+        row = RefreshSettings(id=1)
+        db.add(row)
+        db.commit()
+        db.refresh(row)
+    return row
+
+
+def _calculate_date_range(db: Session, cfg: RefreshSettings) -> tuple[date, date]:
+    today = date.today()
+
+    if cfg.refresh_mode == "last_success_buffer":
+        last_run = (
+            db.query(RefreshRun)
+            .filter(RefreshRun.status == "success", RefreshRun.date_to.isnot(None))
+            .order_by(desc(RefreshRun.finished_at))
+            .first()
+        )
+        if last_run and last_run.date_to:
+            date_from = last_run.date_to - timedelta(days=cfg.safety_buffer_days)
+        else:
+            date_from = today.replace(day=1)  # fallback: current month
+
+    elif cfg.refresh_mode == "last_n_days":
+        date_from = today - timedelta(days=cfg.last_n_days)
+
+    elif cfg.refresh_mode == "current_month":
+        date_from = today.replace(day=1)
+
+    elif cfg.refresh_mode == "ytd":
+        date_from = today.replace(month=1, day=1)
+
+    else:
+        date_from = today.replace(day=1)
+
+    return date_from, today
+
+
+def _init_job(job_id: str, companies: List[str], date_from: date, date_to: date, mode: str) -> dict:
+    job: dict = {
+        "job_id": job_id,
+        "status": "queued",
+        "mode": mode,
+        "companies": companies,
+        "date_from": str(date_from),
+        "date_to": str(date_to),
+        "current_step": "Queued",
+        "steps": [],
+        "log": [],
+        "started_at": datetime.now(tz=timezone.utc).isoformat(),
+        "finished_at": None,
+        "error": None,
+    }
+    _jobs[job_id] = job
+    return job
+
+
+def _log(job_id: str, msg: str):
+    job = _jobs.get(job_id)
+    if job:
+        ts = datetime.now(tz=timezone.utc).strftime("%H:%M:%S")
+        job["log"].append(f"[{ts}] {msg}")
+        job["current_step"] = msg
+    print(msg, flush=True)
+
+
+def _add_step(job_id: str, company: str, step: str, status: str, records: int = 0, message: str = ""):
+    job = _jobs.get(job_id)
+    if not job:
+        return
+    job["steps"].append({
+        "company": company,
+        "company_label": COMPANY_LABELS.get(company, company),
+        "step": step,
+        "status": status,
+        "records": records,
+        "message": message,
+        "timestamp": datetime.now(tz=timezone.utc).isoformat(),
+    })
+
+
+# ── Core refresh pipeline ─────────────────────────────────────────────────────
+
+async def _run_pipeline(
+    job_id: str,
+    companies: List[str],
+    date_from: date,
+    date_to: date,
+    include_master: bool,
+    include_invoices: bool,
+    include_deliveries: bool,
+    rebuild_facts: bool,
+    rebuild_movement: bool,
+    rebuild_stock: bool,
+):
+    job = _jobs[job_id]
+    job["status"] = "running"
+
+    try:
+        # ── Master data ───────────────────────────────────────────────────────
+        if include_master:
+            _log(job_id, "Refreshing master data (items, customers)...")
+            db = SessionLocal()
+            try:
+                r = await refresh_master_data(db)
+                _add_step(job_id, "all", "master_data", r.status, r.records_processed, r.message or "")
+                _log(job_id, f"  master-data → {r.status} ({r.records_processed} records)")
+            except Exception as e:
+                _add_step(job_id, "all", "master_data", "error", 0, str(e))
+                _log(job_id, f"  master-data ERROR: {e}")
+            finally:
+                db.close()
+
+        # ── Per-company pipeline ──────────────────────────────────────────────
+        for co in companies:
+            label = COMPANY_LABELS.get(co, f"Company {co}")
+
+            if include_invoices:
+                _log(job_id, f"Refreshing invoices [{label}]...")
+                db = SessionLocal()
+                try:
+                    r = await refresh_invoice_source(db, date_from, date_to, co)
+                    _add_step(job_id, co, "invoices", r.status, r.records_processed, r.message or "")
+                    _log(job_id, f"  invoices [{label}] → {r.status} ({r.records_processed})")
+                except Exception as e:
+                    _add_step(job_id, co, "invoices", "error", 0, str(e))
+                    _log(job_id, f"  invoices [{label}] ERROR: {e}")
+                finally:
+                    db.close()
+
+            if include_deliveries:
+                _log(job_id, f"Refreshing deliveries [{label}]...")
+                db = SessionLocal()
+                try:
+                    r = await refresh_delivery_source(db, date_from, date_to, co)
+                    _add_step(job_id, co, "deliveries", r.status, r.records_processed, r.message or "")
+                    _log(job_id, f"  deliveries [{label}] → {r.status} ({r.records_processed})")
+                except Exception as e:
+                    _add_step(job_id, co, "deliveries", "error", 0, str(e))
+                    _log(job_id, f"  deliveries [{label}] ERROR: {e}")
+                finally:
+                    db.close()
+
+            if rebuild_facts:
+                _log(job_id, f"Rebuilding sales facts [{label}]...")
+                db = SessionLocal()
+                try:
+                    r = rebuild_fact_sales_lines(db, date_from, date_to, co)
+                    _add_step(job_id, co, "fact_sales", r.status, r.records_processed, r.message or "")
+                    _log(job_id, f"  fact-sales [{label}] → {r.status} ({r.records_processed})")
+                except Exception as e:
+                    _add_step(job_id, co, "fact_sales", "error", 0, str(e))
+                    _log(job_id, f"  fact-sales [{label}] ERROR: {e}")
+                finally:
+                    db.close()
+
+        # ── Customer movement ─────────────────────────────────────────────────
+        if rebuild_movement:
+            _log(job_id, "Rebuilding customer movement...")
+            db = SessionLocal()
+            try:
+                r = rebuild_customer_product_group_movement(db)
+                _add_step(job_id, "all", "customer_movement", r.status, r.records_processed, r.message or "")
+                _log(job_id, f"  customer-movement → {r.status} ({r.records_processed})")
+            except Exception as e:
+                _add_step(job_id, "all", "customer_movement", "error", 0, str(e))
+                _log(job_id, f"  customer-movement ERROR: {e}")
+            finally:
+                db.close()
+
+        # ── Stock status ──────────────────────────────────────────────────────
+        if rebuild_stock:
+            for co in companies:
+                if co not in COMPANY_LOCATIONS:
+                    continue
+                label = COMPANY_LABELS.get(co, f"Company {co}")
+                _log(job_id, f"Refreshing stock status [{label}]...")
+                db = SessionLocal()
+                try:
+                    r = await refresh_stock_status(db, co)
+                    _add_step(job_id, co, "stock", r.status, r.records_processed, r.message or "")
+                    _log(job_id, f"  stock [{label}] → {r.status} ({r.records_processed})")
+                except Exception as e:
+                    _add_step(job_id, co, "stock", "error", 0, str(e))
+                    _log(job_id, f"  stock [{label}] ERROR: {e}")
+                finally:
+                    db.close()
+
+        # ── Done ──────────────────────────────────────────────────────────────
+        has_errors = any(s["status"] == "error" for s in job["steps"])
+        job["status"] = "error" if has_errors else "done"
+        job["finished_at"] = datetime.now(tz=timezone.utc).isoformat()
+        job["current_step"] = "Completed with errors" if has_errors else "All done"
+        _log(job_id, "=== REFRESH COMPLETE ===")
+
+    except Exception as exc:
+        import traceback
+        job["status"] = "error"
+        job["error"] = str(exc)
+        job["finished_at"] = datetime.now(tz=timezone.utc).isoformat()
+        job["current_step"] = f"Failed: {exc}"
+        _log(job_id, f"FATAL ERROR: {exc}")
+        traceback.print_exc()
+
+
+# ── Settings endpoints ────────────────────────────────────────────────────────
+
+@router.get("/settings")
+def get_refresh_settings(db: Session = Depends(get_db)):
+    cfg = _get_or_create_settings(db)
+    return {
+        "active_companies": cfg.active_companies,
+        "refresh_mode": cfg.refresh_mode,
+        "safety_buffer_days": cfg.safety_buffer_days,
+        "last_n_days": cfg.last_n_days,
+        "include_master": cfg.include_master,
+        "include_invoices": cfg.include_invoices,
+        "include_deliveries": cfg.include_deliveries,
+        "rebuild_facts": cfg.rebuild_facts,
+        "rebuild_movement": cfg.rebuild_movement,
+        "rebuild_stock": cfg.rebuild_stock,
+        "updated_at": cfg.updated_at.isoformat() if cfg.updated_at else None,
+    }
+
+
+@router.put("/settings")
+def update_refresh_settings(payload: RefreshSettingsSchema, db: Session = Depends(get_db)):
+    cfg = _get_or_create_settings(db)
+    cfg.active_companies = payload.active_companies
+    cfg.refresh_mode = payload.refresh_mode
+    cfg.safety_buffer_days = payload.safety_buffer_days
+    cfg.last_n_days = payload.last_n_days
+    cfg.include_master = payload.include_master
+    cfg.include_invoices = payload.include_invoices
+    cfg.include_deliveries = payload.include_deliveries
+    cfg.rebuild_facts = payload.rebuild_facts
+    cfg.rebuild_movement = payload.rebuild_movement
+    cfg.rebuild_stock = payload.rebuild_stock
+    cfg.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(cfg)
+    return {"status": "ok", "message": "Settings saved"}
+
+
+# ── Default refresh ───────────────────────────────────────────────────────────
+
+@router.post("/default")
+async def default_refresh(background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    """
+    Run the default refresh using saved settings.
+    Refreshes all active companies over the configured date range.
+    """
+    cfg = _get_or_create_settings(db)
+    companies = cfg.active_companies or ALL_COMPANIES
+    date_from, date_to = _calculate_date_range(db, cfg)
+
+    job_id = str(uuid.uuid4())[:8]
+    _init_job(job_id, companies, date_from, date_to, "default")
+
+    background_tasks.add_task(
+        _run_pipeline,
+        job_id,
+        companies,
+        date_from,
+        date_to,
+        cfg.include_master,
+        cfg.include_invoices,
+        cfg.include_deliveries,
+        cfg.rebuild_facts,
+        cfg.rebuild_movement,
+        cfg.rebuild_stock,
+    )
+
+    return {
+        "job_id": job_id,
+        "status": "queued",
+        "companies": companies,
+        "date_from": str(date_from),
+        "date_to": str(date_to),
+        "mode": "default",
+        "message": f"Default refresh started for {len(companies)} companies ({date_from} → {date_to})",
+    }
+
+
+# ── Custom refresh ────────────────────────────────────────────────────────────
+
+@router.post("/custom")
+async def custom_refresh(payload: CustomRefreshRequest, background_tasks: BackgroundTasks):
+    """
+    Run a custom refresh with full control over companies, date range, and components.
+    """
+    companies = payload.company_nos or ALL_COMPANIES
+    job_id = str(uuid.uuid4())[:8]
+    _init_job(job_id, companies, payload.date_from, payload.date_to, "custom")
+
+    background_tasks.add_task(
+        _run_pipeline,
+        job_id,
+        companies,
+        payload.date_from,
+        payload.date_to,
+        payload.include_master,
+        payload.include_invoices,
+        payload.include_deliveries,
+        payload.rebuild_facts,
+        payload.rebuild_movement,
+        payload.rebuild_stock,
+    )
+
+    return {
+        "job_id": job_id,
+        "status": "queued",
+        "companies": companies,
+        "date_from": str(payload.date_from),
+        "date_to": str(payload.date_to),
+        "mode": "custom",
+        "message": f"Custom refresh started for {companies}",
+    }
+
+
+# ── Job status ────────────────────────────────────────────────────────────────
+
+@router.get("/status/{job_id}")
+def refresh_status(job_id: str):
+    job = _jobs.get(job_id)
+    if not job:
+        return {"error": f"Job {job_id} not found"}
+    return job
+
+
+@router.get("/status")
+def list_refresh_jobs():
+    return list(_jobs.values())
+
+
+# ── Refresh history from DB ───────────────────────────────────────────────────
+
+@router.get("/history")
+def refresh_history(limit: int = 50, db: Session = Depends(get_db)):
+    runs = (
+        db.query(RefreshRun)
+        .order_by(desc(RefreshRun.started_at))
+        .limit(limit)
+        .all()
+    )
+    return [serialize_refresh_run(r) for r in runs]
+
+
+# ── Legacy full-refresh endpoint (kept for backward compatibility) ─────────────
+
+DATE_FROM_LEGACY = date(2024, 1, 1)
+DATE_TO_LEGACY   = date(2026, 6, 4)
+
+
+@router.post("/full")
+async def full_refresh(
+    background_tasks: BackgroundTasks,
+    companies: str = "all",
+    include_stock: bool = True,
+):
+    """
+    Legacy endpoint. Prefer /api/refresh/default or /api/refresh/custom.
+    Kick off a full Hansa → Neon refresh as a background task.
+    """
+    cos = ALL_COMPANIES if companies == "all" else [c.strip() for c in companies.split(",")]
+    job_id = str(uuid.uuid4())[:8]
+    _init_job(job_id, cos, DATE_FROM_LEGACY, DATE_TO_LEGACY, "full_legacy")
+
+    background_tasks.add_task(
+        _run_pipeline,
+        job_id,
+        cos,
+        DATE_FROM_LEGACY,
+        DATE_TO_LEGACY,
+        True,   # include_master
+        True,   # include_invoices
+        True,   # include_deliveries
+        True,   # rebuild_facts
+        True,   # rebuild_movement
+        include_stock,
+    )
+    return {"job_id": job_id, "message": "Refresh started", "companies": cos}
+
+
+# ── Granular legacy endpoints ─────────────────────────────────────────────────
 
 @router.post("/master-data")
 async def refresh_master_data_route(
@@ -104,31 +510,16 @@ async def refresh_sales_pipeline_route(
     payload: TransactionRefreshRequest,
     db: Session = Depends(get_db),
 ):
-    """
-    Full pipeline refresh for one company: invoices → deliveries → fact rebuild.
-    Set company_no to '3', '4', '5', or '6' to refresh specific divisions.
-    """
     company_no = payload.resolved_company_no()
-
     invoice_refresh = await refresh_invoice_source(
-        db=db,
-        date_from=payload.date_from,
-        date_to=payload.date_to,
-        company_no=company_no,
+        db=db, date_from=payload.date_from, date_to=payload.date_to, company_no=company_no,
     )
     delivery_refresh = await refresh_delivery_source(
-        db=db,
-        date_from=payload.date_from,
-        date_to=payload.date_to,
-        company_no=company_no,
+        db=db, date_from=payload.date_from, date_to=payload.date_to, company_no=company_no,
     )
     fact_refresh = rebuild_fact_sales_lines(
-        db=db,
-        date_from=payload.date_from,
-        date_to=payload.date_to,
-        company_no=company_no,
+        db=db, date_from=payload.date_from, date_to=payload.date_to, company_no=company_no,
     )
-
     return {
         "status": "success",
         "company_no": company_no,
@@ -141,7 +532,6 @@ async def refresh_sales_pipeline_route(
     }
 
 
-# Keep old MVP endpoint until new flow is fully validated.
 @router.post("/transactions")
 async def refresh_transactions_route(
     payload: TransactionRefreshRequest,
@@ -159,133 +549,3 @@ async def refresh_transactions_route(
 def rebuild_customer_movement_route(db: Session = Depends(get_db)):
     refresh_run = rebuild_customer_product_group_movement(db)
     return serialize_refresh_run(refresh_run)
-
-
-# ── Full background refresh ───────────────────────────────────────────────────
-
-DATE_FROM = date(2024, 1, 1)
-DATE_TO   = date(2026, 6, 4)
-ALL_COMPANIES = ["3", "4", "5", "6"]
-
-
-def _log(job_id: str, msg: str):
-    job = _jobs.get(job_id)
-    if job:
-        job["log"].append(f"[{datetime.now(tz=timezone.utc).strftime('%H:%M:%S')}] {msg}")
-        job["current_step"] = msg
-    print(msg, flush=True)
-
-
-async def _run_full_refresh(job_id: str, companies: list[str], include_stock: bool):
-    job = _jobs[job_id]
-    job["status"] = "running"
-    try:
-        # 1. Master data
-        _log(job_id, "Step: master-data")
-        db = SessionLocal()
-        try:
-            r = await refresh_master_data(db)
-            _log(job_id, f"  master-data → {r.status} ({r.records_processed} records)")
-        finally:
-            db.close()
-
-        # 2. Per-company pipeline
-        for co in companies:
-            _log(job_id, f"Step: source invoices [company={co}]")
-            db = SessionLocal()
-            try:
-                r = await refresh_invoice_source(db, DATE_FROM, DATE_TO, co)
-                _log(job_id, f"  invoices [{co}] → {r.status} ({r.records_processed})")
-            finally:
-                db.close()
-
-            _log(job_id, f"Step: source deliveries [company={co}]")
-            db = SessionLocal()
-            try:
-                r = await refresh_delivery_source(db, DATE_FROM, DATE_TO, co)
-                _log(job_id, f"  deliveries [{co}] → {r.status} ({r.records_processed})")
-            finally:
-                db.close()
-
-            _log(job_id, f"Step: fact-sales [company={co}]")
-            db = SessionLocal()
-            try:
-                r = rebuild_fact_sales_lines(db, DATE_FROM, DATE_TO, co)
-                _log(job_id, f"  fact-sales [{co}] → {r.status} ({r.records_processed})")
-            finally:
-                db.close()
-
-        # 3. Customer movement
-        _log(job_id, "Step: customer-movement (all companies)")
-        db = SessionLocal()
-        try:
-            r = rebuild_customer_product_group_movement(db)
-            _log(job_id, f"  customer-movement → {r.status} ({r.records_processed})")
-        finally:
-            db.close()
-
-        # 4. Stock status
-        if include_stock:
-            for co in companies:
-                if co in COMPANY_LOCATIONS:
-                    _log(job_id, f"Step: stock status [company={co}]")
-                    db = SessionLocal()
-                    try:
-                        r = await refresh_stock_status(db, co)
-                        _log(job_id, f"  stock [{co}] → {r.status} ({r.records_processed})")
-                    finally:
-                        db.close()
-
-        job["status"] = "done"
-        job["current_step"] = "All done"
-        _log(job_id, "=== ALL DONE ===")
-
-    except Exception as exc:
-        import traceback
-        job["status"] = "error"
-        job["error"] = str(exc)
-        _log(job_id, f"ERROR: {exc}")
-        traceback.print_exc()
-
-
-@router.post("/full")
-async def full_refresh(
-    background_tasks: BackgroundTasks,
-    companies: str = "all",
-    include_stock: bool = True,
-):
-    """
-    Kick off a full Hansa → Neon refresh as a background task.
-    Returns a job_id immediately; poll GET /api/refresh/status/{job_id} for progress.
-
-    companies: comma-separated company numbers, or "all" (default: 3,4,5,6)
-    include_stock: also refresh ItemStatusVc stock snapshot (default: true)
-    """
-    cos = ALL_COMPANIES if companies == "all" else [c.strip() for c in companies.split(",")]
-    job_id = str(uuid.uuid4())[:8]
-    _jobs[job_id] = {
-        "job_id": job_id,
-        "status": "queued",
-        "companies": cos,
-        "include_stock": include_stock,
-        "current_step": "queued",
-        "log": [],
-        "started_at": datetime.now(tz=timezone.utc).isoformat(),
-    }
-    background_tasks.add_task(_run_full_refresh, job_id, cos, include_stock)
-    return {"job_id": job_id, "message": "Refresh started", "companies": cos}
-
-
-@router.get("/status/{job_id}")
-def refresh_status(job_id: str):
-    """Poll this endpoint to track full refresh progress."""
-    job = _jobs.get(job_id)
-    if not job:
-        return {"error": f"Job {job_id} not found"}
-    return job
-
-
-@router.get("/status")
-def list_refresh_jobs():
-    """List all recent refresh jobs."""
-    return list(_jobs.values())

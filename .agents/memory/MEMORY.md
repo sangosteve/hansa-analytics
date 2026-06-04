@@ -3,4 +3,5 @@
 - [Neon DB refresh pattern](neon-refresh-pattern.md) — long-running Hansa fetches need fresh DB session per step to avoid Neon idle-connection timeout
 - [Multi-company + sale scope filter](multi-company-scope-filter.md) — companyNos array + saleScope pattern; internal customers defined in filters.py; HMR cascade fix: batch all edits then restart workflow
 - [Hansa client pagination](hansa-pagination.md) — Hansa REST uses ?offset=N&limit=N (not start/skip/page). Master data OOM fix: stream via iter_pages() + bulk-upsert per page. Use run_master_data.py for master sync.
+- [Vite proxy required](vite-proxy.md) — frontend/vite.config.ts must have server.proxy for /api → http://localhost:8080 or all API calls return HTML 404.
 - [AI Insights architecture](ai-insights-architecture.md) — 4-step orchestration: classify_intent → plan_steps (AI) → execute_tools (safe analytics_tools only) → synthesize; business_context.py is single source of truth for company mapping and glossary
