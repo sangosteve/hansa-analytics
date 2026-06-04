@@ -17,6 +17,7 @@ from app.db.database import SessionLocal
 router = APIRouter(prefix="/api/stock", tags=["Stock"])
 
 
+@router.get("/status")
 @router.get("")
 def get_stock(
     company_nos: Optional[list[str]] = Query(default=None),

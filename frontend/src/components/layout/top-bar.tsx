@@ -1,14 +1,11 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState } from "react";
 import { useLocation } from "wouter";
 import {
   Building01Icon,
   ArrowReloadHorizontalIcon,
   ArrowDown01Icon,
   CheckmarkCircle01Icon,
-  Calendar01Icon,
 } from "hugeicons-react";
-import { format } from "date-fns";
-import type { DateRange } from "react-day-picker";
 
 import {
   Popover,
@@ -16,7 +13,6 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
-import { Calendar } from "@/components/ui/calendar";
 import {
   useCompany,
   COMPANY_OPTIONS,
@@ -35,88 +31,96 @@ const PAGE_TITLES: Record<string, string> = {
   "/settings": "Settings",
 };
 
+function today() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function nDaysAgo(n: number) {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  return d.toISOString().slice(0, 10);
+}
+
 // ── Date Range Picker ─────────────────────────────────────────────────────────
 function DateRangePicker() {
   const { dateFrom, dateTo, setDateRange, resetDateRange, isAllTime } = useCompany();
-  const [open, setOpen] = useState(false);
 
-  // Local range tracks in-progress selection; only committed when both ends are picked
-  const contextRange: DateRange = {
-    from: dateFrom ? new Date(dateFrom + "T00:00:00") : undefined,
-    to:   dateTo   ? new Date(dateTo   + "T00:00:00") : undefined,
-  };
-  const [localRange, setLocalRange] = useState<DateRange>(contextRange);
+  const from = dateFrom ?? "";
+  const to   = dateTo   ?? "";
 
-  // Sync local range from context whenever the popover opens
-  useEffect(() => {
-    if (open) setLocalRange(contextRange);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  function handleFrom(e: React.ChangeEvent<HTMLInputElement>) {
+    const val = e.target.value;
+    if (val && to && val <= to) setDateRange(val, to);
+    else if (val) setDateRange(val, to || today());
+  }
 
-  const handleSelect = useCallback((range: DateRange | undefined) => {
-    if (!range) return;
-    setLocalRange(range);
-    // Only commit + close when the user has picked BOTH ends
-    if (range.from && range.to) {
-      setDateRange(
-        format(range.from, "yyyy-MM-dd"),
-        format(range.to,   "yyyy-MM-dd"),
-      );
-      setOpen(false);
-    }
-  }, [setDateRange]);
+  function handleTo(e: React.ChangeEvent<HTMLInputElement>) {
+    const val = e.target.value;
+    if (val && from && val >= from) setDateRange(from, val);
+    else if (val) setDateRange(from || nDaysAgo(30), val);
+  }
 
-  const label = isAllTime
-    ? "All Time"
-    : `${contextRange.from ? format(contextRange.from, "dd MMM yyyy") : "—"}  –  ${contextRange.to ? format(contextRange.to, "dd MMM yyyy") : "—"}`;
-
-  // Calendar opens on the month that contains the current `from` date
-  const defaultMonth = localRange.from ?? new Date();
+  const PRESETS = [
+    { label: "7d",  action: () => setDateRange(nDaysAgo(7),   today()) },
+    { label: "30d", action: () => setDateRange(nDaysAgo(30),  today()) },
+    { label: "90d", action: () => setDateRange(nDaysAgo(90),  today()) },
+    {
+      label: "MTD",
+      action: () => {
+        const d = new Date(); d.setDate(1);
+        setDateRange(d.toISOString().slice(0, 10), today());
+      },
+    },
+    {
+      label: "YTD",
+      action: () => {
+        const d = new Date(); d.setMonth(0); d.setDate(1);
+        setDateRange(d.toISOString().slice(0, 10), today());
+      },
+    },
+  ];
 
   return (
-    <div className="flex items-center gap-1.5">
-      <Calendar01Icon size={14} className="text-muted-foreground flex-shrink-0" />
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 px-3 text-xs font-normal min-w-[210px] justify-start gap-2"
-          >
-            {label}
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-auto p-0" align="start">
-          {/* Single-month calendar with nav arrows — user can freely navigate to any month/year */}
-          <Calendar
-            mode="range"
-            selected={localRange}
-            onSelect={handleSelect}
-            defaultMonth={defaultMonth}
-            numberOfMonths={1}
-            captionLayout="label"
-            fromYear={2018}
-            toYear={new Date().getFullYear() + 2}
-          />
-          <div className="border-t border-border px-3 py-2 flex justify-between items-center gap-3">
-            <span className="text-[10px] text-muted-foreground flex-1">
-              {localRange.from && localRange.to
-                ? `${format(localRange.from, "dd MMM yyyy")} – ${format(localRange.to, "dd MMM yyyy")}`
-                : localRange.from
-                  ? `From ${format(localRange.from, "dd MMM yyyy")} — navigate & pick end date`
-                  : "Pick a start date"}
-            </span>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-6 px-2 text-[10px] flex-shrink-0"
-              onClick={() => { resetDateRange(); setOpen(false); }}
+    <div className="flex flex-col gap-1">
+      <p className="text-[9px] uppercase tracking-widest font-semibold text-muted-foreground/55 leading-none">
+        Date Range
+      </p>
+      <div className="flex items-center gap-1.5">
+        <input
+          type="date"
+          value={from}
+          onChange={handleFrom}
+          className="h-7 px-2 text-xs rounded border border-border bg-secondary text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50 w-[130px]"
+        />
+        <span className="text-muted-foreground text-xs flex-shrink-0">–</span>
+        <input
+          type="date"
+          value={to}
+          onChange={handleTo}
+          className="h-7 px-2 text-xs rounded border border-border bg-secondary text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50 w-[130px]"
+        />
+        <div className="flex items-center gap-1 ml-0.5">
+          {PRESETS.map((p) => (
+            <button
+              key={p.label}
+              onClick={p.action}
+              className="h-5 px-1.5 text-[10px] rounded border border-border bg-secondary text-muted-foreground hover:text-foreground hover:bg-accent/30 transition-colors"
             >
-              All Time
-            </Button>
-          </div>
-        </PopoverContent>
-      </Popover>
+              {p.label}
+            </button>
+          ))}
+          <button
+            onClick={resetDateRange}
+            className={`h-5 px-1.5 text-[10px] rounded border transition-colors ${
+              isAllTime
+                ? "border-primary/60 bg-primary/10 text-primary"
+                : "border-border bg-secondary text-muted-foreground hover:text-foreground hover:bg-accent/30"
+            }`}
+          >
+            All
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

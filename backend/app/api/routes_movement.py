@@ -106,6 +106,7 @@ def product_group_monthly(
     return [dict(r) for r in rows]
 
 
+@router.get("/slow-items")
 @router.get("/items")
 def slow_moving_items(
     company_nos: Optional[list[str]] = Query(default=None),
