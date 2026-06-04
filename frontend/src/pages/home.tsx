@@ -19,6 +19,7 @@ import {
 import { Button } from "@/components/ui/button";
 import AIFloatingDrawer from "@/components/ai/ai-floating-drawer";
 import { useCompany } from "@/lib/company-context";
+import { CustomerDrilldownModal } from "@/components/home/customer-drilldown-modal";
 
 const monthLabels = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const chartColors = ["#818cf8","#34d399","#fb923c","#f87171","#a78bfa","#38bdf8"];
@@ -71,6 +72,7 @@ export default function Home() {
   const [predictiveLoading, setPredictiveLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedRisk, setSelectedRisk] = useState<PredictiveInsightsResponse["customer_lapse_risk"][0] | null>(null);
 
   // Loads date-filtered KPI data + predictive (re-runs on any filter change)
   const loadFiltered = async () => {
@@ -413,12 +415,16 @@ export default function Home() {
                     At-risk customers
                   </span>
                 </div>
-                <div className="space-y-1.5 max-h-[120px] overflow-y-auto">
+                <div className="space-y-1 max-h-[130px] overflow-y-auto">
                   {predictive.customer_lapse_risk.length === 0 ? (
                     <p className="text-xs text-muted-foreground">None identified</p>
                   ) : predictive.customer_lapse_risk.slice(0, 5).map((c) => (
-                    <div key={c.customer_code} className="flex items-center justify-between">
-                      <span className="text-xs text-foreground truncate max-w-[140px]">
+                    <button
+                      key={c.customer_code}
+                      onClick={() => setSelectedRisk(c)}
+                      className="w-full flex items-center justify-between rounded px-1.5 py-1 hover:bg-accent/30 transition-colors cursor-pointer group"
+                    >
+                      <span className="text-xs text-foreground truncate max-w-[140px] group-hover:text-primary transition-colors text-left">
                         {c.customer_name || c.customer_code}
                       </span>
                       <div className="flex items-center gap-1.5 flex-shrink-0">
@@ -430,7 +436,7 @@ export default function Home() {
                         </span>
                         <span className="text-[10px] text-muted-foreground">{formatTonnes(c.tonnes_6m_prior)}</span>
                       </div>
-                    </div>
+                    </button>
                   ))}
                 </div>
                 <div className="mt-2 text-[10px] text-muted-foreground">
@@ -615,6 +621,22 @@ export default function Home() {
 
       {/* ── Floating AI drawer (fixed overlay, no layout impact) ── */}
       <AIFloatingDrawer companyNos={companyNos} saleScope={saleScope} dateFrom={dateFrom} dateTo={dateTo} />
+
+      {/* ── Customer drilldown modal ── */}
+      {selectedRisk && (
+        <CustomerDrilldownModal
+          open={!!selectedRisk}
+          onClose={() => setSelectedRisk(null)}
+          customerCode={selectedRisk.customer_code}
+          customerName={selectedRisk.customer_name}
+          revenueTier={selectedRisk.revenue_tier}
+          tonnes6mPrior={selectedRisk.tonnes_6m_prior}
+          lastPurchaseDate={selectedRisk.last_purchase_date}
+          daysSince={selectedRisk.days_since_purchase}
+          companyNos={companyNos}
+          saleScope={saleScope}
+        />
+      )}
     </div>
   );
 }

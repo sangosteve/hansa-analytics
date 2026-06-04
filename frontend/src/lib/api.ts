@@ -542,6 +542,56 @@ export async function getAISuggestions(): Promise<AISuggestion[]> {
   return res.json();
 }
 
+export type CustomerHistoryMonthRow = {
+  month: string;
+  tonnes: number;
+  txn_count: number;
+};
+
+export type CustomerHistoryGroupRow = {
+  group_code: string;
+  group_name: string;
+  total_tonnes: number;
+  t3m: number;
+  p3m: number;
+  change_pct: number | null;
+  last_sale: string | null;
+  items: number;
+};
+
+export type CustomerHistoryItemRow = {
+  item_code: string;
+  item_name: string;
+  group_name: string;
+  total_tonnes: number;
+  last_sale: string | null;
+  days_since: number | null;
+};
+
+export type CustomerHistoryResponse = {
+  customer_code: string;
+  customer_name: string;
+  total_tonnes: number;
+  first_purchase: string | null;
+  last_purchase: string | null;
+  active_months: number;
+  monthly: CustomerHistoryMonthRow[];
+  by_group: CustomerHistoryGroupRow[];
+  top_items: CustomerHistoryItemRow[];
+};
+
+export async function getCustomerHistory(
+  customerCode: string,
+  companyNos: string[],
+  saleScope: string,
+): Promise<CustomerHistoryResponse> {
+  const params = new URLSearchParams({ sale_scope: saleScope });
+  appendCompanyNos(params, companyNos);
+  const res = await fetch(`${API_BASE_URL}/analytics/customer-history/${encodeURIComponent(customerCode)}?${params}`);
+  if (!res.ok) throw new Error("Failed to fetch customer history");
+  return res.json();
+}
+
 export async function getPredictiveInsights(
   companyNos: string[],
   saleScope: string

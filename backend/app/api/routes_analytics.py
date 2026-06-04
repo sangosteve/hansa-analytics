@@ -263,3 +263,133 @@ def get_predictive_insights(
         "products_to_push": products_to_push,
         "salesperson_trends": salesperson_trends,
     }
+
+
+@router.get("/customer-history/{customer_code}")
+def get_customer_history(
+    customer_code: str,
+    company_nos: Optional[list[str]] = Query(default=None),
+    company_no: Optional[str] = Query(default=None),
+    sale_scope: str = Query(default="all"),
+    db: Session = Depends(get_db),
+):
+    resolved = company_nos or ([company_no] if company_no else None) or [settings.hansa_company_no]
+    co_frag, co_params = build_company_filter(resolved)
+    scope_frag = build_scope_sql(sale_scope)
+    params = {**co_params, "cust_code": customer_code}
+
+    monthly_rows = db.execute(text(f"""
+        SELECT
+            DATE_TRUNC('month', transaction_date)::date::text AS month,
+            ROUND(SUM(tonnes)::numeric, 2)                    AS tonnes,
+            COUNT(*)                                          AS txn_count
+        FROM fact_sales_lines
+        WHERE {co_frag}
+          {scope_frag}
+          AND customer_code = :cust_code
+        GROUP BY DATE_TRUNC('month', transaction_date)
+        ORDER BY month
+        LIMIT 36
+    """), params).mappings().fetchall()
+
+    group_rows = db.execute(text(f"""
+        WITH ref AS (
+            SELECT MAX(transaction_date) AS max_d
+            FROM fact_sales_lines
+            WHERE {co_frag} {scope_frag} AND customer_code = :cust_code
+        )
+        SELECT
+            COALESCE(item_group_code, 'UNKNOWN')  AS group_code,
+            COALESCE(MAX(item_group_name), 'Unknown') AS group_name,
+            ROUND(SUM(tonnes)::numeric, 2)        AS total_tonnes,
+            ROUND(SUM(CASE WHEN transaction_date >= (SELECT max_d FROM ref) - INTERVAL '3 months'
+                           THEN tonnes ELSE 0 END)::numeric, 2) AS t3m,
+            ROUND(SUM(CASE WHEN transaction_date >= (SELECT max_d FROM ref) - INTERVAL '6 months'
+                            AND transaction_date  < (SELECT max_d FROM ref) - INTERVAL '3 months'
+                           THEN tonnes ELSE 0 END)::numeric, 2) AS p3m,
+            MAX(transaction_date)::text           AS last_sale,
+            COUNT(DISTINCT item_code)             AS items
+        FROM fact_sales_lines
+        WHERE {co_frag}
+          {scope_frag}
+          AND customer_code = :cust_code
+          AND item_group_code IS NOT NULL
+        GROUP BY item_group_code
+        ORDER BY total_tonnes DESC
+    """), params).mappings().fetchall()
+
+    item_rows = db.execute(text(f"""
+        WITH ref AS (
+            SELECT MAX(transaction_date) AS max_d
+            FROM fact_sales_lines
+            WHERE {co_frag} {scope_frag} AND customer_code = :cust_code
+        )
+        SELECT
+            item_code,
+            COALESCE(MAX(item_name), item_code)      AS item_name,
+            COALESCE(MAX(item_group_name), 'Unknown') AS group_name,
+            ROUND(SUM(tonnes)::numeric, 2)           AS total_tonnes,
+            MAX(transaction_date)::text              AS last_sale,
+            ((SELECT max_d FROM ref) - MAX(transaction_date))::int AS days_since
+        FROM fact_sales_lines
+        WHERE {co_frag}
+          {scope_frag}
+          AND customer_code = :cust_code
+          AND item_code IS NOT NULL
+        GROUP BY item_code
+        ORDER BY total_tonnes DESC
+        LIMIT 20
+    """), params).mappings().fetchall()
+
+    summary = db.execute(text(f"""
+        SELECT
+            COALESCE(MAX(customer_name), :cust_code) AS customer_name,
+            ROUND(SUM(tonnes)::numeric, 2)           AS total_tonnes,
+            MIN(transaction_date)::text              AS first_purchase,
+            MAX(transaction_date)::text              AS last_purchase,
+            COUNT(DISTINCT DATE_TRUNC('month', transaction_date)) AS active_months
+        FROM fact_sales_lines
+        WHERE {co_frag}
+          {scope_frag}
+          AND customer_code = :cust_code
+    """), params).mappings().fetchone()
+
+    def _f(v): return float(v) if v is not None else 0.0
+
+    return {
+        "customer_code": customer_code,
+        "customer_name": summary["customer_name"] if summary else customer_code,
+        "total_tonnes": _f(summary["total_tonnes"] if summary else None),
+        "first_purchase": summary["first_purchase"] if summary else None,
+        "last_purchase": summary["last_purchase"] if summary else None,
+        "active_months": int(summary["active_months"] or 0) if summary else 0,
+        "monthly": [
+            {"month": r["month"], "tonnes": _f(r["tonnes"]), "txn_count": int(r["txn_count"] or 0)}
+            for r in monthly_rows
+        ],
+        "by_group": [
+            {
+                "group_code": r["group_code"],
+                "group_name": r["group_name"],
+                "total_tonnes": _f(r["total_tonnes"]),
+                "t3m": _f(r["t3m"]),
+                "p3m": _f(r["p3m"]),
+                "change_pct": round((_f(r["t3m"]) - _f(r["p3m"])) / _f(r["p3m"]) * 100, 1)
+                              if _f(r["p3m"]) > 0 else None,
+                "last_sale": r["last_sale"],
+                "items": int(r["items"] or 0),
+            }
+            for r in group_rows
+        ],
+        "top_items": [
+            {
+                "item_code": r["item_code"],
+                "item_name": r["item_name"],
+                "group_name": r["group_name"],
+                "total_tonnes": _f(r["total_tonnes"]),
+                "last_sale": r["last_sale"],
+                "days_since": int(r["days_since"]) if r["days_since"] is not None else None,
+            }
+            for r in item_rows
+        ],
+    }
