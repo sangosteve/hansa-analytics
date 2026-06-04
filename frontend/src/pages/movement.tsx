@@ -285,7 +285,8 @@ function ProductGroupsTab({ companyNos, saleScope }: { companyNos: string[]; sal
                   <tr className="border-b border-border bg-secondary/40">
                     <th className="text-left px-3 py-2 font-semibold text-muted-foreground">Product</th>
                     <th className="text-right px-3 py-2 font-semibold text-muted-foreground">Total t</th>
-                    <th className="text-right px-3 py-2 font-semibold text-muted-foreground">Total Qty</th>
+                    <th className="text-right px-3 py-2 font-semibold text-muted-foreground">Qty Bought</th>
+                    <th className="text-right px-3 py-2 font-semibold text-muted-foreground">Qty On Hand</th>
                     <th className="text-right px-3 py-2 font-semibold text-muted-foreground">Recent 3m</th>
                     <th className="text-right px-3 py-2 font-semibold text-muted-foreground">Prior 3m</th>
                     <th className="text-right px-3 py-2 font-semibold text-muted-foreground">3m Δ</th>
@@ -296,7 +297,7 @@ function ProductGroupsTab({ companyNos, saleScope }: { companyNos: string[]; sal
                 </thead>
                 <tbody>
                   {drillItems.length === 0 ? (
-                    <tr><td colSpan={9} className="px-3 py-4 text-center text-muted-foreground">No products found</td></tr>
+                    <tr><td colSpan={10} className="px-3 py-4 text-center text-muted-foreground">No products found</td></tr>
                   ) : drillItems.map((item) => (
                     <tr key={item.item_code} className="border-b border-border/40 hover:bg-accent/20 transition-colors">
                       <td className="px-3 py-2">
@@ -304,7 +305,10 @@ function ProductGroupsTab({ companyNos, saleScope }: { companyNos: string[]; sal
                         <div className="text-[10px] text-muted-foreground">{item.item_code}</div>
                       </td>
                       <td className="px-3 py-2 text-right text-foreground">{fmtT(item.total_tonnes)}</td>
-                      <td className="px-3 py-2 text-right text-foreground">{item.total_qty != null ? fmt.format(item.total_qty) : "—"}</td>
+                      <td className="px-3 py-2 text-right text-foreground">{item.qty_bought != null ? fmt.format(item.qty_bought) : "—"}</td>
+                      <td className={`px-3 py-2 text-right font-medium ${item.qty_on_hand != null && item.qty_on_hand > 0 ? "text-emerald-400" : "text-red-400"}`}>
+                        {item.qty_on_hand != null ? fmt.format(item.qty_on_hand) : "—"}
+                      </td>
                       <td className="px-3 py-2 text-right text-foreground">{fmtT(item.t3m)}</td>
                       <td className="px-3 py-2 text-right text-muted-foreground">{fmtT(item.p3m)}</td>
                       <td className="px-3 py-2 text-right"><ChangeCell pct={item.change_pct} /></td>

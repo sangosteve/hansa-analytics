@@ -1,17 +1,22 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useLocation } from "wouter";
 import {
-  Calendar01Icon,
   Building01Icon,
   ArrowReloadHorizontalIcon,
   ArrowDown01Icon,
   CheckmarkCircle01Icon,
+  Calendar01Icon,
 } from "hugeicons-react";
+import { format } from "date-fns";
+import type { DateRange } from "react-day-picker";
+
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
 import {
   useCompany,
   COMPANY_OPTIONS,
@@ -30,21 +35,84 @@ const PAGE_TITLES: Record<string, string> = {
   "/settings": "Settings",
 };
 
+// ── Date Range Picker ─────────────────────────────────────────────────────────
+function DateRangePicker() {
+  const { dateFrom, dateTo, setDateRange, resetDateRange, isAllTime } = useCompany();
+  const [open, setOpen] = useState(false);
+
+  const selected: DateRange = {
+    from: dateFrom ? new Date(dateFrom) : undefined,
+    to:   dateTo   ? new Date(dateTo)   : undefined,
+  };
+
+  const handleSelect = useCallback((range: DateRange | undefined) => {
+    if (!range) return;
+    const from = range.from ? format(range.from, "yyyy-MM-dd") : dateFrom;
+    const to   = range.to   ? format(range.to,   "yyyy-MM-dd") : dateTo;
+    setDateRange(from, to);
+    if (range.from && range.to) setOpen(false);
+  }, [dateFrom, dateTo, setDateRange]);
+
+  const label = isAllTime
+    ? "All Time"
+    : `${selected.from ? format(selected.from, "dd MMM yyyy") : "—"}  –  ${selected.to ? format(selected.to, "dd MMM yyyy") : "—"}`;
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <Calendar01Icon size={14} className="text-muted-foreground flex-shrink-0" />
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 px-3 text-xs font-normal min-w-[200px] justify-start gap-2"
+          >
+            {label}
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-auto p-0" align="start">
+          <Calendar
+            mode="range"
+            selected={selected}
+            onSelect={handleSelect}
+            numberOfMonths={2}
+            captionLayout="dropdown"
+          />
+          <div className="border-t border-border px-3 py-2 flex justify-between items-center">
+            <span className="text-[10px] text-muted-foreground">
+              {selected.from && selected.to
+                ? `${format(selected.from, "dd MMM yyyy")} – ${format(selected.to, "dd MMM yyyy")}`
+                : "Pick a start and end date"}
+            </span>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 px-2 text-[10px]"
+              onClick={() => { resetDateRange(); setOpen(false); }}
+            >
+              All Time
+            </Button>
+          </div>
+        </PopoverContent>
+      </Popover>
+    </div>
+  );
+}
+
+// ── Top Bar ───────────────────────────────────────────────────────────────────
 export default function TopBar() {
   const [location] = useLocation();
   const {
     companyNos, setCompanyNos,
     saleScope, setSaleScope,
     companyLabel,
-    dateFrom, dateTo,
-    setDateRange, resetDateRange, isAllTime,
   } = useCompany();
 
-  const [companyOpen, setCompanyOpen] = useState(false);
-  const [refreshing, setRefreshing]   = useState(false);
-  const [jobId, setJobId]             = useState<string | null>(null);
-  const [drawerOpen, setDrawerOpen]   = useState(false);
-  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [companyOpen, setCompanyOpen]       = useState(false);
+  const [refreshing, setRefreshing]         = useState(false);
+  const [jobId, setJobId]                   = useState<string | null>(null);
+  const [drawerOpen, setDrawerOpen]         = useState(false);
+  const [advancedOpen, setAdvancedOpen]     = useState(false);
   const [refreshMenuOpen, setRefreshMenuOpen] = useState(false);
 
   const isAll = companyNos.includes("all") || companyNos.length === ALL_VALUES.length || companyNos.length === 0;
@@ -85,34 +153,8 @@ export default function TopBar() {
         {/* Page title */}
         <h1 className="font-semibold text-sm text-foreground mr-auto truncate">{pageTitle}</h1>
 
-        {/* ── Date Range ── */}
-        <div className="flex items-center gap-1.5">
-          <Calendar01Icon size={14} className="text-muted-foreground flex-shrink-0" />
-          <div className="flex items-center gap-1.5">
-            <input
-              type="date"
-              value={dateFrom}
-              onChange={(e) => setDateRange(e.target.value, dateTo)}
-              className="h-8 px-2.5 text-xs rounded-lg border border-border bg-secondary text-foreground focus:outline-none focus:ring-1 focus:ring-primary/60 transition-colors w-[128px]"
-            />
-            <span className="text-muted-foreground/60 text-xs select-none">–</span>
-            <input
-              type="date"
-              value={dateTo}
-              onChange={(e) => setDateRange(dateFrom, e.target.value)}
-              className="h-8 px-2.5 text-xs rounded-lg border border-border bg-secondary text-foreground focus:outline-none focus:ring-1 focus:ring-primary/60 transition-colors w-[128px]"
-            />
-            {!isAllTime && (
-              <button
-                onClick={resetDateRange}
-                className="h-8 px-2 text-xs rounded-lg border border-border bg-secondary text-muted-foreground hover:text-foreground hover:bg-accent/40 transition-colors"
-                title="Reset to all time"
-              >
-                All
-              </button>
-            )}
-          </div>
-        </div>
+        {/* ── Date Range Picker ── */}
+        <DateRangePicker />
 
         <div className="h-6 w-px bg-border/60 flex-shrink-0" />
 
@@ -141,11 +183,15 @@ export default function TopBar() {
         {/* ── Company ── */}
         <Popover open={companyOpen} onOpenChange={setCompanyOpen}>
           <PopoverTrigger asChild>
-            <button className="h-8 px-3 text-xs font-medium rounded-lg border border-border bg-secondary text-foreground flex items-center gap-2 hover:bg-accent/40 transition-colors min-w-[130px] max-w-[180px] justify-between">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 px-3 text-xs font-medium min-w-[130px] max-w-[180px] justify-between gap-2"
+            >
               <Building01Icon size={13} className="text-muted-foreground flex-shrink-0" />
               <span className="truncate flex-1 text-left">{companyLabel}</span>
               <ArrowDown01Icon size={12} className="text-muted-foreground flex-shrink-0" />
-            </button>
+            </Button>
           </PopoverTrigger>
           <PopoverContent className="w-48 p-1 bg-card border-border shadow-xl" align="end">
             <button

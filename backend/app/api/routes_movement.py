@@ -253,7 +253,7 @@ def product_group_items(
                 ROUND(SUM(CASE WHEN transaction_date >= (SELECT max_d FROM ref) - INTERVAL '6 months'
                                AND transaction_date < (SELECT max_d FROM ref) - INTERVAL '3 months'
                                THEN tonnes ELSE 0 END)::numeric, 1) AS p3m,
-                ROUND(SUM(quantity)::numeric, 0) AS total_qty,
+                ROUND(SUM(quantity)::numeric, 0) AS qty_bought,
                 MAX(transaction_date)::text AS last_sale,
                 ((SELECT max_d FROM ref) - MAX(transaction_date))::int AS days_since,
                 COUNT(DISTINCT customer_code) AS customers
@@ -264,11 +264,18 @@ def product_group_items(
               AND item_code IS NOT NULL
             GROUP BY item_code
         )
-        SELECT *,
+        SELECT base.*,
+            COALESCE(stock.qty_on_hand, 0) AS qty_on_hand,
             CASE WHEN p3m > 0
                  THEN ROUND(((t3m - p3m) / p3m * 100)::numeric, 1)
                  ELSE NULL END AS change_pct
         FROM base
+        LEFT JOIN (
+            SELECT art_code, ROUND(SUM(instock)::numeric, 0) AS qty_on_hand
+            FROM item_stock_status
+            WHERE {co_frag}
+            GROUP BY art_code
+        ) stock ON stock.art_code = base.item_code
         ORDER BY total_tonnes DESC
         LIMIT 200
     """), {**co_params, "group_code": group_code}).mappings().fetchall()
