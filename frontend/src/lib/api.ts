@@ -264,6 +264,7 @@ export type GroupItemRow = {
   total_tonnes: number;
   t3m: number;
   p3m: number;
+  total_qty: number;
   last_sale: string | null;
   days_since: number;
   customers: number;

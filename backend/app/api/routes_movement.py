@@ -253,6 +253,7 @@ def product_group_items(
                 ROUND(SUM(CASE WHEN transaction_date >= (SELECT max_d FROM ref) - INTERVAL '6 months'
                                AND transaction_date < (SELECT max_d FROM ref) - INTERVAL '3 months'
                                THEN tonnes ELSE 0 END)::numeric, 1) AS p3m,
+                ROUND(SUM(quantity)::numeric, 0) AS total_qty,
                 MAX(transaction_date)::text AS last_sale,
                 ((SELECT max_d FROM ref) - MAX(transaction_date))::int AS days_since,
                 COUNT(DISTINCT customer_code) AS customers

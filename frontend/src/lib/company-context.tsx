@@ -18,6 +18,32 @@ export const SCOPE_OPTIONS: { value: SaleScope; label: string }[] = [
 const ALL_TIME_FROM = "2020-01-01";
 const ALL_TIME_TO   = "2030-12-31";
 
+const STORAGE_KEY_FROM = "hansa-date-from";
+const STORAGE_KEY_TO   = "hansa-date-to";
+
+function currentYearFrom() {
+  return `${new Date().getFullYear()}-01-01`;
+}
+function currentYearTo() {
+  return `${new Date().getFullYear()}-12-31`;
+}
+
+function getInitialDateFrom(): string {
+  try {
+    return localStorage.getItem(STORAGE_KEY_FROM) ?? currentYearFrom();
+  } catch {
+    return currentYearFrom();
+  }
+}
+
+function getInitialDateTo(): string {
+  try {
+    return localStorage.getItem(STORAGE_KEY_TO) ?? currentYearTo();
+  } catch {
+    return currentYearTo();
+  }
+}
+
 type CompanyContextType = {
   companyNos: string[];
   setCompanyNos: (v: string[]) => void;
@@ -50,21 +76,31 @@ function buildLabel(companyNos: string[]): string {
 export function CompanyProvider({ children }: { children: ReactNode }) {
   const [companyNos, setCompanyNos] = useState<string[]>(["all"]);
   const [saleScope, setSaleScope]   = useState<SaleScope>("all");
-  const [dateFrom, setDateFrom]     = useState<string>(ALL_TIME_FROM);
-  const [dateTo, setDateTo]         = useState<string>(ALL_TIME_TO);
+  const [dateFrom, setDateFrom]     = useState<string>(getInitialDateFrom);
+  const [dateTo, setDateTo]         = useState<string>(getInitialDateTo);
 
   const companyLabel = buildLabel(companyNos);
 
   const isAllTime = dateFrom === ALL_TIME_FROM && dateTo === ALL_TIME_TO;
 
   const setDateRange = useCallback((from: string, to: string) => {
-    setDateFrom(from || ALL_TIME_FROM);
-    setDateTo(to || ALL_TIME_TO);
+    const f = from || ALL_TIME_FROM;
+    const t = to || ALL_TIME_TO;
+    setDateFrom(f);
+    setDateTo(t);
+    try {
+      localStorage.setItem(STORAGE_KEY_FROM, f);
+      localStorage.setItem(STORAGE_KEY_TO, t);
+    } catch {}
   }, []);
 
   const resetDateRange = useCallback(() => {
     setDateFrom(ALL_TIME_FROM);
     setDateTo(ALL_TIME_TO);
+    try {
+      localStorage.setItem(STORAGE_KEY_FROM, ALL_TIME_FROM);
+      localStorage.setItem(STORAGE_KEY_TO, ALL_TIME_TO);
+    } catch {}
   }, []);
 
   return (

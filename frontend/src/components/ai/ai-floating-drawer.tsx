@@ -258,7 +258,7 @@ export default function AIFloatingDrawer({ companyNos, saleScope, dateFrom, date
     setPinned((prev) => prev.filter((p) => p.id !== id));
   }, []);
 
-  const drawerWidth = isExpanded ? "w-[82vw]" : "w-[460px] max-w-[100vw]";
+  const drawerWidth = isExpanded ? "w-[82vw]" : "w-[680px] max-w-[100vw]";
 
   return (
     <>
