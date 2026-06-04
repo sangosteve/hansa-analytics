@@ -21,7 +21,7 @@ from app.services.fact_sales_service import rebuild_fact_sales_lines
 from app.services.movement_service import rebuild_customer_product_group_movement
 from app.services.stock_service import refresh_stock_status
 
-DATE_FROM = date(2024, 1, 1)
+DATE_FROM = date(2025, 1, 1)
 DATE_TO   = date(2026, 6, 3)
 
 ALL_COMPANIES = ["3", "4", "5", "6"]

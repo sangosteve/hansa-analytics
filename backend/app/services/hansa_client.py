@@ -84,22 +84,53 @@ class HansaClient:
 
         return self._extract_records(data)
 
+    async def _get_paginated(self, path: str, page_size: int = 500) -> list[dict]:
+        """
+        Fetch all records from a Hansa endpoint using offset-based pagination.
+        Hansa supports ?limit=N&offset=N query parameters.
+        Stops when a page returns fewer records than page_size.
+        """
+        sep = "&" if "?" in path else "?"
+        all_records: list[dict] = []
+        offset = 0
+        while True:
+            url = f"{path}{sep}limit={page_size}&offset={offset}"
+            page = await self._get(url)
+            all_records.extend(page)
+            if len(page) < page_size:
+                break
+            offset += page_size
+        return all_records
+
+    async def iter_pages(self, path: str, page_size: int = 500):
+        """
+        Async generator that yields one page at a time — keeps memory flat.
+        """
+        sep = "&" if "?" in path else "?"
+        offset = 0
+        while True:
+            url = f"{path}{sep}limit={page_size}&offset={offset}"
+            page = await self._get(url)
+            if page:
+                yield page
+            if len(page) < page_size:
+                break
+            offset += page_size
+
     async def get_item_groups(self) -> list[dict]:
-        return await self._get(
-            f"api/{self.company_no}/ITVc"
-            "?fields=Code,Comment"
+        return await self._get_paginated(
+            f"api/{self.company_no}/ITVc?fields=Code,Comment"
         )
 
     async def get_items(self) -> list[dict]:
-        return await self._get(
+        return await self._get_paginated(
             f"api/{self.company_no}/INVc"
             "?fields=Code,AlternativeCode,Name,Group,Weight,UnitCoefficient"
         )
 
     async def get_customers(self) -> list[dict]:
-        return await self._get(
-            f"api/{self.company_no}/CUVc"
-            "?fields=Code,Name,CUType&filter.CUType=1"
+        return await self._get_paginated(
+            f"api/{self.company_no}/CUVc?fields=Code,Name,CUType&filter.CUType=1"
         )
 
     async def get_invoices(self, date_from: str, date_to: str) -> list[dict]:
