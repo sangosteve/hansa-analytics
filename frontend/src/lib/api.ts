@@ -328,6 +328,9 @@ export type RefreshSettings = {
   rebuild_facts: boolean;
   rebuild_movement: boolean;
   rebuild_stock: boolean;
+  schedule_enabled: boolean;
+  schedule_frequency: "daily" | "weekly" | "monthly";
+  schedule_time: string;
   updated_at: string | null;
 };
 
@@ -358,15 +361,34 @@ export type RefreshJob = {
 
 export type RefreshHistoryRow = {
   id: number;
-  company_no: string;
+  job_id: string;
+  trigger_type: "manual" | "scheduled";
   status: string;
-  message: string | null;
-  records_processed: number;
+  companies: string[];
   date_from: string | null;
   date_to: string | null;
   started_at: string | null;
   finished_at: string | null;
+  duration_secs: number | null;
+  total_records: number;
+  step_count: number;
+  error_count: number;
+  error_message: string | null;
 };
+
+export type RefreshFreshness = {
+  last_refresh: string | null;
+  hours_ago: number | null;
+  status: "ok" | "stale" | "overdue" | "unknown";
+  trigger_type: string | null;
+  companies: string[];
+};
+
+export async function getRefreshFreshness(): Promise<RefreshFreshness> {
+  const res = await fetch(`${API_BASE_URL}/refresh/freshness`);
+  if (!res.ok) throw new Error("Failed to fetch freshness");
+  return res.json();
+}
 
 export type CustomRefreshPayload = {
   company_nos: string[];

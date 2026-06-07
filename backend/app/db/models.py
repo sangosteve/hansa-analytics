@@ -56,11 +56,36 @@ class RefreshSettings(Base):
     rebuild_facts: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     rebuild_movement: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     rebuild_stock: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    schedule_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    schedule_frequency: Mapped[str] = mapped_column(String(20), nullable=False, default="daily")
+    schedule_time: Mapped[str] = mapped_column(String(10), nullable=False, default="02:00")
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
         onupdate=func.now(),
     )
+
+
+class RefreshJob(Base):
+    """One row per full refresh pipeline execution (manual or scheduled)."""
+    __tablename__ = "refresh_jobs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    job_id: Mapped[str] = mapped_column(String(50), nullable=False, unique=True, index=True)
+    trigger_type: Mapped[str] = mapped_column(String(20), nullable=False, default="manual")
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="running")
+    companies: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    date_from: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    date_to: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+    )
+    finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    total_records: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    step_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    error_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
 
 class RefreshRun(Base):

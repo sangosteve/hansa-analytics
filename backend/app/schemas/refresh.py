@@ -44,6 +44,9 @@ class RefreshSettingsSchema(BaseModel):
     rebuild_facts: bool = Field(default=True)
     rebuild_movement: bool = Field(default=True)
     rebuild_stock: bool = Field(default=True)
+    schedule_enabled: bool = Field(default=False)
+    schedule_frequency: str = Field(default="daily", description="daily | weekly | monthly")
+    schedule_time: str = Field(default="02:00", description="HH:MM server time")
 
 
 class CustomRefreshRequest(BaseModel):

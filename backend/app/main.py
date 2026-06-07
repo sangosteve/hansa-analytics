@@ -1,4 +1,5 @@
 import os
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,10 +14,20 @@ from app.api.routes_refresh import router as refresh_router
 from app.api.routes_sales_summary import router as sales_summary_router
 from app.api.routes_stock import router as stock_router
 from app.core.config import settings
+from app.services.scheduler_service import start_scheduler, stop_scheduler
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    start_scheduler()
+    yield
+    stop_scheduler()
+
 
 app = FastAPI(
     title=settings.app_name,
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 _raw_origins = os.environ.get("ALLOWED_ORIGINS", "*")

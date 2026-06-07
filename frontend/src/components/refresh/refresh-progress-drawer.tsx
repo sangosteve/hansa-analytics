@@ -142,9 +142,11 @@ export function RefreshProgressDrawer({ jobId, open, onClose, onDone }: Props) {
         setJob(j);
         if (j.status === "done" || j.status === "error") {
           if (pollingRef.current) clearInterval(pollingRef.current);
-          if (!doneCalledRef.current && j.status === "done") {
+          if (!doneCalledRef.current) {
             doneCalledRef.current = true;
-            onDone?.();
+            // Notify all pages that fresh data is available
+            window.dispatchEvent(new CustomEvent("hansa-data-refreshed"));
+            if (j.status === "done") onDone?.();
           }
         }
       } catch {

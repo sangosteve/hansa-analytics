@@ -2,13 +2,14 @@
 Refresh routes — trigger Hansa data pulls and fact rebuilds.
 
 Endpoints:
-  GET  /api/refresh/settings          — get refresh configuration
+  GET  /api/refresh/settings          — get refresh configuration (includes schedule)
   PUT  /api/refresh/settings          — update refresh configuration
   POST /api/refresh/default           — run default refresh (all active companies, smart date range)
   POST /api/refresh/custom            — run custom refresh with full payload control
   GET  /api/refresh/status/{job_id}   — poll job progress
   GET  /api/refresh/status            — list recent jobs
-  GET  /api/refresh/history           — recent RefreshRun rows from DB
+  GET  /api/refresh/history           — job-level history from refresh_jobs table
+  GET  /api/refresh/freshness         — data freshness indicator for dashboard
 
   (legacy endpoints kept for backward compatibility)
 """
@@ -23,7 +24,7 @@ from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from app.db.database import SessionLocal, get_db
-from app.db.models import RefreshRun, RefreshSettings
+from app.db.models import RefreshJob, RefreshRun, RefreshSettings
 from app.schemas.refresh import (
     CustomRefreshRequest,
     MasterDataRefreshRequest,
@@ -63,6 +64,30 @@ def serialize_refresh_run(refresh_run):
     }
 
 
+def _serialize_refresh_job(job: RefreshJob) -> dict:
+    started = job.started_at
+    finished = job.finished_at
+    duration_secs = None
+    if started and finished:
+        duration_secs = round((finished - started).total_seconds())
+    return {
+        "id": job.id,
+        "job_id": job.job_id,
+        "trigger_type": job.trigger_type,
+        "status": job.status,
+        "companies": job.companies,
+        "date_from": str(job.date_from) if job.date_from else None,
+        "date_to": str(job.date_to) if job.date_to else None,
+        "started_at": started.isoformat() if started else None,
+        "finished_at": finished.isoformat() if finished else None,
+        "duration_secs": duration_secs,
+        "total_records": job.total_records,
+        "step_count": job.step_count,
+        "error_count": job.error_count,
+        "error_message": job.error_message,
+    }
+
+
 def _get_or_create_settings(db: Session) -> RefreshSettings:
     row = db.get(RefreshSettings, 1)
     if row is None:
@@ -77,16 +102,26 @@ def _calculate_date_range(db: Session, cfg: RefreshSettings) -> tuple[date, date
     today = date.today()
 
     if cfg.refresh_mode == "last_success_buffer":
-        last_run = (
-            db.query(RefreshRun)
-            .filter(RefreshRun.status == "success", RefreshRun.date_to.isnot(None))
-            .order_by(desc(RefreshRun.finished_at))
+        last_job = (
+            db.query(RefreshJob)
+            .filter(RefreshJob.status == "done", RefreshJob.date_to.isnot(None))
+            .order_by(desc(RefreshJob.finished_at))
             .first()
         )
-        if last_run and last_run.date_to:
-            date_from = last_run.date_to - timedelta(days=cfg.safety_buffer_days)
+        if last_job and last_job.date_to:
+            date_from = last_job.date_to - timedelta(days=cfg.safety_buffer_days)
         else:
-            date_from = today.replace(day=1)  # fallback: current month
+            # Fall back to legacy RefreshRun table
+            last_run = (
+                db.query(RefreshRun)
+                .filter(RefreshRun.status == "success", RefreshRun.date_to.isnot(None))
+                .order_by(desc(RefreshRun.finished_at))
+                .first()
+            )
+            if last_run and last_run.date_to:
+                date_from = last_run.date_to - timedelta(days=cfg.safety_buffer_days)
+            else:
+                date_from = today.replace(day=1)
 
     elif cfg.refresh_mode == "last_n_days":
         date_from = today - timedelta(days=cfg.last_n_days)
@@ -146,6 +181,48 @@ def _add_step(job_id: str, company: str, step: str, status: str, records: int = 
     })
 
 
+def _save_refresh_job(job_id: str, trigger_type: str, companies: list, date_from: date, date_to: date):
+    """Create the RefreshJob record in DB when a pipeline starts."""
+    db = SessionLocal()
+    try:
+        rj = RefreshJob(
+            job_id=job_id,
+            trigger_type=trigger_type,
+            status="running",
+            companies=companies,
+            date_from=date_from,
+            date_to=date_to,
+            started_at=datetime.now(timezone.utc),
+        )
+        db.add(rj)
+        db.commit()
+    except Exception as e:
+        print(f"[refresh_job] Failed to create DB record: {e}", flush=True)
+        db.rollback()
+    finally:
+        db.close()
+
+
+def _update_refresh_job(job_id: str, status: str, total_records: int, step_count: int, error_count: int, error_message: str | None = None):
+    """Update the RefreshJob record when a pipeline finishes."""
+    db = SessionLocal()
+    try:
+        rj = db.query(RefreshJob).filter(RefreshJob.job_id == job_id).first()
+        if rj:
+            rj.status = status
+            rj.finished_at = datetime.now(timezone.utc)
+            rj.total_records = total_records
+            rj.step_count = step_count
+            rj.error_count = error_count
+            rj.error_message = error_message
+            db.commit()
+    except Exception as e:
+        print(f"[refresh_job] Failed to update DB record: {e}", flush=True)
+        db.rollback()
+    finally:
+        db.close()
+
+
 # ── Core refresh pipeline ─────────────────────────────────────────────────────
 
 async def _run_pipeline(
@@ -159,9 +236,13 @@ async def _run_pipeline(
     rebuild_facts: bool,
     rebuild_movement: bool,
     rebuild_stock: bool,
+    trigger_type: str = "manual",
 ):
     job = _jobs[job_id]
     job["status"] = "running"
+    job["trigger_type"] = trigger_type
+
+    _save_refresh_job(job_id, trigger_type, companies, date_from, date_to)
 
     try:
         # ── Master data ───────────────────────────────────────────────────────
@@ -255,10 +336,15 @@ async def _run_pipeline(
 
         # ── Done ──────────────────────────────────────────────────────────────
         has_errors = any(s["status"] == "error" for s in job["steps"])
-        job["status"] = "error" if has_errors else "done"
+        final_status = "error" if has_errors else "done"
+        job["status"] = final_status
         job["finished_at"] = datetime.now(tz=timezone.utc).isoformat()
         job["current_step"] = "Completed with errors" if has_errors else "All done"
         _log(job_id, "=== REFRESH COMPLETE ===")
+
+        total_records = sum(s.get("records", 0) for s in job["steps"])
+        error_count = sum(1 for s in job["steps"] if s["status"] == "error")
+        _update_refresh_job(job_id, final_status, total_records, len(job["steps"]), error_count)
 
     except Exception as exc:
         import traceback
@@ -268,6 +354,7 @@ async def _run_pipeline(
         job["current_step"] = f"Failed: {exc}"
         _log(job_id, f"FATAL ERROR: {exc}")
         traceback.print_exc()
+        _update_refresh_job(job_id, "error", 0, len(job.get("steps", [])), 1, str(exc))
 
 
 # ── Settings endpoints ────────────────────────────────────────────────────────
@@ -286,6 +373,9 @@ def get_refresh_settings(db: Session = Depends(get_db)):
         "rebuild_facts": cfg.rebuild_facts,
         "rebuild_movement": cfg.rebuild_movement,
         "rebuild_stock": cfg.rebuild_stock,
+        "schedule_enabled": cfg.schedule_enabled,
+        "schedule_frequency": cfg.schedule_frequency,
+        "schedule_time": cfg.schedule_time,
         "updated_at": cfg.updated_at.isoformat() if cfg.updated_at else None,
     }
 
@@ -303,10 +393,86 @@ def update_refresh_settings(payload: RefreshSettingsSchema, db: Session = Depend
     cfg.rebuild_facts = payload.rebuild_facts
     cfg.rebuild_movement = payload.rebuild_movement
     cfg.rebuild_stock = payload.rebuild_stock
+    cfg.schedule_enabled = payload.schedule_enabled
+    cfg.schedule_frequency = payload.schedule_frequency
+    cfg.schedule_time = payload.schedule_time
     cfg.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(cfg)
+
+    # Update APScheduler with new settings
+    try:
+        from app.services.scheduler_service import reschedule
+        reschedule(cfg)
+    except Exception as e:
+        print(f"[scheduler] Failed to reschedule after settings update: {e}", flush=True)
+
     return {"status": "ok", "message": "Settings saved"}
+
+
+# ── Data freshness indicator ──────────────────────────────────────────────────
+
+@router.get("/freshness")
+def get_freshness(db: Session = Depends(get_db)):
+    """Return the most recent successful refresh for the dashboard freshness badge."""
+    last_job = (
+        db.query(RefreshJob)
+        .filter(RefreshJob.status == "done")
+        .order_by(desc(RefreshJob.finished_at))
+        .first()
+    )
+
+    now = datetime.now(timezone.utc)
+
+    if last_job and last_job.finished_at:
+        finished = last_job.finished_at
+        if finished.tzinfo is None:
+            finished = finished.replace(tzinfo=timezone.utc)
+        hours_ago = (now - finished).total_seconds() / 3600
+
+        if hours_ago < 26:
+            status = "ok"
+        elif hours_ago < 50:
+            status = "stale"
+        else:
+            status = "overdue"
+
+        return {
+            "last_refresh": finished.isoformat(),
+            "hours_ago": round(hours_ago, 1),
+            "status": status,
+            "trigger_type": last_job.trigger_type,
+            "companies": last_job.companies,
+        }
+
+    # Check legacy RefreshRun table too
+    last_run = (
+        db.query(RefreshRun)
+        .filter(RefreshRun.status == "success")
+        .order_by(desc(RefreshRun.finished_at))
+        .first()
+    )
+    if last_run and last_run.finished_at:
+        finished = last_run.finished_at
+        if finished.tzinfo is None:
+            finished = finished.replace(tzinfo=timezone.utc)
+        hours_ago = (now - finished).total_seconds() / 3600
+        status = "ok" if hours_ago < 26 else ("stale" if hours_ago < 50 else "overdue")
+        return {
+            "last_refresh": finished.isoformat(),
+            "hours_ago": round(hours_ago, 1),
+            "status": status,
+            "trigger_type": "manual",
+            "companies": [],
+        }
+
+    return {
+        "last_refresh": None,
+        "hours_ago": None,
+        "status": "unknown",
+        "trigger_type": None,
+        "companies": [],
+    }
 
 
 # ── Default refresh ───────────────────────────────────────────────────────────
@@ -336,6 +502,7 @@ async def default_refresh(background_tasks: BackgroundTasks, db: Session = Depen
         cfg.rebuild_facts,
         cfg.rebuild_movement,
         cfg.rebuild_stock,
+        "manual",
     )
 
     return {
@@ -372,6 +539,7 @@ async def custom_refresh(payload: CustomRefreshRequest, background_tasks: Backgr
         payload.rebuild_facts,
         payload.rebuild_movement,
         payload.rebuild_stock,
+        "manual",
     )
 
     return {
@@ -403,14 +571,15 @@ def list_refresh_jobs():
 # ── Refresh history from DB ───────────────────────────────────────────────────
 
 @router.get("/history")
-def refresh_history(limit: int = 50, db: Session = Depends(get_db)):
-    runs = (
-        db.query(RefreshRun)
-        .order_by(desc(RefreshRun.started_at))
+def refresh_history(limit: int = 100, db: Session = Depends(get_db)):
+    """Return job-level history from refresh_jobs table."""
+    jobs = (
+        db.query(RefreshJob)
+        .order_by(desc(RefreshJob.started_at))
         .limit(limit)
         .all()
     )
-    return [serialize_refresh_run(r) for r in runs]
+    return [_serialize_refresh_job(j) for j in jobs]
 
 
 # ── Legacy full-refresh endpoint (kept for backward compatibility) ─────────────
@@ -445,6 +614,7 @@ async def full_refresh(
         True,   # rebuild_facts
         True,   # rebuild_movement
         include_stock,
+        "manual",
     )
     return {"job_id": job_id, "message": "Refresh started", "companies": cos}
 

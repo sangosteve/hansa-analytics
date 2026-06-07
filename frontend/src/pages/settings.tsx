@@ -678,6 +678,79 @@ export default function SettingsPage() {
                   </div>
                 </section>
 
+                <div className="h-px bg-border" />
+
+                {/* Scheduled Refresh */}
+                <section>
+                  <h2 className="text-xs font-semibold text-foreground mb-0.5">Scheduled Refresh</h2>
+                  <p className="text-[11px] text-muted-foreground mb-3">
+                    Automatically refresh data on a schedule. Uses the same pipeline and components selected above.
+                  </p>
+                  <div className="space-y-4">
+                    <Toggle
+                      checked={draft.schedule_enabled ?? false}
+                      onChange={(v) => set("schedule_enabled", v)}
+                      label="Enable Scheduled Refresh"
+                      desc="Run the refresh pipeline automatically — no manual trigger required"
+                    />
+
+                    {draft.schedule_enabled && (
+                      <>
+                        {/* Frequency */}
+                        <div>
+                          <p className="text-[11px] font-medium text-foreground mb-2">Frequency</p>
+                          <div className="flex gap-2">
+                            {(["daily", "weekly", "monthly"] as const).map((freq) => (
+                              <button
+                                key={freq}
+                                onClick={() => set("schedule_frequency", freq)}
+                                className={`h-8 px-4 rounded-md border text-xs font-medium capitalize transition-colors ${
+                                  draft.schedule_frequency === freq
+                                    ? "border-primary bg-primary/10 text-primary"
+                                    : "border-border bg-secondary text-muted-foreground hover:text-foreground hover:bg-accent/30"
+                                }`}
+                              >
+                                {freq}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Time */}
+                        <div>
+                          <p className="text-[11px] font-medium text-foreground mb-2">Refresh Time <span className="font-normal text-muted-foreground">(server UTC)</span></p>
+                          <div className="flex items-center gap-3">
+                            <input
+                              type="time"
+                              value={draft.schedule_time ?? "02:00"}
+                              onChange={(e) => set("schedule_time", e.target.value)}
+                              className="h-8 px-2 text-xs rounded-md border border-border bg-secondary text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50"
+                            />
+                            <div className="flex gap-1.5">
+                              {["00:00", "02:00", "04:00", "06:00"].map((t) => (
+                                <button
+                                  key={t}
+                                  onClick={() => set("schedule_time", t)}
+                                  className={`h-6 px-2 text-[10px] rounded border transition-colors ${
+                                    draft.schedule_time === t
+                                      ? "border-primary/60 bg-primary/10 text-primary"
+                                      : "border-border bg-secondary text-muted-foreground hover:text-foreground hover:bg-accent/30"
+                                  }`}
+                                >
+                                  {t}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                          <p className="text-[10px] text-muted-foreground mt-1.5">
+                            Default is 02:00 AM UTC — off-peak, before the business day starts.
+                          </p>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </section>
+
                 {/* Save button */}
                 <div className="flex items-center gap-3 pt-2">
                   <button
@@ -730,12 +803,12 @@ export default function SettingsPage() {
 
             {!historyLoading && history.length > 0 && (
               <div className="overflow-x-auto rounded-md border border-border">
-                <table className="w-full text-[11px]">
+                <table className="w-full text-[11px] min-w-[700px]">
                   <thead>
                     <tr className="border-b border-border bg-card/60">
-                      <th className="text-left px-3 py-2 text-[10px] uppercase tracking-widest text-muted-foreground/60 font-semibold">ID</th>
                       <th className="text-left px-3 py-2 text-[10px] uppercase tracking-widest text-muted-foreground/60 font-semibold">Status</th>
-                      <th className="text-left px-3 py-2 text-[10px] uppercase tracking-widest text-muted-foreground/60 font-semibold">Company</th>
+                      <th className="text-left px-3 py-2 text-[10px] uppercase tracking-widest text-muted-foreground/60 font-semibold">Trigger</th>
+                      <th className="text-left px-3 py-2 text-[10px] uppercase tracking-widest text-muted-foreground/60 font-semibold">Companies</th>
                       <th className="text-left px-3 py-2 text-[10px] uppercase tracking-widest text-muted-foreground/60 font-semibold">Date Range</th>
                       <th className="text-left px-3 py-2 text-[10px] uppercase tracking-widest text-muted-foreground/60 font-semibold">Records</th>
                       <th className="text-left px-3 py-2 text-[10px] uppercase tracking-widest text-muted-foreground/60 font-semibold">Started</th>
@@ -745,19 +818,40 @@ export default function SettingsPage() {
                   <tbody className="divide-y divide-border/50">
                     {history.map((row) => (
                       <tr key={row.id} className="hover:bg-accent/10 transition-colors">
-                        <td className="px-3 py-2 text-muted-foreground">#{row.id}</td>
                         <td className="px-3 py-2">
-                          <StatusBadge status={row.status} />
+                          <div className="flex items-center gap-1.5">
+                            <StatusBadge status={row.status} />
+                            {row.error_count > 0 && (
+                              <span className="text-[9px] text-red-400">{row.error_count} error{row.error_count > 1 ? "s" : ""}</span>
+                            )}
+                          </div>
                         </td>
-                        <td className="px-3 py-2 text-foreground/70">{row.company_no}</td>
+                        <td className="px-3 py-2">
+                          <span className={`inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded ${
+                            row.trigger_type === "scheduled"
+                              ? "bg-primary/10 text-primary"
+                              : "bg-secondary text-muted-foreground"
+                          }`}>
+                            {row.trigger_type === "scheduled" ? "⏱ Scheduled" : "Manual"}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-foreground/70">
+                          {row.companies?.length ? row.companies.join(", ") : "—"}
+                        </td>
                         <td className="px-3 py-2 text-foreground/70">
                           {row.date_from && row.date_to ? `${row.date_from} → ${row.date_to}` : "—"}
                         </td>
                         <td className="px-3 py-2 text-foreground/70">
-                          {row.records_processed?.toLocaleString() ?? "—"}
+                          {row.total_records?.toLocaleString() ?? "—"}
                         </td>
                         <td className="px-3 py-2 text-foreground/70">{formatDt(row.started_at)}</td>
-                        <td className="px-3 py-2 text-foreground/70">{duration(row.started_at, row.finished_at)}</td>
+                        <td className="px-3 py-2 text-foreground/70">
+                          {row.duration_secs != null
+                            ? row.duration_secs < 60
+                              ? `${row.duration_secs}s`
+                              : `${Math.floor(row.duration_secs / 60)}m ${row.duration_secs % 60}s`
+                            : duration(row.started_at, row.finished_at)}
+                        </td>
                       </tr>
                     ))}
                   </tbody>

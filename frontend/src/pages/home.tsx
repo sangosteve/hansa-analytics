@@ -1,22 +1,25 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-  ArrowReloadHorizontalIcon,
   ChartUpIcon,
   Building01Icon,
   Alert01Icon,
   ChartDownIcon,
   Activity01Icon,
   Package01Icon,
+  CheckmarkCircle01Icon,
+  AlertCircleIcon,
+  Clock01Icon,
 } from "hugeicons-react";
 import ReactECharts from "echarts-for-react";
 
 import {
   getSalesSummary,
   getPredictiveInsights,
+  getRefreshFreshness,
   type SalesSummaryResponse,
   type PredictiveInsightsResponse,
+  type RefreshFreshness,
 } from "@/lib/api";
-import { Button } from "@/components/ui/button";
 import AIFloatingDrawer from "@/components/ai/ai-floating-drawer";
 import { useCompany } from "@/lib/company-context";
 import { CustomerDrilldownModal } from "@/components/home/customer-drilldown-modal";
@@ -56,6 +59,56 @@ function trendIcon(trend: string) {
   return <Activity01Icon size={12} className="text-yellow-400" />;
 }
 
+function DataFreshnessIndicator({ freshness }: { freshness: RefreshFreshness | null }) {
+  if (!freshness) return null;
+
+  const { status, last_refresh, hours_ago } = freshness;
+
+  let label = "Unknown";
+  let dotClass = "bg-muted-foreground/40";
+  let textClass = "text-muted-foreground";
+
+  if (status === "ok") {
+    dotClass = "bg-emerald-400";
+    textClass = "text-emerald-400";
+    label = "Up to date";
+  } else if (status === "stale") {
+    dotClass = "bg-yellow-400";
+    textClass = "text-yellow-400";
+    label = hours_ago != null ? `${Math.round(hours_ago)}h old` : "Stale";
+  } else if (status === "overdue") {
+    dotClass = "bg-red-400";
+    textClass = "text-red-400";
+    label = "Refresh overdue";
+  } else if (status === "unknown" || !last_refresh) {
+    return (
+      <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground/60">
+        <Clock01Icon size={12} />
+        No data yet
+      </span>
+    );
+  }
+
+  const d = last_refresh ? new Date(last_refresh) : null;
+  const timeStr = d
+    ? d.toLocaleString("en-AU", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })
+    : "";
+
+  const Icon = status === "ok" ? CheckmarkCircle01Icon : status === "overdue" ? AlertCircleIcon : Clock01Icon;
+
+  return (
+    <span
+      className={`flex items-center gap-1.5 text-[10px] font-medium ${textClass}`}
+      title={`Last refreshed: ${timeStr}`}
+    >
+      <span className={`h-1.5 w-1.5 rounded-full flex-shrink-0 ${dotClass}`} />
+      <Icon size={11} className="flex-shrink-0" />
+      {label}
+      {timeStr && <span className="text-muted-foreground font-normal hidden sm:inline">· {timeStr}</span>}
+    </span>
+  );
+}
+
 const darkChartBase = {
   backgroundColor: "transparent",
   textStyle: { color: "#8b949e" },
@@ -70,9 +123,9 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [momLoading, setMomLoading] = useState(true);
   const [predictiveLoading, setPredictiveLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedRisk, setSelectedRisk] = useState<PredictiveInsightsResponse["customer_lapse_risk"][0] | null>(null);
+  const [freshness, setFreshness] = useState<RefreshFreshness | null>(null);
 
   // Loads date-filtered KPI data + predictive (re-runs on any filter change)
   const loadFiltered = async () => {
@@ -108,16 +161,35 @@ export default function Home() {
     }
   };
 
+  const loadFreshness = async () => {
+    try {
+      const f = await getRefreshFreshness();
+      setFreshness(f);
+    } catch {
+      // non-critical
+    }
+  };
+
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { loadFiltered(); }, [JSON.stringify(companyNos), saleScope, dateFrom, dateTo]);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { loadMom(); }, [JSON.stringify(companyNos), saleScope]);
 
-  const handleRefresh = async () => {
-    setRefreshing(true);
-    try { await Promise.all([loadFiltered(), loadMom()]); } finally { setRefreshing(false); }
-  };
+  // Freshness on mount
+  useEffect(() => { loadFreshness(); }, []);
+
+  // When a Hansa→Neon refresh completes, re-fetch all data automatically
+  useEffect(() => {
+    const handler = () => {
+      loadFiltered();
+      loadMom();
+      loadFreshness();
+    };
+    window.addEventListener("hansa-data-refreshed", handler);
+    return () => window.removeEventListener("hansa-data-refreshed", handler);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(companyNos), saleScope, dateFrom, dateTo]);
 
   // Date-filtered rows → KPI numbers, division breakdown
   const salesRows = summary?.monthly_sales ?? [];
@@ -317,11 +389,7 @@ export default function Home() {
               <h1 className="text-lg font-semibold tracking-tight text-foreground">Hansa Analytics</h1>
               <p className="text-xs text-muted-foreground mt-0.5">Sales tonnage dashboard — {companyLabel}</p>
             </div>
-            <Button size="sm" variant="outline" onClick={handleRefresh} disabled={refreshing || loading}
-              className="gap-1.5 text-xs h-8 border-border bg-secondary hover:bg-accent">
-              <ArrowReloadHorizontalIcon size={14} className={refreshing ? "animate-spin" : ""} />
-              {refreshing ? "Refreshing…" : "Refresh"}
-            </Button>
+            <DataFreshnessIndicator freshness={freshness} />
           </div>
 
           {/* Date range display */}
