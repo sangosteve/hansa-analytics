@@ -5,3 +5,5 @@
 - [Hansa client pagination](hansa-pagination.md) — Hansa REST uses ?offset=N&limit=N (not start/skip/page). Master data OOM fix: stream via iter_pages() + bulk-upsert per page. Use run_master_data.py for master sync.
 - [Vite proxy required](vite-proxy.md) — frontend/vite.config.ts must have server.proxy for /api → http://localhost:8080 or all API calls return HTML 404.
 - [AI Insights architecture](ai-insights-architecture.md) — 4-step orchestration: classify_intent → plan_steps (AI) → execute_tools (safe analytics_tools only) → synthesize; business_context.py is single source of truth for company mapping and glossary
+- [Phase 1 DB schema](phase1-schema.md) — new tables: hansa_receipts (IPVc), hansa_order_headers/lines (SOVc), gl_accounts (AccVc company 1); new cols on hansa_invoice_headers: pay_date/pay_days/currency_code/cred_inv/sum1/sum4/base_sum4; new RefreshSettings bools: include_orders/receipts/gl_accounts (migration 65d9b37e342b)
+- [Alembic bool column pattern](alembic-bool-column.md) — when adding NOT NULL boolean columns to a table that already has rows, add server_default=sa.false() or migration will fail with NotNullViolation

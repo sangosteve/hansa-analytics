@@ -1,9 +1,7 @@
 """
-Invoice source refresh service.
-Fetches stock-updating invoices from Hansa for a given company and date range,
-applying a range-reload strategy (delete then insert) to keep source data current.
-Stores financial header fields (Sum1, Sum4, BaseSum4, PayDate, PDays, CurncyCode, CredInv)
-added in Phase 1 for revenue and profitability analytics.
+Sales order source refresh service.
+Fetches sales orders (SOVc register) from Hansa per company and date range.
+Uses range-reload strategy: delete existing rows for the period, then insert fresh data.
 """
 
 import hashlib
@@ -15,7 +13,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.db.models import HansaInvoiceHeader, HansaInvoiceLine, RefreshRun
+from app.db.models import HansaOrderHeader, HansaOrderLine, RefreshRun
 from app.services.hansa_client import HansaClient
 
 
@@ -46,12 +44,6 @@ def to_int(value: Any) -> int | None:
         return None
 
 
-def parse_date(value: Any) -> date:
-    if isinstance(value, date):
-        return value
-    return datetime.strptime(str(value), "%Y-%m-%d").date()
-
-
 def parse_date_or_none(value: Any) -> date | None:
     if value is None or value == "" or value == "0000-00-00":
         return None
@@ -64,11 +56,11 @@ def parse_date_or_none(value: Any) -> date | None:
 
 
 def make_source_row_hash(*values: object) -> str:
-    raw = "|".join("" if value is None else str(value) for value in values)
+    raw = "|".join("" if v is None else str(v) for v in values)
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
-async def refresh_invoice_source(
+async def refresh_order_source(
     db: Session,
     date_from: date,
     date_to: date,
@@ -78,12 +70,11 @@ async def refresh_invoice_source(
 
     refresh_run = RefreshRun(
         company_no=company_no,
-        refresh_type="source_invoices",
+        refresh_type="source_orders",
         status="running",
         date_from=date_from,
         date_to=date_to,
     )
-
     db.add(refresh_run)
     db.commit()
     db.refresh(refresh_run)
@@ -91,68 +82,55 @@ async def refresh_invoice_source(
     client = HansaClient(company_no=company_no)
 
     try:
-        invoices = await client.get_invoices(
+        orders = await client.get_sales_orders(
             date_from.isoformat(),
             date_to.isoformat(),
         )
 
-        # Range reload: delete existing source invoice rows for this period.
+        # Range reload: delete existing orders for this company and period
         db.execute(
             text("""
-                DELETE FROM hansa_invoice_lines il
-                USING hansa_invoice_headers ih
-                WHERE il.company_no = ih.company_no
-                  AND il.ser_nr = ih.ser_nr
-                  AND ih.company_no = :company_no
-                  AND ih.inv_date >= :date_from
-                  AND ih.inv_date <= :date_to;
+                DELETE FROM hansa_order_lines ol
+                USING hansa_order_headers oh
+                WHERE ol.company_no = oh.company_no
+                  AND ol.ser_nr = oh.ser_nr
+                  AND oh.company_no = :company_no
+                  AND oh.order_date >= :date_from
+                  AND oh.order_date <= :date_to
             """),
             {"company_no": company_no, "date_from": date_from, "date_to": date_to},
         )
         db.execute(
             text("""
-                DELETE FROM hansa_invoice_headers
+                DELETE FROM hansa_order_headers
                 WHERE company_no = :company_no
-                  AND inv_date >= :date_from
-                  AND inv_date <= :date_to;
+                  AND order_date >= :date_from
+                  AND order_date <= :date_to
             """),
             {"company_no": company_no, "date_from": date_from, "date_to": date_to},
         )
 
-        headers: list[HansaInvoiceHeader] = []
-        lines: list[HansaInvoiceLine] = []
+        headers: list[HansaOrderHeader] = []
+        lines: list[HansaOrderLine] = []
         skipped_headers = 0
         skipped_lines = 0
 
-        for document in invoices:
+        for document in orders:
             ser_nr = str(document.get("SerNr") or "")
-            inv_date_value = document.get("InvDate") or document.get("TransDate")
-
-            if not ser_nr or not inv_date_value:
+            if not ser_nr:
                 skipped_headers += 1
                 continue
 
-            inv_date = parse_date(inv_date_value)
-
             headers.append(
-                HansaInvoiceHeader(
+                HansaOrderHeader(
                     company_no=company_no,
                     ser_nr=ser_nr,
-                    inv_date=inv_date,
-                    cust_code=document.get("CustCode"),
-                    order_no=document.get("OrderNr") or None,
-                    pay_deal=document.get("PayDeal"),
+                    cust_code=document.get("CustCode") or None,
+                    order_date=parse_date_or_none(document.get("OrderDate")),
+                    sales_man=document.get("SalesMan") or None,
                     ok_flag=to_int(document.get("OKFlag")),
-                    inv_type=document.get("InvType"),
-                    cred_mark=document.get("CredMark"),
-                    sales_man=document.get("SalesMan"),
-                    upd_stock_flag=to_int(document.get("UpdStockFlag")),
-                    location=document.get("Location"),
-                    # Phase 1: financial enrichment fields
-                    pay_date=parse_date_or_none(document.get("PayDate")),
-                    pay_days=to_int(document.get("PDays") or document.get("pdays")),
                     currency_code=document.get("CurncyCode") or None,
-                    cred_inv=document.get("CredInv") or None,
+                    pay_deal=document.get("PayDeal") or None,
                     sum1=to_decimal_or_none(document.get("Sum1")),
                     sum4=to_decimal_or_none(document.get("Sum4")),
                     base_sum4=to_decimal_or_none(document.get("BaseSum4")),
@@ -162,19 +140,16 @@ async def refresh_invoice_source(
             )
 
             document_rows = document.get("rows") or []
-
             for index, line in enumerate(document_rows):
                 row_number = str(line.get("@rownumber") or index)
 
                 source_row_hash = make_source_row_hash(
                     company_no,
-                    "invoice",
+                    "order",
                     ser_nr,
                     row_number,
                     line.get("ArtCode"),
                     line.get("Quant"),
-                    line.get("Location"),
-                    line.get("NotUpdStockFlag"),
                 )
 
                 if not row_number:
@@ -182,14 +157,15 @@ async def refresh_invoice_source(
                     continue
 
                 lines.append(
-                    HansaInvoiceLine(
+                    HansaOrderLine(
                         company_no=company_no,
                         ser_nr=ser_nr,
                         row_number=row_number,
-                        art_code=line.get("ArtCode"),
+                        art_code=line.get("ArtCode") or None,
                         quant=to_decimal(line.get("Quant")),
-                        not_upd_stock_flag=to_int(line.get("NotUpdStockFlag")),
-                        location=line.get("Location"),
+                        price=to_decimal_or_none(line.get("Price")),
+                        disc=to_decimal_or_none(line.get("Disc")),
+                        amount=to_decimal_or_none(line.get("Amount") or line.get("Sum")),
                         source_row_hash=source_row_hash,
                     )
                 )
@@ -203,12 +179,10 @@ async def refresh_invoice_source(
         refresh_run.finished_at = datetime.now(timezone.utc)
         refresh_run.records_processed = len(headers) + len(lines)
         refresh_run.message = (
-            f"Invoice source refreshed. company={company_no} "
-            f"Documents: {len(invoices)}. "
-            f"Headers: {len(headers)}. Lines: {len(lines)}. "
+            f"Orders source refreshed. company={company_no} "
+            f"Fetched: {len(orders)}. Headers: {len(headers)}. Lines: {len(lines)}. "
             f"Skipped headers: {skipped_headers}. Skipped lines: {skipped_lines}."
         )
-
         db.commit()
         db.refresh(refresh_run)
         return refresh_run

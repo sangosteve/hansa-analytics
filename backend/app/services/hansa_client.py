@@ -135,9 +135,10 @@ class HansaClient:
 
     async def get_invoices(self, date_from: str, date_to: str) -> list[dict]:
         """
-        Fetch stock-updating invoices (UpdStockFlag=1) for the date range.
-        OrderNr is included so deliveries can be linked back to their
-        originating invoice for salesperson attribution.
+        Fetch stock-updating invoices (UpdStockFlag=1, OKFlag=1) for the date range.
+        Includes financial fields (Sum1, Sum4, BaseSum4, PayDate, PDays, CurncyCode, CredInv)
+        added in Phase 1 for revenue and profitability analytics.
+        OrderNr is included so deliveries can be linked back for salesperson attribution.
         """
         return await self._get(
             f"api/{self.company_no}/IVVc"
@@ -146,7 +147,8 @@ class HansaClient:
             f"&filter.OKFlag=1"
             f"&filter.UpdStockFlag=1"
             f"&fields=SerNr,InvDate,CustCode,OrderNr,ArtCode,Quant,Location,"
-            f"NotUpdStockFlag,UpdStockFlag,SalesMan,PayDeal,CredMark,InvType,OKFlag"
+            f"NotUpdStockFlag,UpdStockFlag,SalesMan,PayDeal,CredMark,InvType,OKFlag,"
+            f"PayDate,PDays,CurncyCode,CredInv,Sum1,Sum4,BaseSum4"
         )
 
     async def get_deliveries(self, date_from: str, date_to: str) -> list[dict]:
@@ -156,6 +158,44 @@ class HansaClient:
             f"&range={date_from}:{date_to}"
             f"&filter.OKFlag=1"
             f"&fields=SerNr,OrderNr,ShipDate,CustCode,ArtCode,Ship,Location,Weight,OKFlag"
+        )
+
+    async def get_receipts(self, date_from: str, date_to: str) -> list[dict]:
+        """
+        Fetch customer payment receipts (IPVc register) for the date range.
+        Receipts are fetched per company (self.company_no).
+        Fields: SerNr, CustCode, TransDate, InvoiceNr, InvCurncy, PayDate,
+                RecCurncy, RecVal, OkFlag.
+        """
+        return await self._get(
+            f"api/{self.company_no}/IPVc"
+            f"?sort=TransDate"
+            f"&range={date_from}:{date_to}"
+            f"&fields=SerNr,CustCode,TransDate,InvoiceNr,InvCurncy,PayDate,RecCurncy,RecVal,OkFlag"
+        )
+
+    async def get_sales_orders(self, date_from: str, date_to: str) -> list[dict]:
+        """
+        Fetch sales orders (SOVc register) for the date range.
+        Fetched per company (self.company_no).
+        Fields include header financials and line items.
+        """
+        return await self._get(
+            f"api/{self.company_no}/SOVc"
+            f"?sort=OrderDate"
+            f"&range={date_from}:{date_to}"
+            f"&fields=SerNr,CustCode,OrderDate,SalesMan,OKFlag,CurncyCode,"
+            f"PayDeal,Sum1,Sum4,BaseSum4"
+        )
+
+    async def get_gl_accounts(self, company_no: str = "1") -> list[dict]:
+        """
+        Fetch GL accounts (AccVc register) from the master company.
+        Always fetched from company 1 (the master/holding company).
+        """
+        return await self._get_paginated(
+            f"api/{company_no}/AccVc"
+            f"?fields=AccNumber,Comment,AccType,Curncy,GroupAcc"
         )
 
     async def get_item_stock_status(self, location: str) -> list[dict]:

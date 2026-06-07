@@ -32,10 +32,13 @@ from app.schemas.refresh import (
     TransactionRefreshRequest,
 )
 from app.services.fact_sales_service import rebuild_fact_sales_lines
+from app.services.gl_accounts_service import refresh_gl_accounts
 from app.services.master_data_service import refresh_master_data
 from app.services.movement_service import rebuild_customer_product_group_movement
 from app.services.source_delivery_service import refresh_delivery_source
 from app.services.source_invoice_service import refresh_invoice_source
+from app.services.source_order_service import refresh_order_source
+from app.services.source_receipt_service import refresh_receipt_source
 from app.services.stock_service import COMPANY_LOCATIONS, refresh_stock_status
 from app.services.transaction_service import refresh_transactions
 
@@ -233,6 +236,9 @@ async def _run_pipeline(
     include_master: bool,
     include_invoices: bool,
     include_deliveries: bool,
+    include_orders: bool,
+    include_receipts: bool,
+    include_gl_accounts: bool,
     rebuild_facts: bool,
     rebuild_movement: bool,
     rebuild_stock: bool,
@@ -289,6 +295,32 @@ async def _run_pipeline(
                 finally:
                     db.close()
 
+            if include_orders:
+                _log(job_id, f"Refreshing sales orders [{label}]...")
+                db = SessionLocal()
+                try:
+                    r = await refresh_order_source(db, date_from, date_to, co)
+                    _add_step(job_id, co, "orders", r.status, r.records_processed, r.message or "")
+                    _log(job_id, f"  orders [{label}] → {r.status} ({r.records_processed})")
+                except Exception as e:
+                    _add_step(job_id, co, "orders", "error", 0, str(e))
+                    _log(job_id, f"  orders [{label}] ERROR: {e}")
+                finally:
+                    db.close()
+
+            if include_receipts:
+                _log(job_id, f"Refreshing customer receipts [{label}]...")
+                db = SessionLocal()
+                try:
+                    r = await refresh_receipt_source(db, date_from, date_to, co)
+                    _add_step(job_id, co, "receipts", r.status, r.records_processed, r.message or "")
+                    _log(job_id, f"  receipts [{label}] → {r.status} ({r.records_processed})")
+                except Exception as e:
+                    _add_step(job_id, co, "receipts", "error", 0, str(e))
+                    _log(job_id, f"  receipts [{label}] ERROR: {e}")
+                finally:
+                    db.close()
+
             if rebuild_facts:
                 _log(job_id, f"Rebuilding sales facts [{label}]...")
                 db = SessionLocal()
@@ -334,6 +366,20 @@ async def _run_pipeline(
                 finally:
                     db.close()
 
+        # ── GL Accounts ───────────────────────────────────────────────────────
+        if include_gl_accounts:
+            _log(job_id, "Refreshing GL accounts (master company)...")
+            db = SessionLocal()
+            try:
+                r = await refresh_gl_accounts(db)
+                _add_step(job_id, "all", "gl_accounts", r.status, r.records_processed, r.message or "")
+                _log(job_id, f"  gl-accounts → {r.status} ({r.records_processed})")
+            except Exception as e:
+                _add_step(job_id, "all", "gl_accounts", "error", 0, str(e))
+                _log(job_id, f"  gl-accounts ERROR: {e}")
+            finally:
+                db.close()
+
         # ── Done ──────────────────────────────────────────────────────────────
         has_errors = any(s["status"] == "error" for s in job["steps"])
         final_status = "error" if has_errors else "done"
@@ -370,6 +416,9 @@ def get_refresh_settings(db: Session = Depends(get_db)):
         "include_master": cfg.include_master,
         "include_invoices": cfg.include_invoices,
         "include_deliveries": cfg.include_deliveries,
+        "include_orders": cfg.include_orders,
+        "include_receipts": cfg.include_receipts,
+        "include_gl_accounts": cfg.include_gl_accounts,
         "rebuild_facts": cfg.rebuild_facts,
         "rebuild_movement": cfg.rebuild_movement,
         "rebuild_stock": cfg.rebuild_stock,
@@ -390,6 +439,9 @@ def update_refresh_settings(payload: RefreshSettingsSchema, db: Session = Depend
     cfg.include_master = payload.include_master
     cfg.include_invoices = payload.include_invoices
     cfg.include_deliveries = payload.include_deliveries
+    cfg.include_orders = payload.include_orders
+    cfg.include_receipts = payload.include_receipts
+    cfg.include_gl_accounts = payload.include_gl_accounts
     cfg.rebuild_facts = payload.rebuild_facts
     cfg.rebuild_movement = payload.rebuild_movement
     cfg.rebuild_stock = payload.rebuild_stock
@@ -499,6 +551,9 @@ async def default_refresh(background_tasks: BackgroundTasks, db: Session = Depen
         cfg.include_master,
         cfg.include_invoices,
         cfg.include_deliveries,
+        cfg.include_orders,
+        cfg.include_receipts,
+        cfg.include_gl_accounts,
         cfg.rebuild_facts,
         cfg.rebuild_movement,
         cfg.rebuild_stock,
@@ -536,6 +591,9 @@ async def custom_refresh(payload: CustomRefreshRequest, background_tasks: Backgr
         payload.include_master,
         payload.include_invoices,
         payload.include_deliveries,
+        payload.include_orders,
+        payload.include_receipts,
+        payload.include_gl_accounts,
         payload.rebuild_facts,
         payload.rebuild_movement,
         payload.rebuild_stock,
@@ -611,6 +669,9 @@ async def full_refresh(
         True,   # include_master
         True,   # include_invoices
         True,   # include_deliveries
+        False,  # include_orders
+        False,  # include_receipts
+        False,  # include_gl_accounts
         True,   # rebuild_facts
         True,   # rebuild_movement
         include_stock,

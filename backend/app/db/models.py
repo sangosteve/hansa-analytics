@@ -53,6 +53,9 @@ class RefreshSettings(Base):
     include_master: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     include_invoices: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     include_deliveries: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    include_orders: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    include_receipts: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    include_gl_accounts: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     rebuild_facts: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     rebuild_movement: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     rebuild_stock: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
@@ -333,6 +336,15 @@ class HansaInvoiceHeader(Base):
     order_no: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, index=True)
     location: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, index=True)
 
+    # ── Phase 1: Financial enrichment fields ──────────────────────────────────
+    pay_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    pay_days: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    currency_code: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    cred_inv: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    sum1: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 4), nullable=True)
+    sum4: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 4), nullable=True)
+    base_sum4: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 4), nullable=True)
+
     source_sequence: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     source_url: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
@@ -534,4 +546,138 @@ class FactSalesLine(Base):
             "source_row_hash",
             name="uq_fact_sales_lines_source_hash",
         ),
+    )
+
+
+# ── Phase 1: New models ────────────────────────────────────────────────────────
+
+class HansaReceipt(Base):
+    """
+    Customer payment receipts (IPVc register) — one row per receipt per company.
+    Receipts are fetched per company over a date range.
+    """
+    __tablename__ = "hansa_receipts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+
+    company_no: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+
+    ser_nr: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    cust_code: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, index=True)
+    trans_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True, index=True)
+    invoice_nr: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, index=True)
+    inv_curncy: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    pay_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    rec_curncy: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    rec_val: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 4), nullable=True)
+    ok_flag: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+
+    fetched_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+    )
+
+    __table_args__ = (
+        UniqueConstraint("company_no", "ser_nr", name="uq_hansa_receipts_company_sernr"),
+    )
+
+
+class HansaOrderHeader(Base):
+    """
+    Sales order headers (SOVc register) — one row per order per company.
+    """
+    __tablename__ = "hansa_order_headers"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+
+    company_no: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+
+    ser_nr: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    cust_code: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, index=True)
+    order_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True, index=True)
+    sales_man: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, index=True)
+    ok_flag: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    currency_code: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    pay_deal: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    sum1: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 4), nullable=True)
+    sum4: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 4), nullable=True)
+    base_sum4: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 4), nullable=True)
+
+    source_sequence: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    source_url: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+
+    fetched_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+    )
+
+    __table_args__ = (
+        UniqueConstraint("company_no", "ser_nr", name="uq_hansa_order_headers_company_sernr"),
+    )
+
+
+class HansaOrderLine(Base):
+    """
+    Sales order lines — one row per line item per order per company.
+    """
+    __tablename__ = "hansa_order_lines"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+
+    company_no: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+
+    ser_nr: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    row_number: Mapped[str] = mapped_column(String(50), nullable=False)
+
+    art_code: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, index=True)
+    quant: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False, default=0)
+    price: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 4), nullable=True)
+    disc: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 4), nullable=True)
+    amount: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 4), nullable=True)
+
+    source_row_hash: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+
+    fetched_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "company_no",
+            "ser_nr",
+            "row_number",
+            name="uq_hansa_order_lines_company_sernr_row",
+        ),
+        UniqueConstraint(
+            "company_no",
+            "source_row_hash",
+            name="uq_hansa_order_lines_source_hash",
+        ),
+    )
+
+
+class GlAccount(Base):
+    """
+    General Ledger accounts (AccVc register) — fetched from master company (1) only.
+    Used as a dimension for financial P&L analytics.
+    """
+    __tablename__ = "gl_accounts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+
+    company_no: Mapped[str] = mapped_column(String(20), nullable=False, default="1")
+    acc_number: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    comment: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    acc_type: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
+    curncy: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    group_acc: Mapped[Optional[str]] = mapped_column(String(50), nullable=True, index=True)
+
+    fetched_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+    )
+
+    __table_args__ = (
+        UniqueConstraint("company_no", "acc_number", name="uq_gl_accounts_company_accnr"),
     )
