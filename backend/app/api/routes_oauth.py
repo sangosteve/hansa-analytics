@@ -213,8 +213,13 @@ async def oauth_callback(
             error, error_description or "(no description)",
         )
         dest = _frontend_settings_url(state)
+        # Forward both the error code and the human-readable description to the frontend
+        from urllib.parse import urlencode as _ue
+        err_params = {"oauth_error": error}
+        if error_description:
+            err_params["oauth_error_desc"] = error_description
         return RedirectResponse(
-            url=f"{dest}?oauth_error={error}",
+            url=f"{dest}?{_ue(err_params)}",
             status_code=302,
         )
 

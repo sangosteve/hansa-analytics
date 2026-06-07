@@ -177,13 +177,17 @@ function IntegrationsTab() {
     }
     if (params.get("oauth_error")) {
       const code = params.get("oauth_error");
+      const desc = params.get("oauth_error_desc");
       const messages: Record<string, string> = {
-        not_started:   "OAuth flow was not started properly. Please click \"Connect Hansa\" to begin.",
-        missing_code:  "Authorization was not completed — no code was received from Hansa. Please try again.",
-        access_denied: "Authorization was denied. Please try again and approve the Hansa connection.",
-        wrong_redirect: "The redirect URI sent to Hansa doesn't match the one registered in your StandardID developer app. Make sure HANSA_OAUTH_REDIRECT_URI is set to the exact callback URL registered in the Hansa developer portal.",
+        not_started:    "OAuth flow was not started properly. Please click \"Connect Hansa\" to begin.",
+        missing_code:   "Authorization was not completed — no code was received from Hansa. Please try again.",
+        missing_state:  "Authorization was not completed — state parameter missing (possible CSRF). Please try again.",
+        access_denied:  "Authorization was denied. Please try again and approve the Hansa connection.",
+        wrong_redirect: "Hansa rejected the authorization request.",
       };
-      setActionError(messages[code!] ?? `OAuth error: ${code}`);
+      const base = messages[code!] ?? `OAuth error: ${code}`;
+      // Append the raw description from Hansa so the exact reason is visible
+      setActionError(desc ? `${base} Hansa says: "${desc}"` : base);
       window.history.replaceState({}, "", window.location.pathname);
     }
   }, []);
