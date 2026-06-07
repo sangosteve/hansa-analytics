@@ -5,6 +5,8 @@ import {
   ArrowReloadHorizontalIcon,
   ArrowDown01Icon,
   CheckmarkCircle01Icon,
+  Menu01Icon,
+  Settings01Icon,
 } from "hugeicons-react";
 
 import {
@@ -13,6 +15,12 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import {
   useCompany,
   COMPANY_OPTIONS,
@@ -42,7 +50,7 @@ function nDaysAgo(n: number) {
 }
 
 // ── Date Range Picker ─────────────────────────────────────────────────────────
-function DateRangePicker() {
+function DateRangePicker({ compact = false }: { compact?: boolean }) {
   const { dateFrom, dateTo, setDateRange, resetDateRange, isAllTime } = useCompany();
 
   const from = dateFrom ?? "";
@@ -79,6 +87,54 @@ function DateRangePicker() {
       },
     },
   ];
+
+  if (compact) {
+    return (
+      <div className="space-y-3">
+        <p className="text-xs font-semibold text-foreground">Date Range</p>
+        <div className="flex flex-col gap-2">
+          <input
+            type="date"
+            value={from}
+            onChange={handleFrom}
+            className="h-9 px-3 text-sm rounded-md border border-border bg-secondary text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50 w-full"
+          />
+          <div className="flex items-center gap-2">
+            <div className="h-px flex-1 bg-border" />
+            <span className="text-muted-foreground text-xs">to</span>
+            <div className="h-px flex-1 bg-border" />
+          </div>
+          <input
+            type="date"
+            value={to}
+            onChange={handleTo}
+            className="h-9 px-3 text-sm rounded-md border border-border bg-secondary text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50 w-full"
+          />
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {PRESETS.map((p) => (
+            <button
+              key={p.label}
+              onClick={p.action}
+              className="h-7 px-2.5 text-xs rounded-md border border-border bg-secondary text-muted-foreground hover:text-foreground hover:bg-accent/30 transition-colors"
+            >
+              {p.label}
+            </button>
+          ))}
+          <button
+            onClick={resetDateRange}
+            className={`h-7 px-2.5 text-xs rounded-md border transition-colors ${
+              isAllTime
+                ? "border-primary/60 bg-primary/10 text-primary"
+                : "border-border bg-secondary text-muted-foreground hover:text-foreground hover:bg-accent/30"
+            }`}
+          >
+            All
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-1">
@@ -125,8 +181,51 @@ function DateRangePicker() {
   );
 }
 
+// ── Company selector (reusable) ───────────────────────────────────────────────
+function CompanySelector({
+  isAll, companyNos, onToggle,
+}: {
+  isAll: boolean;
+  companyNos: string[];
+  onToggle: (v: string) => void;
+}) {
+  return (
+    <div className="space-y-1">
+      <button
+        onClick={() => onToggle("all")}
+        className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-md text-xs font-medium transition-colors ${
+          isAll ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-accent/20"
+        }`}
+      >
+        <div className={`h-4 w-4 rounded border flex items-center justify-center flex-shrink-0 ${isAll ? "bg-primary border-primary" : "border-border"}`}>
+          {isAll && <CheckmarkCircle01Icon size={10} className="text-primary-foreground" />}
+        </div>
+        All Companies
+      </button>
+      <div className="h-px bg-border" />
+      {COMPANY_OPTIONS.map((co) => {
+        const checked = !isAll && companyNos.includes(co.value);
+        return (
+          <button
+            key={co.value}
+            onClick={() => onToggle(co.value)}
+            className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-md text-xs transition-colors ${
+              checked ? "text-foreground" : "text-muted-foreground hover:text-foreground hover:bg-accent/20"
+            }`}
+          >
+            <div className={`h-4 w-4 rounded border flex items-center justify-center flex-shrink-0 ${checked ? "bg-primary border-primary" : "border-border"}`}>
+              {checked && <CheckmarkCircle01Icon size={10} className="text-primary-foreground" />}
+            </div>
+            {co.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 // ── Top Bar ───────────────────────────────────────────────────────────────────
-export default function TopBar() {
+export default function TopBar({ onMobileMenuToggle }: { onMobileMenuToggle?: () => void }) {
   const [location] = useLocation();
   const {
     companyNos, setCompanyNos,
@@ -140,6 +239,7 @@ export default function TopBar() {
   const [drawerOpen, setDrawerOpen]           = useState(false);
   const [advancedOpen, setAdvancedOpen]       = useState(false);
   const [refreshMenuOpen, setRefreshMenuOpen] = useState(false);
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
 
   const isAll = companyNos.includes("all") || companyNos.length === ALL_VALUES.length || companyNos.length === 0;
 
@@ -175,92 +275,92 @@ export default function TopBar() {
 
   return (
     <>
-      <header className="flex-shrink-0 h-[60px] border-b border-border bg-card flex items-center px-5 gap-4">
-        <h1 className="font-semibold text-sm text-foreground mr-auto truncate">{pageTitle}</h1>
+      <header className="flex-shrink-0 h-[60px] border-b border-border bg-card flex items-center px-3 md:px-5 gap-2 md:gap-4">
 
-        <DateRangePicker />
+        {/* ── Mobile: hamburger ── */}
+        <button
+          onClick={onMobileMenuToggle}
+          className="lg:hidden flex items-center justify-center h-8 w-8 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/30 transition-colors flex-shrink-0"
+          aria-label="Open menu"
+        >
+          <Menu01Icon size={18} />
+        </button>
 
-        <div className="h-6 w-px bg-border/60 flex-shrink-0" />
+        {/* ── Page title (visible on all sizes, truncates) ── */}
+        <h1 className="font-semibold text-sm text-foreground truncate flex-shrink min-w-0 mr-auto md:mr-0">
+          {pageTitle}
+        </h1>
 
-        {/* Sale Type */}
-        <div className="flex items-center rounded-lg border border-border bg-secondary overflow-hidden h-8">
-          {SCOPE_OPTIONS.map((opt, i) => (
-            <button
-              key={opt.value}
-              onClick={() => setSaleScope(opt.value as SaleScope)}
-              className={`
-                px-3 h-full text-xs font-medium transition-colors cursor-pointer
-                ${i < SCOPE_OPTIONS.length - 1 ? "border-r border-border" : ""}
-                ${saleScope === opt.value
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:text-foreground hover:bg-accent/30"
-                }
-              `}
-            >
-              {opt.label}
-            </button>
-          ))}
+        {/* ── Desktop controls (hidden on mobile) ── */}
+        <div className="hidden md:flex items-center gap-3 flex-shrink-0">
+          <DateRangePicker />
+
+          <div className="h-6 w-px bg-border/60" />
+
+          {/* Sale Type */}
+          <div className="flex items-center rounded-lg border border-border bg-secondary overflow-hidden h-8">
+            {SCOPE_OPTIONS.map((opt, i) => (
+              <button
+                key={opt.value}
+                onClick={() => setSaleScope(opt.value as SaleScope)}
+                className={`
+                  px-3 h-full text-xs font-medium transition-colors cursor-pointer
+                  ${i < SCOPE_OPTIONS.length - 1 ? "border-r border-border" : ""}
+                  ${saleScope === opt.value
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground hover:bg-accent/30"
+                  }
+                `}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="h-6 w-px bg-border/60" />
+
+          {/* Company */}
+          <Popover open={companyOpen} onOpenChange={setCompanyOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 px-3 text-xs font-medium min-w-[130px] max-w-[180px] justify-between gap-2"
+              >
+                <Building01Icon size={13} className="text-muted-foreground flex-shrink-0" />
+                <span className="truncate flex-1 text-left">{companyLabel}</span>
+                <ArrowDown01Icon size={12} className="text-muted-foreground flex-shrink-0" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-48 p-1 bg-card border-border shadow-xl" align="end">
+              <CompanySelector isAll={isAll} companyNos={companyNos} onToggle={toggleCompany} />
+            </PopoverContent>
+          </Popover>
+
+          <div className="h-6 w-px bg-border/60" />
         </div>
 
-        <div className="h-6 w-px bg-border/60 flex-shrink-0" />
+        {/* ── Mobile: filter sheet button ── */}
+        <button
+          onClick={() => setMobileFiltersOpen(true)}
+          className="md:hidden flex items-center justify-center h-8 w-8 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/30 transition-colors flex-shrink-0 relative"
+          aria-label="Filters"
+        >
+          <Settings01Icon size={17} />
+          {!isAll && (
+            <span className="absolute top-0.5 right-0.5 h-2 w-2 rounded-full bg-primary" />
+          )}
+        </button>
 
-        {/* Company */}
-        <Popover open={companyOpen} onOpenChange={setCompanyOpen}>
-          <PopoverTrigger asChild>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 px-3 text-xs font-medium min-w-[130px] max-w-[180px] justify-between gap-2"
-            >
-              <Building01Icon size={13} className="text-muted-foreground flex-shrink-0" />
-              <span className="truncate flex-1 text-left">{companyLabel}</span>
-              <ArrowDown01Icon size={12} className="text-muted-foreground flex-shrink-0" />
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-48 p-1 bg-card border-border shadow-xl" align="end">
-            <button
-              onClick={() => toggleCompany("all")}
-              className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-md text-xs font-medium transition-colors ${
-                isAll ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-accent/20"
-              }`}
-            >
-              <div className={`h-4 w-4 rounded border flex items-center justify-center flex-shrink-0 ${isAll ? "bg-primary border-primary" : "border-border"}`}>
-                {isAll && <CheckmarkCircle01Icon size={10} className="text-primary-foreground" />}
-              </div>
-              All Companies
-            </button>
-            <div className="h-px bg-border my-1" />
-            {COMPANY_OPTIONS.map((co) => {
-              const checked = !isAll && companyNos.includes(co.value);
-              return (
-                <button
-                  key={co.value}
-                  onClick={() => toggleCompany(co.value)}
-                  className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-md text-xs transition-colors ${
-                    checked ? "text-foreground" : "text-muted-foreground hover:text-foreground hover:bg-accent/20"
-                  }`}
-                >
-                  <div className={`h-4 w-4 rounded border flex items-center justify-center flex-shrink-0 ${checked ? "bg-primary border-primary" : "border-border"}`}>
-                    {checked && <CheckmarkCircle01Icon size={10} className="text-primary-foreground" />}
-                  </div>
-                  {co.label}
-                </button>
-              );
-            })}
-          </PopoverContent>
-        </Popover>
-
-        <div className="h-6 w-px bg-border/60 flex-shrink-0" />
-
-        {/* Refresh Data */}
-        <div className="flex items-stretch rounded-lg overflow-hidden border border-primary/60 h-8">
+        {/* ── Refresh Data (shown on all sizes) ── */}
+        <div className="flex items-stretch rounded-lg overflow-hidden border border-primary/60 h-8 flex-shrink-0">
           <button
             onClick={handleDefaultRefresh}
             disabled={refreshing}
-            className="flex items-center gap-1.5 px-3 text-xs font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+            className="flex items-center gap-1.5 px-2 md:px-3 text-xs font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
           >
             <ArrowReloadHorizontalIcon size={13} className={refreshing ? "animate-spin" : ""} />
-            {refreshing ? "Starting…" : "Refresh Data"}
+            <span className="hidden sm:inline">{refreshing ? "Starting…" : "Refresh Data"}</span>
           </button>
           <Popover open={refreshMenuOpen} onOpenChange={setRefreshMenuOpen}>
             <PopoverTrigger asChild>
@@ -302,6 +402,53 @@ export default function TopBar() {
           </Popover>
         </div>
       </header>
+
+      {/* ── Mobile Filters Sheet ── */}
+      <Sheet open={mobileFiltersOpen} onOpenChange={setMobileFiltersOpen}>
+        <SheetContent side="right" className="w-[300px] sm:w-[360px] overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle className="text-sm">Filters</SheetTitle>
+          </SheetHeader>
+          <div className="mt-6 space-y-6">
+            <DateRangePicker compact />
+
+            <div className="space-y-2">
+              <p className="text-xs font-semibold text-foreground">Sale Type</p>
+              <div className="flex rounded-lg border border-border bg-secondary overflow-hidden">
+                {SCOPE_OPTIONS.map((opt, i) => (
+                  <button
+                    key={opt.value}
+                    onClick={() => setSaleScope(opt.value as SaleScope)}
+                    className={`
+                      flex-1 py-2 text-xs font-medium transition-colors
+                      ${i < SCOPE_OPTIONS.length - 1 ? "border-r border-border" : ""}
+                      ${saleScope === opt.value
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                      }
+                    `}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-xs font-semibold text-foreground">Company</p>
+              <CompanySelector isAll={isAll} companyNos={companyNos} onToggle={toggleCompany} />
+            </div>
+
+            <Button
+              className="w-full"
+              size="sm"
+              onClick={() => setMobileFiltersOpen(false)}
+            >
+              Apply
+            </Button>
+          </div>
+        </SheetContent>
+      </Sheet>
 
       <RefreshProgressDrawer jobId={jobId} open={drawerOpen} onClose={() => setDrawerOpen(false)} />
       <AdvancedRefreshModal open={advancedOpen} onClose={() => setAdvancedOpen(false)} onJobStarted={handleJobStarted} />

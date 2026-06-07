@@ -21,6 +21,7 @@ import {
 } from "hugeicons-react";
 import { useCompany } from "@/lib/company-context";
 import ReactECharts from "echarts-for-react";
+import { ItemDrilldownModal } from "@/components/movement/item-drilldown-modal";
 
 import {
   getMovementSummary,
@@ -435,7 +436,8 @@ function ProductGroupsTab({ companyNos, saleScope }: { companyNos: string[]; sal
 
       {/* Main table */}
       <div className="rounded-lg border border-border overflow-hidden">
-        <table className="w-full text-xs">
+        <div className="overflow-x-auto">
+        <table className="w-full text-xs min-w-[780px]">
           <thead>
             <tr className="border-b border-border bg-secondary/60">
               <SortableHeader label="Group"     sortKey="group_name"       sort={groupSort} onToggle={groupToggle} align="left" className="w-40" />
@@ -479,6 +481,7 @@ function ProductGroupsTab({ companyNos, saleScope }: { companyNos: string[]; sal
             )}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );
@@ -492,6 +495,7 @@ function ItemsTab({ companyNos, saleScope }: { companyNos: string[]; saleScope: 
   const [loading, setLoading] = useState(true);
   const [filter, setFilter]   = useState("All");
   const [search, setSearch]   = useState("");
+  const [selectedItem, setSelectedItem] = useState<SlowMovingItem | null>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -550,7 +554,8 @@ function ItemsTab({ companyNos, saleScope }: { companyNos: string[]; saleScope: 
       </div>
 
       <div className="rounded-lg border border-border overflow-hidden">
-        <table className="w-full text-xs">
+        <div className="overflow-x-auto">
+        <table className="w-full text-xs min-w-[640px]">
           <thead>
             <tr className="border-b border-border bg-secondary/60">
               <SortableHeader label="Item"      sortKey="item_name"    sort={itemSort} onToggle={itemToggle} align="left" />
@@ -561,15 +566,20 @@ function ItemsTab({ companyNos, saleScope }: { companyNos: string[]; saleScope: 
               <SortableHeader label="YTD t"     sortKey="ytd"          sort={itemSort} onToggle={itemToggle} />
               <SortableHeader label="Total t"   sortKey="total_tonnes" sort={itemSort} onToggle={itemToggle} />
               <SortableHeader label="Custs"     sortKey="customers"    sort={itemSort} onToggle={itemToggle} />
+              <th className="px-3 py-2.5 w-8" />
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <LoadingRows cols={8} />
+              <LoadingRows cols={9} />
             ) : itemSorted.slice(0, 200).map((r) => (
-              <tr key={r.item_code} className="border-b border-border/40 hover:bg-accent/20 transition-colors">
+              <tr
+                key={r.item_code}
+                onClick={() => setSelectedItem(r)}
+                className="border-b border-border/40 hover:bg-accent/20 transition-colors cursor-pointer group"
+              >
                 <td className="px-3 py-2.5">
-                  <div className="font-medium text-foreground truncate max-w-[200px]">{r.item_name}</div>
+                  <div className="font-medium text-foreground truncate max-w-[200px] group-hover:text-primary transition-colors">{r.item_name}</div>
                   <div className="text-[10px] text-muted-foreground">{r.item_code}</div>
                 </td>
                 <td className="px-3 py-2.5 text-muted-foreground truncate max-w-[120px]">{r.group_name}</td>
@@ -581,17 +591,31 @@ function ItemsTab({ companyNos, saleScope }: { companyNos: string[]; saleScope: 
                 <td className="px-3 py-2.5 text-right text-foreground">{fmtT(r.ytd)}</td>
                 <td className="px-3 py-2.5 text-right text-muted-foreground">{fmtT(r.total_tonnes)}</td>
                 <td className="px-3 py-2.5 text-right text-muted-foreground">{r.customers}</td>
+                <td className="px-3 py-2.5 text-center">
+                  <ArrowRight01Icon size={13} className="text-muted-foreground/30 group-hover:text-primary transition-colors" />
+                </td>
               </tr>
             ))}
             {!loading && filtered.length === 0 && (
-              <tr><td colSpan={8} className="px-3 py-6 text-center text-muted-foreground text-xs">No items match</td></tr>
+              <tr><td colSpan={9} className="px-3 py-6 text-center text-muted-foreground text-xs">No items match</td></tr>
             )}
             {!loading && filtered.length > 200 && (
-              <tr><td colSpan={8} className="px-3 py-2 text-center text-muted-foreground text-xs">Showing 200 of {filtered.length}</td></tr>
+              <tr><td colSpan={9} className="px-3 py-2 text-center text-muted-foreground text-xs">Showing 200 of {filtered.length}</td></tr>
             )}
           </tbody>
         </table>
+        </div>
       </div>
+
+      {selectedItem && (
+        <ItemDrilldownModal
+          open={!!selectedItem}
+          onClose={() => setSelectedItem(null)}
+          item={selectedItem}
+          companyNos={companyNos}
+          saleScope={saleScope}
+        />
+      )}
     </div>
   );
 }
@@ -678,7 +702,8 @@ function CustomersTab({ companyNos, saleScope }: { companyNos: string[]; saleSco
       </div>
 
       <div className="rounded-lg border border-border overflow-hidden">
-        <table className="w-full text-xs">
+        <div className="overflow-x-auto">
+        <table className="w-full text-xs min-w-[780px]">
           <thead>
             <tr className="border-b border-border bg-secondary/60">
               <SortableHeader label="Customer"      sortKey="customer_name"  sort={custSort} onToggle={custToggle} align="left" />
@@ -775,6 +800,7 @@ function CustomersTab({ companyNos, saleScope }: { companyNos: string[]; saleSco
             )}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );
@@ -935,7 +961,8 @@ function StockTab({ companyNos, saleScope: _saleScope }: { companyNos: string[];
 
       {/* Table */}
       <div className="rounded-lg border border-border overflow-hidden">
-        <table className="w-full text-xs">
+        <div className="overflow-x-auto">
+        <table className="w-full text-xs min-w-[720px]">
           <thead>
             <tr className="border-b border-border bg-secondary/60">
               <SortableHeader label="Item"       sortKey="item_name"        sort={stockSort} onToggle={stockToggle} align="left" />
@@ -982,6 +1009,7 @@ function StockTab({ companyNos, saleScope: _saleScope }: { companyNos: string[];
             )}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );
@@ -1028,7 +1056,7 @@ export default function Movement() {
 
       {/* KPI summary */}
       <div className="flex-shrink-0 px-5 py-3 border-b border-border">
-        <div className="grid grid-cols-8 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
           <KpiCard label="Growing Groups"  value={summaryLoading ? "…" : summary?.growing_groups ?? 0}   color="text-emerald-400" />
           <KpiCard label="Declining Groups" value={summaryLoading ? "…" : summary?.declining_groups ?? 0} color="text-amber-400" />
           <KpiCard label="Dead Groups"     value={summaryLoading ? "…" : summary?.dead_groups ?? 0}       color="text-red-400" />
@@ -1056,7 +1084,7 @@ export default function Movement() {
       </div>
 
       {/* Tabs */}
-      <div className="flex-shrink-0 border-b border-border px-5 flex gap-0">
+      <div className="flex-shrink-0 border-b border-border px-5 flex gap-0 overflow-x-auto">
         {TABS.map((t) => (
           <button
             key={t.id}

@@ -393,3 +393,106 @@ def get_customer_history(
             for r in item_rows
         ],
     }
+
+
+@router.get("/item-history/{item_code}")
+def get_item_history(
+    item_code: str,
+    company_nos: Optional[list[str]] = Query(default=None),
+    company_no: Optional[str] = Query(default=None),
+    sale_scope: str = Query(default="all"),
+    db: Session = Depends(get_db),
+):
+    resolved = company_nos or ([company_no] if company_no else None) or [settings.hansa_company_no]
+    co_frag, co_params = build_company_filter(resolved)
+    scope_frag = build_scope_sql(sale_scope)
+    params = {**co_params, "item_code": item_code}
+
+    summary = db.execute(text(f"""
+        SELECT
+            COALESCE(MAX(item_name), :item_code)      AS item_name,
+            COALESCE(MAX(item_group_code), '')         AS group_code,
+            COALESCE(MAX(item_group_name), 'Unknown')  AS group_name,
+            ROUND(SUM(tonnes)::numeric, 2)             AS total_tonnes,
+            MIN(transaction_date)::text                AS first_sale,
+            MAX(transaction_date)::text                AS last_sale,
+            COUNT(DISTINCT customer_code)              AS unique_customers
+        FROM fact_sales_lines
+        WHERE {co_frag} {scope_frag} AND item_code = :item_code
+    """), params).mappings().fetchone()
+
+    def _f(v): return float(v) if v is not None else 0.0
+
+    if not summary or not _f(summary["total_tonnes"]):
+        return {
+            "item_code": item_code, "item_name": item_code,
+            "group_code": "", "group_name": "", "total_tonnes": 0,
+            "first_sale": None, "last_sale": None, "unique_customers": 0,
+            "monthly": [], "top_customers": [],
+        }
+
+    monthly_rows = db.execute(text(f"""
+        WITH ref AS (
+            SELECT MAX(transaction_date) AS max_d
+            FROM fact_sales_lines
+            WHERE {co_frag} {scope_frag} AND item_code = :item_code
+        )
+        SELECT
+            DATE_TRUNC('month', transaction_date)::date::text AS month,
+            ROUND(SUM(tonnes)::numeric, 2) AS tonnes,
+            COUNT(*) AS txn_count
+        FROM fact_sales_lines
+        CROSS JOIN ref
+        WHERE {co_frag} {scope_frag} AND item_code = :item_code
+          AND transaction_date >= (ref.max_d - INTERVAL '24 months')
+        GROUP BY DATE_TRUNC('month', transaction_date)
+        ORDER BY month
+    """), params).mappings().fetchall()
+
+    customer_rows = db.execute(text(f"""
+        WITH ref AS (
+            SELECT MAX(transaction_date) AS max_d
+            FROM fact_sales_lines
+            WHERE {co_frag} {scope_frag} AND item_code = :item_code
+        )
+        SELECT
+            customer_code,
+            COALESCE(MAX(customer_name), customer_code) AS customer_name,
+            ROUND(SUM(tonnes)::numeric, 2)              AS total_tonnes,
+            ROUND(SUM(CASE WHEN transaction_date >= ref.max_d - INTERVAL '3 months'
+                           THEN tonnes ELSE 0 END)::numeric, 2) AS t3m,
+            MAX(transaction_date)::text                 AS last_purchase,
+            (ref.max_d - MAX(transaction_date))::int    AS days_since
+        FROM fact_sales_lines
+        CROSS JOIN ref
+        WHERE {co_frag} {scope_frag} AND item_code = :item_code
+        GROUP BY customer_code, ref.max_d
+        ORDER BY total_tonnes DESC
+        LIMIT 15
+    """), params).mappings().fetchall()
+
+    return {
+        "item_code": item_code,
+        "item_name": summary["item_name"],
+        "group_code": summary["group_code"] or "",
+        "group_name": summary["group_name"],
+        "total_tonnes": _f(summary["total_tonnes"]),
+        "first_sale": summary["first_sale"],
+        "last_sale": summary["last_sale"],
+        "unique_customers": int(summary["unique_customers"] or 0),
+        "monthly": [
+            {"month": r["month"], "tonnes": _f(r["tonnes"]), "txn_count": int(r["txn_count"] or 0)}
+            for r in monthly_rows
+        ],
+        "top_customers": [
+            {
+                "customer_code": r["customer_code"],
+                "customer_name": r["customer_name"],
+                "total_tonnes": _f(r["total_tonnes"]),
+                "t3m": _f(r["t3m"]),
+                "last_purchase": r["last_purchase"],
+                "days_since": int(r["days_since"]) if r["days_since"] is not None else None,
+            }
+            for r in customer_rows
+        ],
+    }

@@ -334,7 +334,7 @@ export default function Home() {
           </div>
 
           {/* KPI cards */}
-          <div className="grid grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {/* Total Tonnes */}
             <div className="rounded-lg border border-border bg-card p-3.5">
               <div className="flex items-center gap-2 mb-1.5">
@@ -406,7 +406,7 @@ export default function Home() {
 
           {/* Predictive insight strip */}
           {!predictiveLoading && predictive && (
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               {/* Customer lapse risk */}
               <div className="rounded-lg border border-border bg-card p-3.5">
                 <div className="flex items-center gap-2 mb-2">
@@ -503,7 +503,7 @@ export default function Home() {
           )}
 
           {/* Charts */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
             <div className="rounded-lg border border-border bg-card p-4">
               <h3 className="text-xs font-semibold text-foreground mb-3">Month-on-month comparison</h3>
               <div className="h-[280px]">
@@ -520,7 +520,7 @@ export default function Home() {
                 )}
               </div>
             </div>
-            <div className="col-span-2 rounded-lg border border-border bg-card p-4">
+            <div className="col-span-1 lg:col-span-2 rounded-lg border border-border bg-card p-4">
               <h3 className="text-xs font-semibold text-foreground mb-3">Cumulative sales comparison</h3>
               <div className="h-[240px]">
                 {momLoading ? loadingOverlay : (

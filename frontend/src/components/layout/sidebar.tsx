@@ -7,6 +7,7 @@ import {
   ArrowRight01Icon,
   Moon01Icon,
   Sun01Icon,
+  Cancel01Icon,
 } from "hugeicons-react";
 import { useTheme } from "@/lib/theme-context";
 
@@ -19,37 +20,42 @@ const NAV_ITEMS = [
 interface SidebarProps {
   collapsed: boolean;
   onToggle: () => void;
+  mobileOpen: boolean;
+  onMobileClose: () => void;
 }
 
-export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
+export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: SidebarProps) {
   const [location] = useLocation();
   const { theme, toggleTheme } = useTheme();
 
-  return (
-    <aside
-      className={`
-        flex flex-col flex-shrink-0 h-screen sidebar-transition
-        bg-[var(--sidebar)] text-[var(--sidebar-foreground)]
-        border-r border-[var(--sidebar-border)]
-        ${collapsed ? "w-16" : "w-60"}
-      `}
-    >
+  const navContent = (isMobileOverlay: boolean) => (
+    <>
       {/* ── Logo ── */}
-      <div className={`flex items-center h-[60px] border-b border-[var(--sidebar-border)] px-4 flex-shrink-0 ${collapsed ? "justify-center" : "gap-3"}`}>
+      <div className={`flex items-center h-[60px] border-b border-[var(--sidebar-border)] px-4 flex-shrink-0 ${
+        (collapsed && !isMobileOverlay) ? "justify-center" : "gap-3"
+      }`}>
         <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-[var(--sidebar-primary)] flex items-center justify-center">
           <span className="text-[var(--sidebar-primary-foreground)] font-black text-sm leading-none">H</span>
         </div>
-        {!collapsed && (
-          <div className="overflow-hidden">
+        {(!collapsed || isMobileOverlay) && (
+          <div className="overflow-hidden flex-1">
             <p className="font-bold text-sm text-white leading-none">Hansa</p>
             <p className="text-[10px] text-white/50 leading-none mt-0.5">Analytics</p>
           </div>
+        )}
+        {isMobileOverlay && (
+          <button
+            onClick={onMobileClose}
+            className="ml-auto h-7 w-7 flex items-center justify-center rounded-md text-white/50 hover:text-white hover:bg-white/10 transition-colors"
+          >
+            <Cancel01Icon size={16} />
+          </button>
         )}
       </div>
 
       {/* ── Nav items ── */}
       <nav className="flex-1 py-4 overflow-y-auto overflow-x-hidden">
-        {!collapsed && (
+        {(!collapsed || isMobileOverlay) && (
           <p className="px-4 mb-2 text-[10px] uppercase tracking-widest font-semibold text-white/35 select-none">
             Main
           </p>
@@ -62,6 +68,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
               <li key={item.path}>
                 <Link
                   href={item.path}
+                  onClick={isMobileOverlay ? onMobileClose : undefined}
                   className={`
                     group flex items-center gap-3 px-2 py-2.5 rounded-lg text-sm font-medium
                     transition-all duration-150 select-none relative
@@ -69,16 +76,16 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
                       ? "bg-[var(--sidebar-primary)] text-[var(--sidebar-primary-foreground)] shadow-md"
                       : "text-white/70 hover:bg-[var(--sidebar-accent)] hover:text-white"
                     }
-                    ${collapsed ? "justify-center" : ""}
+                    ${(collapsed && !isMobileOverlay) ? "justify-center" : ""}
                   `}
-                  title={collapsed ? item.label : undefined}
+                  title={(collapsed && !isMobileOverlay) ? item.label : undefined}
                 >
                   <Icon
                     size={18}
                     className={`flex-shrink-0 ${active ? "text-[var(--sidebar-primary-foreground)]" : "text-white/60 group-hover:text-white"}`}
                   />
-                  {!collapsed && <span className="truncate">{item.label}</span>}
-                  {active && !collapsed && (
+                  {(!collapsed || isMobileOverlay) && <span className="truncate">{item.label}</span>}
+                  {active && (!collapsed || isMobileOverlay) && (
                     <span className="ml-auto w-1.5 h-1.5 rounded-full bg-[var(--sidebar-primary-foreground)] opacity-70" />
                   )}
                 </Link>
@@ -90,7 +97,6 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
 
       {/* ── Bottom actions ── */}
       <div className="flex-shrink-0 border-t border-[var(--sidebar-border)] p-2 space-y-0.5">
-        {/* Theme toggle */}
         <button
           onClick={toggleTheme}
           title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
@@ -98,38 +104,77 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
             w-full flex items-center gap-3 px-2 py-2.5 rounded-lg text-sm
             text-white/70 hover:bg-[var(--sidebar-accent)] hover:text-white
             transition-all duration-150
-            ${collapsed ? "justify-center" : ""}
+            ${(collapsed && !isMobileOverlay) ? "justify-center" : ""}
           `}
         >
           {theme === "dark"
             ? <Sun01Icon size={18} className="flex-shrink-0 text-white/60" />
             : <Moon01Icon size={18} className="flex-shrink-0 text-white/60" />
           }
-          {!collapsed && (
+          {(!collapsed || isMobileOverlay) && (
             <span className="text-sm font-medium">
               {theme === "dark" ? "Light mode" : "Dark mode"}
             </span>
           )}
         </button>
 
-        {/* Collapse toggle */}
-        <button
-          onClick={onToggle}
-          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          className={`
-            w-full flex items-center gap-3 px-2 py-2.5 rounded-lg text-sm
-            text-white/50 hover:bg-[var(--sidebar-accent)] hover:text-white
-            transition-all duration-150
-            ${collapsed ? "justify-center" : ""}
-          `}
-        >
-          {collapsed
-            ? <ArrowRight01Icon size={18} className="flex-shrink-0" />
-            : <ArrowLeft01Icon  size={18} className="flex-shrink-0" />
-          }
-          {!collapsed && <span className="text-sm font-medium">Collapse</span>}
-        </button>
+        {!isMobileOverlay && (
+          <button
+            onClick={onToggle}
+            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            className={`
+              w-full flex items-center gap-3 px-2 py-2.5 rounded-lg text-sm
+              text-white/50 hover:bg-[var(--sidebar-accent)] hover:text-white
+              transition-all duration-150
+              ${collapsed ? "justify-center" : ""}
+            `}
+          >
+            {collapsed
+              ? <ArrowRight01Icon size={18} className="flex-shrink-0" />
+              : <ArrowLeft01Icon  size={18} className="flex-shrink-0" />
+            }
+            {!collapsed && <span className="text-sm font-medium">Collapse</span>}
+          </button>
+        )}
       </div>
-    </aside>
+    </>
+  );
+
+  return (
+    <>
+      {/* ── Mobile backdrop ── */}
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm lg:hidden"
+          onClick={onMobileClose}
+        />
+      )}
+
+      {/* ── Mobile overlay sidebar ── */}
+      <aside
+        className={`
+          lg:hidden
+          fixed inset-y-0 left-0 z-50 w-64 flex flex-col
+          bg-[var(--sidebar)] text-[var(--sidebar-foreground)]
+          border-r border-[var(--sidebar-border)] shadow-2xl
+          transform transition-transform duration-300 ease-in-out
+          ${mobileOpen ? "translate-x-0" : "-translate-x-full"}
+        `}
+      >
+        {navContent(true)}
+      </aside>
+
+      {/* ── Desktop sidebar (always visible, collapsible) ── */}
+      <aside
+        className={`
+          hidden lg:flex flex-col flex-shrink-0 h-screen sidebar-transition
+          bg-[var(--sidebar)] text-[var(--sidebar-foreground)]
+          border-r border-[var(--sidebar-border)]
+          ${collapsed ? "w-16" : "w-60"}
+        `}
+      >
+        {navContent(false)}
+      </aside>
+    </>
   );
 }

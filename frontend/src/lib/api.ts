@@ -652,3 +652,43 @@ export async function testHansaConnection(): Promise<ConnectionTestResult> {
   if (!res.ok) throw new Error("Test request failed");
   return res.json();
 }
+
+export type ItemHistoryMonthRow = {
+  month: string;
+  tonnes: number;
+  txn_count: number;
+};
+
+export type ItemHistoryCustomerRow = {
+  customer_code: string;
+  customer_name: string;
+  total_tonnes: number;
+  t3m: number;
+  last_purchase: string | null;
+  days_since: number | null;
+};
+
+export type ItemHistoryResponse = {
+  item_code: string;
+  item_name: string;
+  group_code: string;
+  group_name: string;
+  total_tonnes: number;
+  first_sale: string | null;
+  last_sale: string | null;
+  unique_customers: number;
+  monthly: ItemHistoryMonthRow[];
+  top_customers: ItemHistoryCustomerRow[];
+};
+
+export async function getItemHistory(
+  itemCode: string,
+  companyNos: string[],
+  saleScope: string,
+): Promise<ItemHistoryResponse> {
+  const params = new URLSearchParams({ sale_scope: saleScope });
+  appendCompanyNos(params, companyNos);
+  const res = await fetch(`${API_BASE_URL}/analytics/item-history/${encodeURIComponent(itemCode)}?${params}`);
+  if (!res.ok) throw new Error("Failed to fetch item history");
+  return res.json();
+}

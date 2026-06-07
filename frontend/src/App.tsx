@@ -29,6 +29,7 @@ function AppShell() {
   const [collapsed, setCollapsed] = useState(() => {
     return localStorage.getItem("hansa-sidebar-collapsed") === "true";
   });
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   useEffect(() => {
     localStorage.setItem("hansa-sidebar-collapsed", String(collapsed));
@@ -36,9 +37,14 @@ function AppShell() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-background text-foreground">
-      <Sidebar collapsed={collapsed} onToggle={() => setCollapsed((c) => !c)} />
+      <Sidebar
+        collapsed={collapsed}
+        onToggle={() => setCollapsed((c) => !c)}
+        mobileOpen={mobileSidebarOpen}
+        onMobileClose={() => setMobileSidebarOpen(false)}
+      />
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
-        <TopBar />
+        <TopBar onMobileMenuToggle={() => setMobileSidebarOpen((o) => !o)} />
         <main className="flex-1 min-h-0 overflow-hidden">
           <Router />
         </main>
