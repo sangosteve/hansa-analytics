@@ -72,7 +72,7 @@ const NAV_STRUCTURE: NavSection[] = [
     section: "Finance",
     items: [
       { label: "Revenue",            icon: ChartHistogramIcon,  enabled: false },
-      { label: "Profitability",      icon: Analytics01Icon,     enabled: false },
+      { label: "Profitability",      icon: Analytics01Icon,     path: "/finance", enabled: true },
       { label: "Customer Receipts",  icon: ChartLineData01Icon, enabled: false },
       { label: "Debtors",            icon: UserGroupIcon,       enabled: false },
     ],

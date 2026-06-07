@@ -7,6 +7,7 @@ import Sidebar from "@/components/layout/sidebar";
 import TopBar from "@/components/layout/top-bar";
 import Home from "@/pages/home";
 import Movement from "@/pages/movement";
+import Finance from "@/pages/finance";
 import Settings from "@/pages/settings";
 import NotFound from "@/pages/not-found";
 import { CompanyProvider } from "@/lib/company-context";
@@ -19,6 +20,7 @@ function Router() {
     <Switch>
       <Route path="/" component={Home} />
       <Route path="/movement" component={Movement} />
+      <Route path="/finance" component={Finance} />
       <Route path="/settings" component={Settings} />
       <Route component={NotFound} />
     </Switch>

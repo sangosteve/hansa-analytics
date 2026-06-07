@@ -8,6 +8,7 @@ from app.api.routes_ai import router as ai_router
 from app.api.routes_oauth import router as oauth_router
 from app.api.routes_analytics import router as analytics_router
 from app.api.routes_customer_movement import router as customer_movement_router
+from app.api.routes_finance import router as finance_router
 from app.api.routes_hansa import router as hansa_router
 from app.api.routes_movement import router as movement_router
 from app.api.routes_refresh import router as refresh_router
@@ -53,6 +54,7 @@ app.include_router(customer_movement_router)
 app.include_router(movement_router)
 app.include_router(stock_router)
 app.include_router(ai_router)
+app.include_router(finance_router)
 
 
 @app.get("/")

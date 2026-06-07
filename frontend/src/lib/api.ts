@@ -446,6 +446,35 @@ export async function getRefreshHistory(limit = 50): Promise<RefreshHistoryRow[]
   return res.json();
 }
 
+// ── Finance / P&L ─────────────────────────────────────────────────────────────
+
+export type PLSummaryResponse = {
+  company_nos: string[];
+  date_from: string;
+  date_to: string;
+  gl_data_available: boolean;
+  revenue: number;
+  revenue_ly: number;
+  revenue_yoy_pct: number | null;
+  invoice_count: number;
+  cost_of_sales: number | null;
+  gross_profit: number | null;
+  opex: number | null;
+  net_profit: number | null;
+};
+
+export async function getPLSummary(
+  dateFrom: string,
+  dateTo: string,
+  companyNos: string[] = ["all"],
+): Promise<PLSummaryResponse> {
+  const params = new URLSearchParams({ date_from: dateFrom, date_to: dateTo });
+  appendCompanyNos(params, companyNos);
+  const res = await fetch(`${API_BASE_URL}/finance/pl-summary?${params}`);
+  if (!res.ok) throw new Error("Failed to fetch P&L summary");
+  return res.json();
+}
+
 // ── AI Insights ───────────────────────────────────────────────────────────────
 
 export type AIChartConfig = {
