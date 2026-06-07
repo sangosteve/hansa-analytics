@@ -4,12 +4,14 @@ import {
   updateRefreshSettings,
   getRefreshHistory,
   getOAuthStatus,
+  getOAuthConfig,
   getOAuthStartUrl,
   disconnectOAuth,
   testHansaConnection,
   type RefreshSettings,
   type RefreshHistoryRow,
   type OAuthStatus,
+  type OAuthConfig,
   type ConnectionTestResult,
 } from "@/lib/api";
 import {
@@ -143,6 +145,7 @@ function OAuthStatusPill({ status }: { status: OAuthStatus["status"] }) {
 
 function IntegrationsTab() {
   const [oauthStatus, setOauthStatus]     = useState<OAuthStatus | null>(null);
+  const [oauthConfig, setOauthConfig]     = useState<OAuthConfig | null>(null);
   const [statusLoading, setStatusLoading] = useState(true);
   const [connecting, setConnecting]       = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
@@ -154,8 +157,9 @@ function IntegrationsTab() {
     setStatusLoading(true);
     setActionError(null);
     try {
-      const s = await getOAuthStatus();
+      const [s, cfg] = await Promise.all([getOAuthStatus(), getOAuthConfig()]);
       setOauthStatus(s);
+      setOauthConfig(cfg);
     } catch (e: any) {
       setActionError(e.message ?? "Failed to load status");
     } finally {
@@ -174,9 +178,10 @@ function IntegrationsTab() {
     if (params.get("oauth_error")) {
       const code = params.get("oauth_error");
       const messages: Record<string, string> = {
-        not_started:  "OAuth flow was not started properly. Please click \"Connect Hansa\" to begin.",
-        missing_code: "Authorization was not completed — no code was received from Hansa. Please try again.",
-        access_denied:"Authorization was denied. Please try again and approve the Hansa connection.",
+        not_started:   "OAuth flow was not started properly. Please click \"Connect Hansa\" to begin.",
+        missing_code:  "Authorization was not completed — no code was received from Hansa. Please try again.",
+        access_denied: "Authorization was denied. Please try again and approve the Hansa connection.",
+        wrong_redirect: "The redirect URI sent to Hansa doesn't match the one registered in your StandardID developer app. Make sure HANSA_OAUTH_REDIRECT_URI is set to the exact callback URL registered in the Hansa developer portal.",
       };
       setActionError(messages[code!] ?? `OAuth error: ${code}`);
       window.history.replaceState({}, "", window.location.pathname);
@@ -378,12 +383,24 @@ function IntegrationsTab() {
             <div className="px-4 py-3 border-t border-border bg-secondary/10 text-[11px] text-muted-foreground space-y-2">
               <p>To connect Hansa ERP via OAuth2:</p>
               <ol className="list-decimal list-inside space-y-1.5 pl-2">
-                <li>Register a Developer App at <strong>MyStandard</strong> (standard-id.hansaworld.com) with the redirect URI set to your backend callback URL</li>
+                <li>Register a Developer App at <strong>MyStandard</strong> (standard-id.hansaworld.com) with the redirect URI set to your backend callback URL (shown below)</li>
                 <li>Set environment variables: <code className="bg-secondary px-1 rounded">HANSA_AUTH_MODE=oauth</code>, <code className="bg-secondary px-1 rounded">HANSA_OAUTH_CLIENT_ID</code>, <code className="bg-secondary px-1 rounded">HANSA_OAUTH_CLIENT_SECRET</code>, <code className="bg-secondary px-1 rounded">HANSA_OAUTH_REDIRECT_URI</code></li>
                 <li>Click <strong>Connect Hansa</strong> above and sign in via StandardID</li>
                 <li>After authorizing, you will be redirected back here automatically</li>
               </ol>
-              <p className="text-[10px]">The callback URL to register is: <code className="bg-secondary px-1 rounded">{window.location.origin}/api/hansa/oauth/callback</code></p>
+              <div className="mt-2 space-y-1">
+                <p className="text-[10px] font-medium text-foreground">Callback URL to register in Hansa developer portal:</p>
+                {oauthConfig?.callback_url ? (
+                  <code className="block bg-secondary px-2 py-1 rounded text-[10px] break-all">{oauthConfig.callback_url}</code>
+                ) : (
+                  <code className="block bg-secondary px-2 py-1 rounded text-[10px] text-amber-400">
+                    Not configured — set HANSA_OAUTH_REDIRECT_URI to your backend URL + /api/hansa/oauth/callback
+                  </code>
+                )}
+                <p className="text-[10px] text-amber-400/80">
+                  ⚠ This URL must match <em>exactly</em> what is registered in your StandardID developer app — any mismatch causes the <code className="bg-secondary px-0.5 rounded">wrong_redirect</code> error.
+                </p>
+              </div>
             </div>
           </details>
         )}

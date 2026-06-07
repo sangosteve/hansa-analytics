@@ -25,6 +25,11 @@ class Settings(BaseSettings):
     # 32-byte URL-safe base64 Fernet key; auto-derived from client_secret if absent
     hansa_oauth_encryption_key: Optional[str] = None
 
+    # Frontend origin — used to redirect back to the SPA after OAuth callbacks.
+    # Set to e.g. https://hansa-analytics.onrender.com (no trailing slash).
+    # If unset, relative redirects are used (only works when backend == frontend origin).
+    frontend_url: Optional[str] = None
+
     openai_api_key: Optional[str] = None
     openai_model: str = "gpt-4o"
 

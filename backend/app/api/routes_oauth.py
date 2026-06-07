@@ -24,6 +24,43 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/hansa", tags=["hansa-oauth"])
 
 
+def _frontend_settings_url(state: str | None = None) -> str:
+    """
+    Resolve the frontend /settings URL for post-OAuth redirects.
+
+    Priority:
+      1. return_url embedded in the HMAC-signed state parameter (most accurate —
+         carries exactly the page the user started from).
+      2. FRONTEND_URL env var + "/settings" (reliable fallback for error paths
+         where state may be absent or malformed).
+      3. Relative "/settings" (last resort — only correct when backend and
+         frontend share the same origin, which is never true on Render).
+    """
+    if state:
+        try:
+            return oauth_service.verify_oauth_state(state)
+        except Exception:
+            pass
+    if settings.frontend_url:
+        return settings.frontend_url.rstrip("/") + "/settings"
+    return "/settings"
+
+
+# ── Config (safe, no secrets) ─────────────────────────────────────────────────
+
+@router.get("/oauth/config")
+def oauth_config():
+    """
+    Return non-secret OAuth configuration so the frontend can display the
+    correct callback URL to register in the Hansa developer portal.
+    """
+    return {
+        "auth_mode": settings.hansa_auth_mode,
+        "callback_url": settings.hansa_oauth_redirect_uri or None,
+        "authorize_url": settings.hansa_authorize_url,
+    }
+
+
 # ── Start OAuth flow ──────────────────────────────────────────────────────────
 
 @router.get("/oauth/start")
@@ -76,15 +113,17 @@ async def oauth_callback(
     if not code and not error and not state:
         logger.warning("OAuth callback visited directly (no code/state). Redirecting to settings.")
         return RedirectResponse(
-            url="/settings?oauth_error=not_started",
+            url=f"{_frontend_settings_url()}?oauth_error=not_started",
             status_code=302,
         )
 
     # Hansa returned an error
     if error:
         logger.warning("OAuth error from Hansa: %s — %s", error, error_description)
+        # Use state to recover the return_url so we redirect to the frontend, not the API server
+        dest = _frontend_settings_url(state)
         return RedirectResponse(
-            url=f"/settings?oauth_error={error}",
+            url=f"{dest}?oauth_error={error}",
             status_code=302,
         )
 
@@ -92,7 +131,7 @@ async def oauth_callback(
     if not code or not state:
         logger.warning("OAuth callback missing code or state (code=%s state=%s)", bool(code), bool(state))
         return RedirectResponse(
-            url="/settings?oauth_error=missing_code",
+            url=f"{_frontend_settings_url(state)}?oauth_error=missing_code",
             status_code=302,
         )
 

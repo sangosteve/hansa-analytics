@@ -653,6 +653,18 @@ export async function getOAuthStatus(): Promise<OAuthStatus> {
   return res.json();
 }
 
+export type OAuthConfig = {
+  auth_mode: string;
+  callback_url: string | null;
+  authorize_url: string;
+};
+
+export async function getOAuthConfig(): Promise<OAuthConfig> {
+  const res = await fetch(`${API_BASE_URL}/hansa/oauth/config`);
+  if (!res.ok) throw new Error("Failed to fetch OAuth config");
+  return res.json();
+}
+
 /**
  * Returns the URL to navigate the browser to in order to start the OAuth flow.
  * The backend /start route immediately redirects to the Hansa authorization page.
