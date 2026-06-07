@@ -97,6 +97,7 @@ async def run_scheduled_refresh():
         include_orders=cfg.include_orders,
         include_receipts=cfg.include_receipts,
         include_gl_accounts=cfg.include_gl_accounts,
+        include_gl_transactions=cfg.include_gl_transactions,
         rebuild_facts=cfg.rebuild_facts,
         rebuild_movement=cfg.rebuild_movement,
         rebuild_stock=cfg.rebuild_stock,

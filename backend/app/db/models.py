@@ -56,6 +56,7 @@ class RefreshSettings(Base):
     include_orders: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     include_receipts: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     include_gl_accounts: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    include_gl_transactions: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     rebuild_facts: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     rebuild_movement: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     rebuild_stock: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
@@ -654,6 +655,46 @@ class HansaOrderLine(Base):
             "source_row_hash",
             name="uq_hansa_order_lines_source_hash",
         ),
+    )
+
+
+class HansaGlTransaction(Base):
+    """
+    GL transaction lines from the Hansa TRVc register — one row per line per company.
+    Used for P&L analytics: Revenue, Cost of Sales, OPEX, Gross Profit, Net Profit.
+
+    Synced per company over a date range (range-reload: delete period, re-insert).
+    Joined with gl_accounts on acc_number to obtain AccType for P&L categorisation.
+    """
+    __tablename__ = "hansa_gl_transactions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+
+    company_no: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    trans_nr: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    number: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    acc_number: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+
+    trans_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True, index=True)
+    reg_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+
+    deb_val: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 4), nullable=True)
+    cred_val: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 4), nullable=True)
+    deb_val2: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 4), nullable=True)
+    cred_val2: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 4), nullable=True)
+
+    comment: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    vat_code: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    qty: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 4), nullable=True)
+    curncy: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+
+    fetched_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+    )
+
+    __table_args__ = (
+        UniqueConstraint("company_no", "trans_nr", name="uq_hansa_gl_transactions_co_transnr"),
     )
 
 

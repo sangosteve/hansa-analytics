@@ -37,6 +37,10 @@ export function AdvancedRefreshModal({ open, onClose, onJobStarted }: Props) {
   const [includeMaster, setIncludeMaster] = useState(false);
   const [includeInvoices, setIncludeInvoices] = useState(true);
   const [includeDeliveries, setIncludeDeliveries] = useState(true);
+  const [includeOrders, setIncludeOrders] = useState(false);
+  const [includeReceipts, setIncludeReceipts] = useState(false);
+  const [includeGlAccounts, setIncludeGlAccounts] = useState(false);
+  const [includeGlTransactions, setIncludeGlTransactions] = useState(false);
   const [rebuildFacts, setRebuildFacts] = useState(true);
   const [rebuildMovement, setRebuildMovement] = useState(true);
   const [rebuildStock, setRebuildStock] = useState(false);
@@ -70,6 +74,10 @@ export function AdvancedRefreshModal({ open, onClose, onJobStarted }: Props) {
         include_master: includeMaster,
         include_invoices: includeInvoices,
         include_deliveries: includeDeliveries,
+        include_orders: includeOrders,
+        include_receipts: includeReceipts,
+        include_gl_accounts: includeGlAccounts,
+        include_gl_transactions: includeGlTransactions,
         rebuild_facts: rebuildFacts,
         rebuild_movement: rebuildMovement,
         rebuild_stock: rebuildStock,
@@ -204,6 +212,10 @@ export function AdvancedRefreshModal({ open, onClose, onJobStarted }: Props) {
               {chk(includeMaster, setIncludeMaster, "Master Data")}
               {chk(includeInvoices, setIncludeInvoices, "Invoices")}
               {chk(includeDeliveries, setIncludeDeliveries, "Deliveries")}
+              {chk(includeOrders, setIncludeOrders, "Sales Orders")}
+              {chk(includeReceipts, setIncludeReceipts, "Receipts")}
+              {chk(includeGlAccounts, setIncludeGlAccounts, "GL Accounts")}
+              {chk(includeGlTransactions, setIncludeGlTransactions, "GL Transactions")}
               {chk(rebuildFacts, setRebuildFacts, "Sales Facts")}
               {chk(rebuildMovement, setRebuildMovement, "Customer Movement")}
               {chk(rebuildStock, setRebuildStock, "Stock Status")}

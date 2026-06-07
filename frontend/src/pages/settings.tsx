@@ -681,6 +681,30 @@ export default function SettingsPage() {
                       desc="Source delivery headers and lines"
                     />
                     <Toggle
+                      checked={draft.include_orders}
+                      onChange={(v) => set("include_orders", v)}
+                      label="Sales Orders"
+                      desc="Open and historical sales orders (SOVc register)"
+                    />
+                    <Toggle
+                      checked={draft.include_receipts}
+                      onChange={(v) => set("include_receipts", v)}
+                      label="Customer Receipts"
+                      desc="Payment receipts linked to invoices (IPVc register)"
+                    />
+                    <Toggle
+                      checked={draft.include_gl_accounts}
+                      onChange={(v) => set("include_gl_accounts", v)}
+                      label="GL Chart of Accounts"
+                      desc="Account master from Hansa master company — required for P&L analytics"
+                    />
+                    <Toggle
+                      checked={draft.include_gl_transactions}
+                      onChange={(v) => set("include_gl_transactions", v)}
+                      label="GL Transactions"
+                      desc="Journal/voucher lines from TRVc register — powers Revenue, CoS, OPEX P&L cards"
+                    />
+                    <Toggle
                       checked={draft.rebuild_facts}
                       onChange={(v) => set("rebuild_facts", v)}
                       label="Sales Facts"

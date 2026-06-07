@@ -188,6 +188,22 @@ class HansaClient:
             f"PayDeal,Sum1,Sum4,BaseSum4"
         )
 
+    async def get_gl_transactions(self, date_from: str, date_to: str) -> list[dict]:
+        """
+        Fetch GL transaction lines from the Hansa TRVc register for this company.
+        Each row is one account line within a journal/voucher — contains DebVal/CredVal
+        per AccNumber, used to build Revenue, Cost of Sales, OPEX P&L analytics.
+
+        The date range filter applies to TransDate (the posting date).
+        """
+        return await self._get_paginated(
+            f"api/{self.company_no}/TRVc"
+            f"?sort=TransDate"
+            f"&range={date_from}:{date_to}"
+            f"&fields=Number,RegDate,Comment,TransDate,DSum,CSum,DSum2,CSum2,"
+            f"TransNr,AccNumber,DebVal,CredVal,VATCode,Qty,Curncy,DebVal2,CredVal2"
+        )
+
     async def get_gl_accounts(self, company_no: str = "1") -> list[dict]:
         """
         Fetch GL accounts (AccVc register) from the master company.

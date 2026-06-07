@@ -325,6 +325,10 @@ export type RefreshSettings = {
   include_master: boolean;
   include_invoices: boolean;
   include_deliveries: boolean;
+  include_orders: boolean;
+  include_receipts: boolean;
+  include_gl_accounts: boolean;
+  include_gl_transactions: boolean;
   rebuild_facts: boolean;
   rebuild_movement: boolean;
   rebuild_stock: boolean;
@@ -397,6 +401,10 @@ export type CustomRefreshPayload = {
   include_master?: boolean;
   include_invoices?: boolean;
   include_deliveries?: boolean;
+  include_orders?: boolean;
+  include_receipts?: boolean;
+  include_gl_accounts?: boolean;
+  include_gl_transactions?: boolean;
   rebuild_facts?: boolean;
   rebuild_movement?: boolean;
   rebuild_stock?: boolean;
