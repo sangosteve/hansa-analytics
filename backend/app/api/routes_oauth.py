@@ -14,7 +14,7 @@ import logging
 from urllib.parse import urlencode
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse, JSONResponse
 from sqlalchemy.orm import Session
 
@@ -25,6 +25,9 @@ from app.services import oauth_service
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/hansa", tags=["hansa-oauth"])
+
+# In-memory store of the last callback received (safe — code value is never stored)
+_last_callback: dict = {}
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -182,6 +185,7 @@ def oauth_start(
 
 @router.get("/oauth/callback")
 async def oauth_callback(
+    request: Request,
     code: str = Query(default=None),
     state: str = Query(default=None),
     error: str = Query(default=None),
@@ -193,9 +197,22 @@ async def oauth_callback(
     Must match HANSA_OAUTH_REDIRECT_URI exactly.
     Exchanges the authorization code for tokens and redirects to the frontend.
     """
+    # Log ALL query parameters Hansa sends so we can see any extra fields
+    all_params = dict(request.query_params)
+    safe_params = {k: v for k, v in all_params.items() if k not in ("code",)}
     logger.info(
-        "OAuth callback received — code=%s state=%s error=%s",
-        bool(code), bool(state), error,
+        "OAuth callback received — all_params=%s",
+        safe_params,
+    )
+
+    # Grab description from any common field name Hansa might use
+    description = (
+        error_description
+        or all_params.get("description")
+        or all_params.get("error_message")
+        or all_params.get("message")
+        or all_params.get("error_detail")
+        or None
     )
 
     # Someone navigated here directly without going through the OAuth flow
@@ -209,17 +226,15 @@ async def oauth_callback(
     # Hansa returned an error
     if error:
         logger.warning(
-            "OAuth provider returned error: %s — %s",
-            error, error_description or "(no description)",
+            "OAuth provider returned error: %s — description=%s — raw_params=%s",
+            error, description or "(none)", safe_params,
         )
         dest = _frontend_settings_url(state)
-        # Forward both the error code and the human-readable description to the frontend
-        from urllib.parse import urlencode as _ue
         err_params = {"oauth_error": error}
-        if error_description:
-            err_params["oauth_error_desc"] = error_description
+        if description:
+            err_params["oauth_error_desc"] = description
         return RedirectResponse(
-            url=f"{dest}?{_ue(err_params)}",
+            url=f"{dest}?{urlencode(err_params)}",
             status_code=302,
         )
 
