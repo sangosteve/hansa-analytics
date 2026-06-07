@@ -653,14 +653,18 @@ export async function getOAuthStatus(): Promise<OAuthStatus> {
   return res.json();
 }
 
-export async function getOAuthStartUrl(returnUrl: string): Promise<{ auth_url: string; state: string }> {
+/**
+ * Returns the URL to navigate the browser to in order to start the OAuth flow.
+ * The backend /start route immediately redirects to the Hansa authorization page.
+ * Use window.location.href = getOAuthStartUrl(returnUrl) — do NOT fetch() this.
+ */
+export function getOAuthStartUrl(returnUrl: string): string {
   const params = new URLSearchParams({ return_url: returnUrl });
-  const res = await fetch(`${API_BASE_URL}/hansa/oauth/start?${params}`);
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.detail ?? "Failed to start OAuth flow");
-  }
-  return res.json();
+  // Build absolute URL so it works with both relative (/api) and absolute VITE_API_URL
+  const base = API_BASE_URL.startsWith("http")
+    ? API_BASE_URL
+    : `${window.location.origin}${API_BASE_URL}`;
+  return `${base}/hansa/oauth/start?${params}`;
 }
 
 export async function disconnectOAuth(): Promise<{ status: string; message: string }> {

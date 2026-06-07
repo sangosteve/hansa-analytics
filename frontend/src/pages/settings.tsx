@@ -172,23 +172,25 @@ function IntegrationsTab() {
       loadStatus();
     }
     if (params.get("oauth_error")) {
-      setActionError(`OAuth error: ${params.get("oauth_error")}`);
+      const code = params.get("oauth_error");
+      const messages: Record<string, string> = {
+        not_started:  "OAuth flow was not started properly. Please click \"Connect Hansa\" to begin.",
+        missing_code: "Authorization was not completed — no code was received from Hansa. Please try again.",
+        access_denied:"Authorization was denied. Please try again and approve the Hansa connection.",
+      };
+      setActionError(messages[code!] ?? `OAuth error: ${code}`);
       window.history.replaceState({}, "", window.location.pathname);
     }
   }, []);
 
-  const handleConnect = async () => {
+  const handleConnect = () => {
     setConnecting(true);
     setActionError(null);
     setTestResult(null);
-    try {
-      const returnUrl = window.location.href.split("?")[0];
-      const { auth_url } = await getOAuthStartUrl(returnUrl);
-      window.location.href = auth_url;
-    } catch (e: any) {
-      setActionError(e.message ?? "Failed to start OAuth");
-      setConnecting(false);
-    }
+    // Navigate the browser directly to the backend /start route.
+    // The backend immediately redirects to the Hansa authorization page.
+    const returnUrl = window.location.href.split("?")[0];
+    window.location.href = getOAuthStartUrl(returnUrl);
   };
 
   const handleDisconnect = async () => {

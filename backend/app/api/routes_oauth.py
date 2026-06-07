@@ -32,34 +32,37 @@ def oauth_start(
     db: Session = Depends(get_db),
 ):
     """
-    Return the Hansa/StandardID authorization URL for the admin to open.
-    Frontend should redirect the user (or open a new tab) to `auth_url`.
+    Initiate the OAuth flow.  Browser navigates here and is immediately
+    redirected to the Hansa/StandardID authorization page.
     """
     if not settings.hansa_oauth_client_id:
         raise HTTPException(status_code=500, detail="HANSA_OAUTH_CLIENT_ID not configured")
     if not settings.hansa_oauth_redirect_uri:
         raise HTTPException(status_code=500, detail="HANSA_OAUTH_REDIRECT_URI not configured")
+    if not settings.hansa_authorize_url:
+        raise HTTPException(status_code=500, detail="HANSA_AUTHORIZE_URL not configured")
 
     state = oauth_service.make_oauth_state(return_url)
 
+    from urllib.parse import urlencode
     params = {
         "response_type": "code",
         "client_id":     settings.hansa_oauth_client_id,
         "redirect_uri":  settings.hansa_oauth_redirect_uri,
         "state":         state,
     }
-    query_string = "&".join(f"{k}={v}" for k, v in params.items())
-    auth_url = f"{settings.hansa_authorize_url}?{query_string}"
+    auth_url = f"{settings.hansa_authorize_url}?{urlencode(params)}"
 
-    return {"auth_url": auth_url, "state": state}
+    logger.info("Starting OAuth flow → %s", settings.hansa_authorize_url)
+    return RedirectResponse(url=auth_url, status_code=302)
 
 
 # ── OAuth callback ────────────────────────────────────────────────────────────
 
 @router.get("/oauth/callback")
 async def oauth_callback(
-    code: str = Query(...),
-    state: str = Query(...),
+    code: str = Query(default=None),
+    state: str = Query(default=None),
     error: str = Query(default=None),
     error_description: str = Query(default=None),
     db: Session = Depends(get_db),
@@ -69,11 +72,27 @@ async def oauth_callback(
     Must match HANSA_OAUTH_REDIRECT_URI exactly.
     Exchanges the authorization code for tokens and redirects to the frontend.
     """
+    # Someone navigated here directly without going through the OAuth flow
+    if not code and not error and not state:
+        logger.warning("OAuth callback visited directly (no code/state). Redirecting to settings.")
+        return RedirectResponse(
+            url="/settings?oauth_error=not_started",
+            status_code=302,
+        )
+
     # Hansa returned an error
     if error:
         logger.warning("OAuth error from Hansa: %s — %s", error, error_description)
         return RedirectResponse(
             url=f"/settings?oauth_error={error}",
+            status_code=302,
+        )
+
+    # Missing code but no error — unexpected
+    if not code or not state:
+        logger.warning("OAuth callback missing code or state (code=%s state=%s)", bool(code), bool(state))
+        return RedirectResponse(
+            url="/settings?oauth_error=missing_code",
             status_code=302,
         )
 
