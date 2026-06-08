@@ -1,28 +1,15 @@
 <svg width="180" height="180" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <!-- Dark background -->
   <rect width="180" height="180" rx="38" fill="#0d1117"/>
-  <!-- Subtle grid baseline -->
-  <line x1="26" y1="144" x2="154" y2="144" stroke="#30363d" stroke-width="1.5" stroke-linecap="round"/>
-  <!-- Histogram bars (left to right, varying heights) -->
-  <!-- Bar 1 -->
-  <rect x="26" y="108" width="18" height="36" rx="4" fill="#818cf8" opacity="0.65"/>
-  <!-- Bar 2 -->
-  <rect x="49" y="82" width="18" height="62" rx="4" fill="#818cf8" opacity="0.8"/>
-  <!-- Bar 3 (peak) -->
-  <rect x="72" y="48" width="18" height="96" rx="4" fill="#818cf8"/>
-  <!-- Bar 4 -->
-  <rect x="95" y="70" width="18" height="74" rx="4" fill="#34d399" opacity="0.9"/>
-  <!-- Bar 5 -->
-  <rect x="118" y="96" width="18" height="48" rx="4" fill="#34d399" opacity="0.7"/>
-  <!-- Trend line -->
-  <polyline
-    points="35,100 58,74 81,40 104,62 127,88"
-    stroke="#fbbf24"
-    stroke-width="3"
-    fill="none"
-    stroke-linecap="round"
-    stroke-linejoin="round"
-  />
-  <!-- Peak dot -->
-  <circle cx="81" cy="40" r="4.5" fill="#fbbf24"/>
+  <g transform="translate(30,30) scale(5)">
+    <path d="M21 21H10C6.70017 21 5.05025 21 4.02513 19.9749C3 18.9497 3 17.2998 3 14V3"
+          stroke="#166534" stroke-linecap="round" stroke-width="1.5"/>
+    <path d="M8 13L8 20"
+          stroke="#34d399" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/>
+    <path d="M13 10L13 21"
+          stroke="#34d399" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/>
+    <path d="M18 13L18 21"
+          stroke="#34d399" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/>
+    <path d="M21 7.98693C19.16 7.98693 17.1922 8.24252 15.8771 6.49346C14.3798 4.50218 11.6202 4.50218 10.1229 6.49346C8.80782 8.24252 6.84003 7.98693 5 7.98693H3"
+          stroke="#059669" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/>
+  </g>
 </svg>

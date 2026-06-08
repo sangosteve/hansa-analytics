@@ -1,6 +1,7 @@
 import { Link, useLocation } from "wouter";
 import {
   Analytics01Icon,
+  ChartHistogramIcon,
   ChartLineData01Icon,
   Settings01Icon,
   ArrowLeft01Icon,
@@ -34,18 +35,8 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
       <div className={`flex items-center h-[60px] border-b border-[var(--sidebar-border)] px-4 flex-shrink-0 ${
         (collapsed && !isMobileOverlay) ? "justify-center" : "gap-3"
       }`}>
-        <div className="flex-shrink-0 w-8 h-8 rounded-lg overflow-hidden">
-          <svg width="32" height="32" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect width="180" height="180" rx="38" fill="#0d1117"/>
-            <line x1="26" y1="144" x2="154" y2="144" stroke="#30363d" strokeWidth="1.5" strokeLinecap="round"/>
-            <rect x="26" y="108" width="18" height="36" rx="4" fill="#818cf8" opacity="0.65"/>
-            <rect x="49" y="82" width="18" height="62" rx="4" fill="#818cf8" opacity="0.8"/>
-            <rect x="72" y="48" width="18" height="96" rx="4" fill="#818cf8"/>
-            <rect x="95" y="70" width="18" height="74" rx="4" fill="#34d399" opacity="0.9"/>
-            <rect x="118" y="96" width="18" height="48" rx="4" fill="#34d399" opacity="0.7"/>
-            <polyline points="35,100 58,74 81,40 104,62 127,88" stroke="#fbbf24" strokeWidth="3" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
-            <circle cx="81" cy="40" r="4.5" fill="#fbbf24"/>
-          </svg>
+        <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-emerald-950/70 border border-emerald-800/40 flex items-center justify-center">
+          <ChartHistogramIcon size={18} color="#34d399" strokeWidth={2} />
         </div>
         {(!collapsed || isMobileOverlay) && (
           <div className="overflow-hidden flex-1">
