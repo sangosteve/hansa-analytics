@@ -374,6 +374,7 @@ def movement_summary(
             (SELECT COUNT(*) FROM grp WHERE p3m > 0 AND (t3m - p3m) / NULLIF(p3m,0) > 0.15)  AS growing_groups,
             (SELECT COUNT(*) FROM grp WHERE t3m = 0) AS dead_groups,
             (SELECT COUNT(*) FROM grp WHERE p3m > 0 AND (t3m - p3m) / NULLIF(p3m,0) < -0.15) AS declining_groups,
+            (SELECT COUNT(*) FROM cust WHERE t3m > 0) AS active_customers,
             (SELECT COUNT(*) FROM cust WHERE t3m = 0 AND days_since > 60) AS stopped_customers,
             (SELECT COUNT(*) FROM cust WHERE t3m = 0 AND days_since BETWEEN 30 AND 60) AS at_risk_customers,
             (SELECT COUNT(*) FROM itm WHERE days_since > 90) AS slow_items,

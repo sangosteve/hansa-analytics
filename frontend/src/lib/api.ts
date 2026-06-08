@@ -128,6 +128,7 @@ export async function getCustomerProductGroupItems(
 }
 
 export type MovementSummary = {
+  active_customers: number;
   growing_groups: number;
   declining_groups: number;
   dead_groups: number;

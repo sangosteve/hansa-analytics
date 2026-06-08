@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-  ChartUpIcon,
   Building01Icon,
   Alert01Icon,
   ChartDownIcon,
@@ -9,6 +8,7 @@ import {
   CheckmarkCircle01Icon,
   AlertCircleIcon,
   Clock01Icon,
+  ChartUpIcon,
 } from "hugeicons-react";
 import ReactECharts from "echarts-for-react";
 
@@ -16,10 +16,13 @@ import {
   getSalesSummary,
   getPredictiveInsights,
   getRefreshFreshness,
+  getMovementSummary,
   type SalesSummaryResponse,
   type PredictiveInsightsResponse,
   type RefreshFreshness,
+  type MovementSummary,
 } from "@/lib/api";
+import DashboardKpiGrid from "@/components/home/dashboard-kpi-grid";
 import AIFloatingDrawer from "@/components/ai/ai-floating-drawer";
 import { useCompany } from "@/lib/company-context";
 import { CustomerDrilldownModal } from "@/components/home/customer-drilldown-modal";
@@ -120,6 +123,7 @@ export default function Home() {
   const [summary, setSummary] = useState<SalesSummaryResponse | null>(null);
   const [momSummary, setMomSummary] = useState<SalesSummaryResponse | null>(null);
   const [predictive, setPredictive] = useState<PredictiveInsightsResponse | null>(null);
+  const [movementSummary, setMovementSummary] = useState<MovementSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [momLoading, setMomLoading] = useState(true);
   const [predictiveLoading, setPredictiveLoading] = useState(true);
@@ -161,6 +165,15 @@ export default function Home() {
     }
   };
 
+  const loadMovSummary = async () => {
+    try {
+      const ms = await getMovementSummary(companyNos, saleScope);
+      setMovementSummary(ms);
+    } catch {
+      // non-critical — customer health card shows zeros
+    }
+  };
+
   const loadFreshness = async () => {
     try {
       const f = await getRefreshFreshness();
@@ -174,7 +187,7 @@ export default function Home() {
   useEffect(() => { loadFiltered(); }, [JSON.stringify(companyNos), saleScope, dateFrom, dateTo]);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { loadMom(); }, [JSON.stringify(companyNos), saleScope]);
+  useEffect(() => { loadMom(); loadMovSummary(); }, [JSON.stringify(companyNos), saleScope]);
 
   // Freshness on mount
   useEffect(() => { loadFreshness(); }, []);
@@ -184,6 +197,7 @@ export default function Home() {
     const handler = () => {
       loadFiltered();
       loadMom();
+      loadMovSummary();
       loadFreshness();
     };
     window.addEventListener("hansa-data-refreshed", handler);
@@ -250,6 +264,25 @@ export default function Home() {
 
   // Date-filtered total for KPI card
   const totalTonnes = useMemo(() => salesRows.reduce((sum, row) => sum + row.total_tonnes, 0), [salesRows]);
+
+  // Same period last year — filter momRows to the same month range but previous year(s)
+  const lyTonnes = useMemo(() => {
+    if (!momRows.length) return 0;
+    const dfDate = new Date(dateFrom);
+    const dtDate = new Date(dateTo);
+    const fromYear = dfDate.getFullYear() - 1;
+    const toYear = dtDate.getFullYear() - 1;
+    const fromMonth = dfDate.getMonth() + 1; // 1-indexed
+    const toMonth = dtDate.getMonth() + 1;
+    return momRows
+      .filter((r) => {
+        if (r.year < fromYear || r.year > toYear) return false;
+        if (r.year === fromYear && r.month < fromMonth) return false;
+        if (r.year === toYear && r.month > toMonth) return false;
+        return true;
+      })
+      .reduce((sum, r) => sum + r.total_tonnes, 0);
+  }, [momRows, dateFrom, dateTo]);
 
   const topGroup = useMemo(() => {
     if (!predictive?.product_group_trends?.length) return null;
@@ -386,7 +419,7 @@ export default function Home() {
           {/* Header */}
           <div className="flex items-center justify-between pb-1 border-b border-border">
             <div>
-              <h1 className="text-lg font-semibold tracking-tight text-foreground">Hansa Analytics</h1>
+              <h1 className="text-lg font-semibold tracking-tight text-foreground">PSS Analytics</h1>
               <p className="text-xs text-muted-foreground mt-0.5">Sales tonnage dashboard — {companyLabel}</p>
             </div>
             <DataFreshnessIndicator freshness={freshness} />
@@ -402,71 +435,16 @@ export default function Home() {
           </div>
 
           {/* KPI cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            {/* Total Tonnes */}
-            <div className="rounded-lg border border-border bg-card p-3.5">
-              <div className="flex items-center gap-2 mb-1.5">
-                <ChartUpIcon size={14} className="text-primary" />
-                <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Total tonnes</span>
-              </div>
-              <div className="text-2xl font-bold text-foreground">{formatTonnes(totalTonnes)}</div>
-            </div>
-
-            {/* Top Product Group (replaces Top Rep) */}
-            <div className="rounded-lg border border-border bg-card p-3.5">
-              <div className="flex items-center gap-2 mb-1.5">
-                <Package01Icon size={14} className="text-primary" />
-                <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Top group (3m)</span>
-              </div>
-              {predictiveLoading ? (
-                <div className="text-xs text-muted-foreground">Loading…</div>
-              ) : topGroup ? (
-                <>
-                  <div className="text-lg font-bold text-foreground truncate">{topGroup.name || topGroup.code}</div>
-                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-0.5">
-                    <span>{formatTonnes(topGroup.current_3m_tonnes)}</span>
-                    {pctBadge(topGroup.pct_change)}
-                  </div>
-                </>
-              ) : (
-                <div className="text-2xl font-bold text-foreground">—</div>
-              )}
-            </div>
-
-            {/* MTD projection */}
-            <div className="rounded-lg border border-border bg-card p-3.5">
-              <div className="flex items-center gap-2 mb-1.5">
-                <Activity01Icon size={14} className="text-primary" />
-                <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
-                  {mtd ? mtd.month : "MTD projection"}
-                </span>
-              </div>
-              {predictiveLoading ? (
-                <div className="text-xs text-muted-foreground">Loading…</div>
-              ) : mtd ? (
-                <>
-                  <div className="text-2xl font-bold text-foreground">{formatTonnes(mtd.projected_eom_tonnes)}</div>
-                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-0.5">
-                    <span>Projected EOM</span>
-                    {pctBadge(mtd.yoy_pct_change)}
-                    <span className="text-muted-foreground/60">vs LY</span>
-                  </div>
-                </>
-              ) : (
-                <div className="text-2xl font-bold text-foreground">—</div>
-              )}
-            </div>
-
-            {/* Company / scope */}
-            <div className="rounded-lg border border-border bg-card p-3.5">
-              <div className="flex items-center gap-2 mb-1.5">
-                <Building01Icon size={14} className="text-primary" />
-                <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Scope</span>
-              </div>
-              <div className="text-sm font-bold text-foreground leading-tight">{companyLabel}</div>
-              <div className="text-xs text-muted-foreground mt-0.5">{momYears.join(", ") || "—"}</div>
-            </div>
-          </div>
+          <DashboardKpiGrid
+            totalTonnes={totalTonnes}
+            lyTonnes={lyTonnes}
+            salesRows={salesRows}
+            mtd={predictive?.mtd_projection ?? null}
+            atRiskCustomers={predictive?.customer_lapse_risk.length ?? 0}
+            activeCustomers={movementSummary?.active_customers ?? 0}
+            loading={loading}
+            predictiveLoading={predictiveLoading}
+          />
 
           {error && (
             <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">{error}</div>
