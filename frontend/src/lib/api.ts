@@ -260,6 +260,25 @@ export async function getSlowMovingItems(companyNos: string[], saleScope: string
   return res.json();
 }
 
+export type CustomerHeatmapEntry = {
+  customer_code: string;
+  customer_name: string | null;
+  total_tonnes: number;
+  months: { month: string; year: number; tonnes: number }[];
+};
+
+export async function getCustomerHeatmap(
+  companyNos: string[],
+  saleScope: string,
+  limit = 15,
+): Promise<CustomerHeatmapEntry[]> {
+  const params = new URLSearchParams({ sale_scope: saleScope, limit: String(limit) });
+  appendCompanyNos(params, companyNos);
+  const res = await fetch(`${API_BASE_URL}/movement/customers/heatmap?${params}`);
+  if (!res.ok) throw new Error("Failed to fetch customer heatmap");
+  return res.json();
+}
+
 export async function getCustomerMovementAnalytics(companyNos: string[], saleScope: string): Promise<CustomerMovementRow[]> {
   const params = new URLSearchParams({ sale_scope: saleScope });
   appendCompanyNos(params, companyNos);

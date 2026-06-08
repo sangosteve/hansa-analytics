@@ -381,3 +381,91 @@ def movement_summary(
             (SELECT COUNT(*) FROM itm WHERE days_since > 180) AS dead_items
     """), co_params).mappings().fetchone()
     return dict(row) if row else {}
+
+
+@router.get("/customers/heatmap")
+def customer_heatmap(
+    company_nos: Optional[list[str]] = Query(default=None),
+    company_no: str = Query(default="3"),
+    sale_scope: str = Query(default="all"),
+    limit: int = Query(default=15, ge=5, le=30),
+    db: Session = Depends(get_db),
+):
+    """Return per-customer per-month tonnes for the top N customers over the last 12 months."""
+    resolved = _resolve(company_nos, company_no)
+    co_frag, co_params = build_company_filter(resolved)
+    scope_frag = build_scope_sql(sale_scope)
+    limit_safe = min(max(int(limit), 5), 30)
+
+    rows = db.execute(text(f"""
+        WITH months AS (
+            SELECT generate_series(
+                DATE_TRUNC('month', CURRENT_DATE) - INTERVAL '11 months',
+                DATE_TRUNC('month', CURRENT_DATE),
+                INTERVAL '1 month'
+            )::date AS month_start
+        ),
+        top_customers AS (
+            SELECT
+                customer_code,
+                MAX(customer_name) AS customer_name,
+                ROUND(SUM(tonnes)::numeric, 2) AS total_tonnes
+            FROM fact_sales_lines
+            WHERE {co_frag}
+              {scope_frag}
+              AND customer_code IS NOT NULL
+              AND transaction_date >= DATE_TRUNC('month', CURRENT_DATE) - INTERVAL '11 months'
+            GROUP BY customer_code
+            ORDER BY total_tonnes DESC
+            LIMIT {limit_safe}
+        ),
+        monthly_agg AS (
+            SELECT
+                f.customer_code,
+                DATE_TRUNC('month', f.transaction_date)::date AS month_start,
+                ROUND(SUM(f.tonnes)::numeric, 2) AS tonnes
+            FROM fact_sales_lines f
+            INNER JOIN top_customers tc ON f.customer_code = tc.customer_code
+            WHERE {co_frag.replace("company_no", "f.company_no", 1)}
+              AND f.transaction_date >= DATE_TRUNC('month', CURRENT_DATE) - INTERVAL '11 months'
+            GROUP BY f.customer_code, DATE_TRUNC('month', f.transaction_date)
+        )
+        SELECT
+            tc.customer_code,
+            tc.customer_name,
+            tc.total_tonnes,
+            m.month_start,
+            COALESCE(ma.tonnes, 0) AS month_tonnes
+        FROM top_customers tc
+        CROSS JOIN months m
+        LEFT JOIN monthly_agg ma
+            ON ma.customer_code = tc.customer_code
+           AND ma.month_start = m.month_start
+        ORDER BY tc.total_tonnes DESC, m.month_start
+    """), co_params).mappings().all()
+
+    from collections import OrderedDict
+    import datetime as _dt
+
+    customers: dict = OrderedDict()
+    for row in rows:
+        code = row["customer_code"]
+        if code not in customers:
+            customers[code] = {
+                "customer_code": code,
+                "customer_name": row["customer_name"],
+                "total_tonnes": float(row["total_tonnes"]),
+                "months": [],
+            }
+        ms = row["month_start"]
+        if hasattr(ms, "strftime"):
+            d = ms
+        else:
+            d = _dt.datetime.strptime(str(ms), "%Y-%m-%d").date()
+        customers[code]["months"].append({
+            "month": d.strftime("%b"),
+            "year": d.year,
+            "tonnes": float(row["month_tonnes"]),
+        })
+
+    return list(customers.values())

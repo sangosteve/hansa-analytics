@@ -1,13 +1,16 @@
+import { useState, useEffect } from "react";
 import {
   AlertCircleIcon,
   ChartDownIcon,
   ChartUpIcon,
   UserIcon,
   Package01Icon,
-  FlashIcon,
+  ChartHistogramIcon,
   ArrowRight01Icon,
 } from "hugeicons-react";
-import type { PredictiveInsightsResponse } from "@/lib/api";
+import type { PredictiveInsightsResponse, CustomerHeatmapEntry } from "@/lib/api";
+import { getCustomerHeatmap } from "@/lib/api";
+import { useCompany } from "@/lib/company-context";
 
 const nf = new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 });
 const fmtT = (v: number) => `${nf.format(Math.abs(v))} t`;
@@ -110,6 +113,125 @@ function ActionCard({
         </div>
       )}
     </div>
+  );
+}
+
+function cellColor(tonnes: number, max: number): string {
+  if (tonnes === 0 || max === 0) return "#1c2128";
+  const r = Math.min(tonnes / max, 1);
+  if (r < 0.08) return "#818cf828";
+  if (r < 0.2)  return "#818cf855";
+  if (r < 0.4)  return "#818cf888";
+  if (r < 0.65) return "#818cf8bb";
+  if (r < 0.85) return "#818cf8dd";
+  return "#34d399";
+}
+
+function CustomerHeatmapCard() {
+  const { companyNos, saleScope } = useCompany();
+  const [data, setData] = useState<CustomerHeatmapEntry[] | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    getCustomerHeatmap(companyNos, saleScope, 14)
+      .then(setData)
+      .catch(() => setData([]))
+      .finally(() => setLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(companyNos), saleScope]);
+
+  const months = data?.[0]?.months ?? [];
+  const maxTonnes = data
+    ? Math.max(...data.flatMap(c => c.months.map(m => m.tonnes)), 1)
+    : 1;
+
+  return (
+    <ActionCard
+      icon={<ChartHistogramIcon size={14} className="text-teal-400" />}
+      iconBg="bg-teal-500/10 border border-teal-500/20"
+      title="Customer Activity"
+      subtitle="Top customers — last 12 months"
+      footer="Colour intensity = purchase volume"
+      cta="View all"
+    >
+      {loading ? (
+        <div className="flex items-center justify-center py-8">
+          <div className="h-3.5 w-3.5 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+        </div>
+      ) : !data?.length ? (
+        <p className="text-[11px] text-muted-foreground py-6 text-center">No activity data</p>
+      ) : (
+        <div className="px-3 pt-2 pb-1">
+          {/* Month header */}
+          <div className="flex items-center mb-1">
+            <div className="w-[90px] flex-shrink-0" />
+            <div className="flex gap-px">
+              {months.map((m, i) => (
+                <div
+                  key={i}
+                  className="text-center text-[8px] text-muted-foreground/50 leading-tight"
+                  style={{ width: 20, flexShrink: 0 }}
+                >
+                  {m.month[0]}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Customer rows */}
+          <div className="space-y-px">
+            {data.slice(0, 13).map(customer => (
+              <div key={customer.customer_code} className="flex items-center">
+                <div
+                  className="flex-shrink-0 text-[9px] text-muted-foreground/70 truncate pr-1.5 leading-tight"
+                  style={{ width: 90 }}
+                  title={customer.customer_name ?? customer.customer_code}
+                >
+                  {customer.customer_name || customer.customer_code}
+                </div>
+                <div className="flex gap-px">
+                  {customer.months.map((m, i) => (
+                    <div
+                      key={i}
+                      className="rounded-[2px] cursor-default transition-opacity hover:opacity-70"
+                      style={{
+                        width: 20,
+                        height: 14,
+                        flexShrink: 0,
+                        background: cellColor(m.tonnes, maxTonnes),
+                      }}
+                      title={
+                        m.tonnes > 0
+                          ? `${customer.customer_name ?? customer.customer_code} · ${m.month} ${m.year}: ${nf.format(m.tonnes)} t`
+                          : `${customer.customer_name ?? customer.customer_code} · ${m.month} ${m.year}: No orders`
+                      }
+                    />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Legend */}
+          <div className="flex items-center gap-2.5 mt-2.5 pt-2 border-t border-border/40">
+            {(
+              [
+                ["#1c2128", "None"],
+                ["#818cf855", "Low"],
+                ["#818cf8bb", "Med"],
+                ["#34d399", "High"],
+              ] as [string, string][]
+            ).map(([c, l]) => (
+              <div key={l} className="flex items-center gap-1">
+                <div className="w-3 h-3 rounded-sm flex-shrink-0" style={{ background: c }} />
+                <span className="text-[8.5px] text-muted-foreground/55">{l}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </ActionCard>
   );
 }
 
@@ -334,30 +456,8 @@ export default function CommercialActionCenter({
           )}
         </ActionCard>
 
-        {/* ── 5. Cross-Sell Opportunities ── */}
-        <ActionCard
-          icon={<FlashIcon size={14} className="text-purple-400" />}
-          iconBg="bg-purple-500/10 border border-purple-500/20"
-          title="Cross-Sell Opportunities"
-          subtitle="AI-matched buying patterns"
-          footer="AI matched based on buying patterns"
-          cta="View opportunities"
-        >
-          <div className="flex flex-col items-center justify-center py-6 px-4 gap-3 text-center">
-            <div className="w-10 h-10 rounded-full bg-purple-500/10 border border-purple-500/20 flex items-center justify-center">
-              <FlashIcon size={18} className="text-purple-400" />
-            </div>
-            <div>
-              <p className="text-[11px] font-semibold text-foreground">AI Analysis Required</p>
-              <p className="text-[10px] text-muted-foreground mt-1 leading-relaxed">
-                Use the AI Assistant to discover cross-sell opportunities based on customer buying patterns.
-              </p>
-            </div>
-            <span className="text-[10px] font-medium px-3 py-1.5 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20">
-              Ask the AI Assistant →
-            </span>
-          </div>
-        </ActionCard>
+        {/* ── 5. Customer Activity Heatmap ── */}
+        <CustomerHeatmapCard />
 
         {/* ── 6. Growing Groups ── */}
         <ActionCard
