@@ -39,7 +39,7 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
         </div>
         {(!collapsed || isMobileOverlay) && (
           <div className="overflow-hidden flex-1">
-            <p className="font-bold text-sm text-white leading-none">Hansa</p>
+            <p className="font-bold text-sm text-white leading-none">PSS</p>
             <p className="text-[10px] text-white/50 leading-none mt-0.5">Analytics</p>
           </div>
         )}
