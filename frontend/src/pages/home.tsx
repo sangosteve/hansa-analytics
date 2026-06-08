@@ -403,7 +403,7 @@ export default function Home() {
         const v = d[`year${year}`];
         return v != null ? v : null;
       }),
-      smooth: true,
+      smooth: false,
       connectNulls: false,
       lineStyle: { width: 2, color: chartColors[index % chartColors.length] },
       itemStyle: { color: chartColors[index % chartColors.length] },
@@ -501,7 +501,7 @@ export default function Home() {
         yAxisIndex: 1,
         data: growthData.map((d, idx) => idx + 1 <= lastCurrentYearMonth && d.current > 0 ? Number(d.growth.toFixed(2)) : null),
         connectNulls: false,
-        smooth: true,
+        smooth: false,
         lineStyle: { width: 2, color: "#f87171" },
         itemStyle: { color: "#f87171" },
         symbol: "circle",
@@ -531,7 +531,7 @@ export default function Home() {
         const v = d[`year${year}`];
         return v != null ? v : null;
       }),
-      smooth: true,
+      smooth: false,
       connectNulls: false,
       lineStyle: { width: 2, color: chartColors[index % chartColors.length] },
       itemStyle: { color: chartColors[index % chartColors.length] },
