@@ -214,6 +214,7 @@ function KpiCard({ children, accentClass = "" }: {
 export interface DashboardKpiGridProps {
   totalTonnes: number;
   lyTonnes: number;
+  comparisonLabel?: string;
   salesRows: SalesSummaryMonthlyRow[];
   mtd: PredictiveInsightsResponse["mtd_projection"] | null;
   atRiskCustomers: number;
@@ -227,6 +228,7 @@ export interface DashboardKpiGridProps {
 export default function DashboardKpiGrid({
   totalTonnes,
   lyTonnes,
+  comparisonLabel,
   salesRows,
   mtd,
   atRiskCustomers,
@@ -282,7 +284,7 @@ export default function DashboardKpiGrid({
                 <span className={`inline-flex items-center gap-0.5 text-[11px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ${
                   yoyPct >= 0 ? "bg-emerald-500/15 text-emerald-400" : "bg-red-500/15 text-red-400"
                 }`}>
-                  {yoyPct >= 0 ? "↑" : "↓"} {Math.abs(yoyPct).toFixed(1)}% vs LY
+                  {yoyPct >= 0 ? "↑" : "↓"} {Math.abs(yoyPct).toFixed(1)}% vs {comparisonLabel ?? "LY"}
                 </span>
               ) : (
                 <span className="text-[11px] text-muted-foreground/50 italic">No prior year data</span>
@@ -291,7 +293,7 @@ export default function DashboardKpiGrid({
 
             {lyTonnes > 0 && (
               <div className="mt-1 text-[11px] text-muted-foreground">
-                Last year: {fmtT(lyTonnes)}
+                {comparisonLabel ?? "Last year"}: {fmtT(lyTonnes)}
               </div>
             )}
           </div>

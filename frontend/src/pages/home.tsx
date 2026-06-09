@@ -24,6 +24,7 @@ import {
 import DashboardKpiGrid, { DEFAULT_TARGET_TONNES } from "@/components/home/dashboard-kpi-grid";
 import CommercialActionCenter from "@/components/home/commercial-action-center";
 import AIFloatingDrawer from "@/components/ai/ai-floating-drawer";
+import { getComparisonPeriod, getComparisonBannerText, buildComparisonModeLabel, type ComparisonMode } from "@/lib/comparison-utils";
 import { useCompany } from "@/lib/company-context";
 import { CustomerDrilldownModal } from "@/components/home/customer-drilldown-modal";
 
@@ -153,18 +154,23 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [selectedRisk, setSelectedRisk] = useState<PredictiveInsightsResponse["customer_lapse_risk"][0] | null>(null);
   const [freshness, setFreshness] = useState<RefreshFreshness | null>(null);
+  const [comparisonMode, setComparisonMode] = useState<ComparisonMode>("same_period_ly");
+  const [compSummary, setCompSummary] = useState<SalesSummaryResponse | null>(null);
 
   const loadFiltered = async () => {
     setLoading(true);
     setPredictiveLoading(true);
     setError(null);
     try {
-      const [salesData, predData] = await Promise.all([
+      const { from: compFrom, to: compTo } = getComparisonPeriod(dateFrom, dateTo, comparisonMode);
+      const [salesData, predData, compData] = await Promise.all([
         getSalesSummary(dateFrom, dateTo, companyNos, saleScope),
         getPredictiveInsights(companyNos, saleScope),
+        getSalesSummary(compFrom, compTo, companyNos, saleScope),
       ]);
       setSummary(salesData);
       setPredictive(predData);
+      setCompSummary(compData);
     } catch (err) {
       setError("Unable to load data. Please try again.");
       console.error(err);
@@ -205,7 +211,7 @@ export default function Home() {
   };
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { loadFiltered(); }, [JSON.stringify(companyNos), saleScope, dateFrom, dateTo]);
+  useEffect(() => { loadFiltered(); }, [JSON.stringify(companyNos), saleScope, dateFrom, dateTo, comparisonMode]);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { loadMom(); loadMovSummary(); }, [JSON.stringify(companyNos), saleScope]);
@@ -304,6 +310,30 @@ export default function Home() {
   );
 
   const divisionBreakdown = summary?.division_breakdown ?? [];
+
+  const comparisonTonnes = useMemo(
+    () => (compSummary?.monthly_sales ?? []).reduce((sum, r) => sum + r.total_tonnes, 0),
+    [compSummary]
+  );
+
+  const comparisonLabel = buildComparisonModeLabel(dateFrom, dateTo, comparisonMode);
+
+  const quarterlyData = useMemo(() => {
+    if (!momRows.length || !currentYear || !previousYear) return [];
+    const curQ = [0, 0, 0, 0];
+    const prevQ = [0, 0, 0, 0];
+    momRows.forEach(r => {
+      const qi = Math.floor((r.month - 1) / 3);
+      if (r.year === currentYear) curQ[qi] += r.total_tonnes;
+      if (r.year === previousYear) prevQ[qi] += r.total_tonnes;
+    });
+    return (["Q1", "Q2", "Q3", "Q4"] as const).map((q, i) => ({
+      q,
+      current: curQ[i],
+      previous: prevQ[i],
+      pct: prevQ[i] > 0 ? ((curQ[i] - prevQ[i]) / prevQ[i]) * 100 : 0,
+    }));
+  }, [momRows, currentYear, previousYear]);
 
   // ── Today / insight computations ──────────────────────────────────────────
   const todayMonth = new Date().getMonth() + 1;
@@ -682,6 +712,76 @@ export default function Home() {
     };
   }, [divisionBreakdown]);
 
+  const quarterlyChartOptions = useMemo(() => {
+    if (!quarterlyData.length) return null;
+    return {
+      ...darkChartBase,
+      tooltip: {
+        ...darkChartBase.tooltip,
+        trigger: "axis",
+        // @ts-ignore
+        formatter: (params) => params
+          // @ts-ignore
+          .filter(item => item.value != null && item.value > 0)
+          // @ts-ignore
+          .map(item => `${item.seriesName}: ${numberFormatter.format(item.value)} t`)
+          .join("<br />"),
+      },
+      legend: {
+        data: [String(currentYear ?? "Current"), String(previousYear ?? "Prior")],
+        top: "4%",
+        textStyle: { color: "#8b949e" },
+      },
+      grid: { left: "8%", right: "4%", bottom: "14%", top: "22%" },
+      xAxis: {
+        type: "category",
+        data: quarterlyData.map(d => d.q),
+        axisLine: { lineStyle: { color: "#30363d" } },
+        axisLabel: { color: "#8b949e" },
+        splitLine: { show: false },
+      },
+      yAxis: {
+        type: "value",
+        name: "Tonnes",
+        nameTextStyle: { color: "#8b949e" },
+        axisLabel: { color: "#8b949e" },
+        splitLine: { lineStyle: { color: "#21262d" } },
+      },
+      series: [
+        {
+          name: String(currentYear ?? "Current"),
+          type: "bar",
+          data: quarterlyData.map(d => d.current > 0 ? d.current : null),
+          itemStyle: { color: "#818cf8", borderRadius: [3, 3, 0, 0] },
+          barGap: "15%",
+          label: {
+            show: true,
+            position: "top",
+            fontSize: 9,
+            color: "#8b949e",
+            // @ts-ignore
+            formatter: (p: any) => p.value > 0 ? `${(p.value / 1000).toFixed(1)}k` : "",
+          },
+        },
+        {
+          name: String(previousYear ?? "Prior"),
+          type: "bar",
+          data: quarterlyData.map(d => d.previous),
+          itemStyle: { color: "#30363d", borderRadius: [3, 3, 0, 0] },
+          barGap: "15%",
+          label: {
+            show: true,
+            position: "top",
+            fontSize: 9,
+            color: "#6b7280",
+            // @ts-ignore
+            formatter: (p: any) => p.value > 0 ? `${(p.value / 1000).toFixed(1)}k` : "",
+          },
+        },
+      ],
+    };
+  }, [quarterlyData, currentYear, previousYear]);
+
   const loadingOverlay = (
     <div className="flex h-full items-center justify-center text-muted-foreground text-sm">
       <div className="flex items-center gap-2">
@@ -699,28 +799,66 @@ export default function Home() {
       <div className="flex-1 min-w-0 overflow-y-auto">
         <div className="p-5 space-y-4">
 
-          {/* Header */}
-          <div className="flex items-center justify-between pb-1 border-b border-border">
+          {/* ── Page header ── */}
+          <div className="flex items-center justify-between pb-2 border-b border-border">
             <div>
-              <h1 className="text-lg font-semibold tracking-tight text-foreground">PSS Analytics</h1>
-              <p className="text-xs text-muted-foreground mt-0.5">Sales tonnage dashboard — {companyLabel}</p>
+              <h1 className="text-lg font-semibold tracking-tight text-foreground">Commercial Overview</h1>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Real-time performance as of {formatDateLabel(dateTo)} · {companyLabel}
+              </p>
             </div>
             <DataFreshnessIndicator freshness={freshness} />
           </div>
 
-          {/* Date range display */}
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-md border border-border bg-secondary text-xs text-muted-foreground">
-            <span className="font-medium text-foreground uppercase tracking-wider text-[10px]">
-              {isAllTime ? "All time" : "Custom range"}
-            </span>
-            <span className="text-border">·</span>
-            {formatDateLabel(dateFrom)} — {formatDateLabel(dateTo)}
+          {/* ── Comparison filter bar ── */}
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex flex-col gap-0.5">
+                <span className="text-[9px] uppercase tracking-widest font-semibold text-muted-foreground/55">Date View</span>
+                <select
+                  value={comparisonMode}
+                  onChange={e => setComparisonMode(e.target.value as ComparisonMode)}
+                  className="h-7 px-2 text-[11px] rounded-md border border-border bg-secondary text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40 cursor-pointer"
+                >
+                  <option value="same_period_ly">Same Period LY</option>
+                  <option value="previous_period">Previous Period</option>
+                </select>
+              </div>
+              <div className="flex flex-col gap-0.5">
+                <span className="text-[9px] uppercase tracking-widest font-semibold text-muted-foreground/55">Period</span>
+                <div className="h-7 px-2.5 flex items-center text-[11px] rounded-md border border-border bg-secondary text-muted-foreground whitespace-nowrap">
+                  {isAllTime ? "All time" : `${formatDateLabel(dateFrom)} – ${formatDateLabel(dateTo)}`}
+                </div>
+              </div>
+              <div className="flex flex-col gap-0.5">
+                <span className="text-[9px] uppercase tracking-widest font-semibold text-muted-foreground/55">Scope</span>
+                <div className="h-7 px-2.5 flex items-center text-[11px] rounded-md border border-border bg-secondary text-muted-foreground capitalize">
+                  {saleScope === "all" ? "All sales" : saleScope}
+                </div>
+              </div>
+              <div className="flex flex-col gap-0.5">
+                <span className="text-[9px] uppercase tracking-widest font-semibold text-muted-foreground/55">Division</span>
+                <div className="h-7 px-2.5 flex items-center text-[11px] rounded-md border border-border bg-secondary text-muted-foreground">
+                  {companyLabel}
+                </div>
+              </div>
+            </div>
+
+            {/* Comparison info banner */}
+            <div className="flex items-center gap-2 px-3 py-2 rounded-md border border-primary/15 bg-primary/5 text-[11px]">
+              <span className="text-primary font-bold text-sm flex-shrink-0 leading-none">ℹ</span>
+              <span className="text-muted-foreground">
+                All comparisons are for the same equivalent period:{" "}
+                <span className="text-foreground font-medium">{getComparisonBannerText(dateFrom, dateTo, comparisonMode)}</span>
+              </span>
+            </div>
           </div>
 
           {/* KPI cards */}
           <DashboardKpiGrid
             totalTonnes={totalTonnes}
-            lyTonnes={lyTonnes}
+            lyTonnes={comparisonTonnes}
+            comparisonLabel={comparisonLabel}
             salesRows={salesRows}
             mtd={predictive?.mtd_projection ?? null}
             atRiskCustomers={predictive?.customer_lapse_risk.length ?? 0}
@@ -740,10 +878,13 @@ export default function Home() {
             onSelectCustomer={setSelectedRisk}
           />
 
-          {/* Performance & Trend Analysis */}
+          {/* Performance Trends */}
           <div className="space-y-3">
-            <div className="flex items-center gap-2 pb-1 border-b border-border/60">
-              <h2 className="text-[13px] font-semibold text-foreground">Performance & Trend Analysis</h2>
+            <div className="flex items-center justify-between pb-1 border-b border-border/60">
+              <div>
+                <h2 className="text-[13px] font-semibold text-foreground">Performance Trends</h2>
+                <p className="text-[11px] text-muted-foreground mt-0.5">Track momentum and growth patterns over time</p>
+              </div>
             </div>
 
             {/* Row 1: MoM + Monthly Growth */}
@@ -832,6 +973,34 @@ export default function Home() {
               </div>
               <p className="mt-1.5 text-[9px] text-muted-foreground/50">All values in tonnes</p>
             </div>
+
+            {/* Row 2b: Quarter by Quarter */}
+            {quarterlyChartOptions && (
+              <div className="rounded-lg border border-border bg-card p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-xs font-semibold text-foreground">
+                    Quarter by Quarter ({currentYear} vs {previousYear})
+                  </h3>
+                  <span className="text-[9px] text-muted-foreground/60">All values in tonnes</span>
+                </div>
+                <div className="h-[200px]">
+                  {momLoading ? loadingOverlay : (
+                    <ReactECharts option={quarterlyChartOptions} style={{ width: "100%", height: "100%" }} notMerge lazyUpdate />
+                  )}
+                </div>
+                {quarterlyData.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {quarterlyData.filter(q => q.previous > 0).map(q => (
+                      <span key={q.q} className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                        q.pct >= 0 ? "bg-emerald-500/10 text-emerald-400" : "bg-red-500/10 text-red-400"
+                      }`}>
+                        {q.q}: {q.pct >= 0 ? "+" : ""}{q.pct.toFixed(1)}%
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Row 3: Division + Product Group Trends */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
@@ -1020,8 +1189,25 @@ export default function Home() {
             </div>
           </div>
 
+            {/* ── Insight footer ── */}
+            {momChips?.ytdPct != null && (
+              <div className="rounded-lg border border-primary/15 bg-primary/5 p-3.5 flex items-start gap-3">
+                <span className="text-base leading-none flex-shrink-0 mt-0.5">💡</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[11px] font-semibold text-foreground mb-0.5">Year-to-date summary</p>
+                  <p className="text-[11px] text-muted-foreground leading-relaxed">
+                    {(momChips.ytdPct ?? 0) >= 0
+                      ? `You are ahead of last year by ${(momChips.ytdPct ?? 0).toFixed(1)}% year-to-date.`
+                      : `You are behind last year by ${Math.abs(momChips.ytdPct ?? 0).toFixed(1)}% year-to-date.`
+                    }
+                    {growingGroups.length > 0 && ` ${growingGroups.slice(0, 2).map(g => g.name || g.code).join(" and ")} ${growingGroups.length === 1 ? "is" : "are"} the top growth driver${growingGroups.length > 1 ? "s" : ""}.`}
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+
         </div>
-      </div>
 
       {/* ── Floating AI drawer (fixed overlay, no layout impact) ── */}
       <AIFloatingDrawer companyNos={companyNos} saleScope={saleScope} dateFrom={dateFrom} dateTo={dateTo} />

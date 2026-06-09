@@ -5,3 +5,4 @@
 - [Hansa client pagination](hansa-pagination.md) — Hansa REST uses ?offset=N&limit=N (not start/skip/page). Master data OOM fix: stream via iter_pages() + bulk-upsert per page. Use run_master_data.py for master sync.
 - [Vite proxy required](vite-proxy.md) — frontend/vite.config.ts must have server.proxy for /api → http://localhost:8080 or all API calls return HTML 404.
 - [AI Insights architecture](ai-insights-architecture.md) — 4-step orchestration: classify_intent → plan_steps (AI) → execute_tools (safe analytics_tools only) → synthesize; business_context.py is single source of truth for company mapping and glossary
+- [JSX self-closing div grep pitfall](jsx-self-close-grep.md) — grep counts of <div vs </div> are off by 1 per self-closing <div … /> tag; trust JSX parser errors over grep counts to find real structural issues

@@ -5,11 +5,11 @@ import {
   ChartUpIcon,
   UserIcon,
   Package01Icon,
-  ChartHistogramIcon,
+  Clock01Icon,
   ArrowRight01Icon,
 } from "hugeicons-react";
-import type { PredictiveInsightsResponse, CustomerHeatmapEntry } from "@/lib/api";
-import { getCustomerHeatmap } from "@/lib/api";
+import type { PredictiveInsightsResponse, ReorderWindowEntry } from "@/lib/api";
+import { getMissedReorderWindows } from "@/lib/api";
 import { useCompany } from "@/lib/company-context";
 
 const nf = new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 });
@@ -116,120 +116,70 @@ function ActionCard({
   );
 }
 
-function cellColor(tonnes: number, max: number): string {
-  if (tonnes === 0 || max === 0) return "#1c2128";
-  const r = Math.min(tonnes / max, 1);
-  if (r < 0.08) return "#818cf828";
-  if (r < 0.2)  return "#818cf855";
-  if (r < 0.4)  return "#818cf888";
-  if (r < 0.65) return "#818cf8bb";
-  if (r < 0.85) return "#818cf8dd";
-  return "#34d399";
-}
-
-function CustomerHeatmapCard() {
+function MissedReorderCard() {
   const { companyNos, saleScope } = useCompany();
-  const [data, setData] = useState<CustomerHeatmapEntry[] | null>(null);
+  const [data, setData] = useState<ReorderWindowEntry[] | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     setLoading(true);
-    getCustomerHeatmap(companyNos, saleScope, 14)
+    getMissedReorderWindows(companyNos, saleScope)
       .then(setData)
       .catch(() => setData([]))
       .finally(() => setLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(companyNos), saleScope]);
 
-  const months = data?.[0]?.months ?? [];
-  const maxTonnes = data
-    ? Math.max(...data.flatMap(c => c.months.map(m => m.tonnes)), 1)
-    : 1;
-
   return (
     <ActionCard
-      icon={<ChartHistogramIcon size={14} className="text-teal-400" />}
-      iconBg="bg-teal-500/10 border border-teal-500/20"
-      title="Customer Activity"
-      subtitle="Top customers — last 12 months"
-      footer="Colour intensity = purchase volume"
-      cta="View all"
+      icon={<Clock01Icon size={14} className="text-orange-400" />}
+      iconBg="bg-orange-500/10 border border-orange-500/20"
+      title="Missed Reorder Windows"
+      subtitle={data != null ? `${data.length} customers overdue` : "Loading…"}
+      footer="Based on historical purchase cadence"
+      cta="Contact customers"
     >
       {loading ? (
         <div className="flex items-center justify-center py-8">
           <div className="h-3.5 w-3.5 rounded-full border-2 border-primary border-t-transparent animate-spin" />
         </div>
       ) : !data?.length ? (
-        <p className="text-[11px] text-muted-foreground py-6 text-center">No activity data</p>
+        <p className="text-[11px] text-muted-foreground py-6 text-center">No overdue reorders detected</p>
       ) : (
-        <div className="px-3 pt-2 pb-1">
-          {/* Month header */}
-          <div className="flex items-center mb-1">
-            <div className="w-[90px] flex-shrink-0" />
-            <div className="flex gap-px">
-              {months.map((m, i) => (
-                <div
-                  key={i}
-                  className="text-center text-[8px] text-muted-foreground/50 leading-tight"
-                  style={{ width: 20, flexShrink: 0 }}
-                >
-                  {m.month[0]}
+        <>
+          <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-2 px-3.5 py-1.5">
+            <ColHeader>Customer</ColHeader>
+            <ColHeader>Usual Vol.</ColHeader>
+            <ColHeader>Overdue</ColHeader>
+            <ColHeader>Priority</ColHeader>
+          </div>
+          {data.slice(0, 6).map(c => (
+            <div
+              key={c.customer_code}
+              className="grid grid-cols-[1fr_auto_auto_auto] gap-x-2 px-3.5 py-1.5 border-t border-border/40 items-center"
+            >
+              <div className="min-w-0">
+                <div className="text-[11px] font-medium text-foreground truncate">
+                  {c.customer_name || c.customer_code}
                 </div>
-              ))}
+                <div className="text-[9px] text-muted-foreground/60 leading-tight">
+                  Due {c.expected_reorder_date}
+                </div>
+              </div>
+              <span className="text-[10px] text-muted-foreground whitespace-nowrap text-right">
+                {fmtT(c.usual_volume)}
+              </span>
+              <span className={`text-[10px] font-bold whitespace-nowrap ${
+                c.days_overdue > 6 ? "text-red-400" :
+                c.days_overdue >= 3 ? "text-amber-400" :
+                "text-muted-foreground"
+              }`}>
+                {c.days_overdue}d
+              </span>
+              <RiskBadge tier={c.priority} />
             </div>
-          </div>
-
-          {/* Customer rows */}
-          <div className="space-y-px">
-            {data.slice(0, 13).map(customer => (
-              <div key={customer.customer_code} className="flex items-center">
-                <div
-                  className="flex-shrink-0 text-[9px] text-muted-foreground/70 truncate pr-1.5 leading-tight"
-                  style={{ width: 90 }}
-                  title={customer.customer_name ?? customer.customer_code}
-                >
-                  {customer.customer_name || customer.customer_code}
-                </div>
-                <div className="flex gap-px">
-                  {customer.months.map((m, i) => (
-                    <div
-                      key={i}
-                      className="rounded-[2px] cursor-default transition-opacity hover:opacity-70"
-                      style={{
-                        width: 20,
-                        height: 14,
-                        flexShrink: 0,
-                        background: cellColor(m.tonnes, maxTonnes),
-                      }}
-                      title={
-                        m.tonnes > 0
-                          ? `${customer.customer_name ?? customer.customer_code} · ${m.month} ${m.year}: ${nf.format(m.tonnes)} t`
-                          : `${customer.customer_name ?? customer.customer_code} · ${m.month} ${m.year}: No orders`
-                      }
-                    />
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Legend */}
-          <div className="flex items-center gap-2.5 mt-2.5 pt-2 border-t border-border/40">
-            {(
-              [
-                ["#1c2128", "None"],
-                ["#818cf855", "Low"],
-                ["#818cf8bb", "Med"],
-                ["#34d399", "High"],
-              ] as [string, string][]
-            ).map(([c, l]) => (
-              <div key={l} className="flex items-center gap-1">
-                <div className="w-3 h-3 rounded-sm flex-shrink-0" style={{ background: c }} />
-                <span className="text-[8.5px] text-muted-foreground/55">{l}</span>
-              </div>
-            ))}
-          </div>
-        </div>
+          ))}
+        </>
       )}
     </ActionCard>
   );
@@ -456,8 +406,8 @@ export default function CommercialActionCenter({
           )}
         </ActionCard>
 
-        {/* ── 5. Customer Activity Heatmap ── */}
-        <CustomerHeatmapCard />
+        {/* ── 5. Missed Reorder Windows ── */}
+        <MissedReorderCard />
 
         {/* ── 6. Growing Groups ── */}
         <ActionCard

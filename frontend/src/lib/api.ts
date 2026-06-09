@@ -750,3 +750,26 @@ export async function getItemHistory(
   if (!res.ok) throw new Error("Failed to fetch item history");
   return res.json();
 }
+
+export type ReorderWindowEntry = {
+  customer_code: string;
+  customer_name: string | null;
+  last_active_month: string;
+  usual_volume: number;
+  active_months: number;
+  avg_reorder_days: number;
+  expected_reorder_date: string;
+  days_overdue: number;
+  priority: "high" | "medium" | "low";
+};
+
+export async function getMissedReorderWindows(
+  companyNos: string[] = ["all"],
+  saleScope: string = "all",
+): Promise<ReorderWindowEntry[]> {
+  const params = new URLSearchParams({ sale_scope: saleScope });
+  appendCompanyNos(params, companyNos);
+  const res = await fetch(`${API_BASE_URL}/movement/customers/reorder-windows?${params}`);
+  if (!res.ok) throw new Error("Failed to fetch reorder windows");
+  return res.json();
+}

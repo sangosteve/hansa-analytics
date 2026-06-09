@@ -469,3 +469,101 @@ def customer_heatmap(
         })
 
     return list(customers.values())
+
+
+@router.get("/customers/reorder-windows")
+def missed_reorder_windows(
+    company_nos: Optional[list[str]] = Query(default=None),
+    company_no: str = Query(default="3"),
+    sale_scope: str = Query(default="all"),
+    db: Session = Depends(get_db),
+):
+    """Customers overdue for a reorder based on historical purchase cadence."""
+    resolved = _resolve(company_nos, company_no)
+    co_frag, co_params = build_company_filter(resolved)
+    scope_frag = build_scope_sql(sale_scope)
+
+    rows = db.execute(text(f"""
+        WITH monthly_activity AS (
+            SELECT
+                customer_code,
+                MAX(customer_name)                        AS customer_name,
+                DATE_TRUNC('month', transaction_date)::date AS month_start,
+                SUM(tonnes)                               AS month_tonnes
+            FROM fact_sales_lines
+            WHERE {co_frag}
+              {scope_frag}
+              AND customer_code IS NOT NULL
+              AND transaction_date >= CURRENT_DATE - INTERVAL '18 months'
+            GROUP BY customer_code, DATE_TRUNC('month', transaction_date)
+        ),
+        with_gaps AS (
+            SELECT
+                customer_code,
+                customer_name,
+                month_start,
+                month_tonnes,
+                EXTRACT(DAY FROM (
+                    month_start::timestamp
+                    - LAG(month_start::timestamp) OVER (PARTITION BY customer_code ORDER BY month_start)
+                ))                                   AS gap_days
+            FROM monthly_activity
+        ),
+        customer_stats AS (
+            SELECT
+                customer_code,
+                MAX(customer_name)                       AS customer_name,
+                COUNT(*)                                 AS active_months,
+                MAX(month_start)                         AS last_active_month,
+                ROUND(AVG(month_tonnes)::numeric, 2)     AS avg_monthly_tonnes,
+                ROUND(
+                    AVG(gap_days) FILTER (WHERE gap_days IS NOT NULL)::numeric
+                )                                        AS avg_gap_days
+            FROM with_gaps
+            GROUP BY customer_code
+        )
+        SELECT
+            cs.customer_code,
+            cs.customer_name,
+            cs.last_active_month::text                   AS last_active_month,
+            cs.avg_monthly_tonnes                        AS usual_volume,
+            cs.active_months,
+            COALESCE(cs.avg_gap_days, 30)                AS avg_reorder_days,
+            (cs.last_active_month
+                + (COALESCE(cs.avg_gap_days, 30)::int * INTERVAL '1 day')
+            )::date::text                                AS expected_reorder_date,
+            GREATEST(
+                (CURRENT_DATE - (
+                    cs.last_active_month
+                    + (COALESCE(cs.avg_gap_days, 30)::int * INTERVAL '1 day')
+                )::date)::int,
+                0
+            )                                            AS days_overdue
+        FROM customer_stats cs
+        WHERE
+            cs.active_months >= 3
+            AND (
+                cs.last_active_month
+                + (COALESCE(cs.avg_gap_days, 30)::int * INTERVAL '1 day')
+            )::date < CURRENT_DATE
+            AND cs.last_active_month >= (CURRENT_DATE - INTERVAL '5 months')::date
+        ORDER BY days_overdue DESC, cs.avg_monthly_tonnes DESC
+        LIMIT 25
+    """), co_params).mappings().all()
+
+    result = []
+    for row in rows:
+        days_overdue = int(row["days_overdue"] or 0)
+        priority = "high" if days_overdue > 6 else "medium" if days_overdue >= 3 else "low"
+        result.append({
+            "customer_code": row["customer_code"],
+            "customer_name": row["customer_name"],
+            "last_active_month": row["last_active_month"],
+            "usual_volume": float(row["usual_volume"] or 0),
+            "active_months": int(row["active_months"] or 0),
+            "avg_reorder_days": int(row["avg_reorder_days"] or 30),
+            "expected_reorder_date": row["expected_reorder_date"],
+            "days_overdue": days_overdue,
+            "priority": priority,
+        })
+    return result
