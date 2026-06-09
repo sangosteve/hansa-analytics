@@ -746,7 +746,11 @@ export default function Home() {
             position: "insideStartTop",
             fontSize: 9,
             color: "#fbbf24",
-            formatter: "Today",
+            formatter: (() => {
+              const d = dateTo ? new Date(dateTo) : new Date();
+              const m = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+              return `${d.getDate()} ${m[d.getMonth()]}`;
+            })(),
             padding: [2, 4],
             backgroundColor: "#1c212880",
             borderRadius: 3,
@@ -813,7 +817,7 @@ export default function Home() {
       },
       series: [...baseSeries, targetSeries, ytdAverageSeries],
     };
-  }, [cumulativeComparisonData, momYears, currentYear, lastCurrentYearMonth]);
+  }, [cumulativeComparisonData, momYears, currentYear, lastCurrentYearMonth, dateTo]);
 
   const quarterlyChartOptions = useMemo(() => {
     if (!quarterlyData.length) return null;
@@ -953,6 +957,20 @@ export default function Home() {
     const qStart = new Date(today.getFullYear(), Math.floor(today.getMonth() / 3) * 3, 1);
     if (from.getTime() === qStart.getTime() && to.getTime() === today.getTime()) return "QTD";
     return "";
+  })();
+
+  // Month-aware labels for the MTD daily chart legend, e.g. "Jun 2025" / "Jun 2024"
+  const dailyThisYearLabel = (() => {
+    if (!dateFrom) return `${currentYear ?? ""}`;
+    const m = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    const d = new Date(dateFrom);
+    return `${m[d.getMonth()]} ${d.getFullYear()}`;
+  })();
+  const dailyLastYearLabel = (() => {
+    if (!dateFrom) return `${previousYear ?? ""}`;
+    const m = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    const d = new Date(dateFrom);
+    return `${m[d.getMonth()]} ${d.getFullYear() - 1}`;
   })();
 
   return (
@@ -1129,10 +1147,10 @@ export default function Home() {
                     </h3>
                     <div className="flex items-center gap-3 mt-1">
                       <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                        <span className="inline-block w-3 h-[2px] rounded bg-emerald-400" /> This Year ({currentYear})
+                        <span className="inline-block w-3 h-[2px] rounded bg-emerald-400" /> This Year ({dailyThisYearLabel})
                       </span>
                       <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                        <span className="inline-block w-3 border-t border-dashed border-muted-foreground" /> Last Year ({previousYear})
+                        <span className="inline-block w-3 border-t border-dashed border-muted-foreground" /> Last Year ({dailyLastYearLabel})
                       </span>
                     </div>
                   </div>
@@ -1158,14 +1176,17 @@ export default function Home() {
                   const diffPct = (dailyComparisonOptions as any)._diffPct;
                   const diff = curEnd - compEnd;
                   return (
-                    <div className="mt-2 pt-2 border-t border-border/40 flex items-center gap-4 text-[10px]">
-                      {diffPct !== null && (
-                        <span className={`font-bold ${diffPct >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                          {diffPct >= 0 ? "▲" : "▼"} {Math.abs(diffPct).toFixed(1)}% more than last year (same period)
+                    <div className="mt-3 pt-3 border-t border-border/40 flex items-center justify-between gap-4 text-[12px]">
+                      {diffPct !== null ? (
+                        <span className="flex items-center gap-1.5">
+                          <span className={`font-bold ${diffPct >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                            {diffPct >= 0 ? "▲" : "▼"} {Math.abs(diffPct).toFixed(1)}%
+                          </span>
+                          <span className="text-muted-foreground">more than last year (same period)</span>
                         </span>
-                      )}
+                      ) : <span />}
                       {diff !== 0 && (
-                        <span className={diffPct != null && diffPct >= 0 ? "text-emerald-400" : "text-red-400"}>
+                        <span className={`font-semibold ${diffPct != null && diffPct >= 0 ? "text-emerald-400" : "text-red-400"}`}>
                           {diff >= 0 ? "+" : ""}{numberFormatter.format(diff)} t
                         </span>
                       )}
@@ -1204,24 +1225,31 @@ export default function Home() {
                   )}
                 </div>
                 {cumulativeFooter && (
-                  <div className="mt-2 pt-2 border-t border-border/40 grid grid-cols-4 gap-2 text-[10px]">
+                  <div className="mt-3 pt-3 border-t border-border/40 grid grid-cols-4 gap-2 text-[12px]">
                     <div>
-                      <div className="text-muted-foreground/60">YTD (as of today)</div>
-                      <div className="font-semibold text-foreground mt-0.5">{numberFormatter.format(cumulativeFooter.ytd)} t</div>
+                      <div className="text-[10px] text-muted-foreground/60">YTD (as of today)</div>
+                      <div className="font-bold text-foreground mt-0.5">{numberFormatter.format(cumulativeFooter.ytd)} t</div>
                     </div>
                     <div>
-                      <div className="text-muted-foreground/60">LY YTD (same day)</div>
-                      <div className="font-semibold text-foreground mt-0.5">{numberFormatter.format(cumulativeFooter.lyYTD)} t</div>
-                    </div>
-                    <div>
-                      <div className="text-muted-foreground/60">Gap to LY YTD</div>
-                      <div className={`font-semibold mt-0.5 ${cumulativeFooter.gapToLY >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                        {cumulativeFooter.vsLYPct != null ? `${cumulativeFooter.vsLYPct >= 0 ? "+" : ""}${cumulativeFooter.vsLYPct.toFixed(1)}%` : "—"}
+                      <div className="text-[10px] text-muted-foreground/60">LY YTD (same day)</div>
+                      <div className="flex items-baseline gap-1.5 mt-0.5">
+                        <span className="font-bold text-foreground">{numberFormatter.format(cumulativeFooter.lyYTD)} t</span>
+                        {cumulativeFooter.vsLYPct != null && (
+                          <span className={`text-[10px] font-bold ${cumulativeFooter.vsLYPct >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                            {cumulativeFooter.vsLYPct >= 0 ? "▲" : "▼"} {Math.abs(cumulativeFooter.vsLYPct).toFixed(1)}%
+                          </span>
+                        )}
                       </div>
                     </div>
                     <div>
-                      <div className="text-muted-foreground/60">Gap to Target YTD</div>
-                      <div className={`font-semibold mt-0.5 ${cumulativeFooter.gapToTarget >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                      <div className="text-[10px] text-muted-foreground/60">Gap to LY YTD</div>
+                      <div className={`font-bold mt-0.5 ${cumulativeFooter.gapToLY >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                        {cumulativeFooter.gapToLY >= 0 ? "+" : ""}{numberFormatter.format(cumulativeFooter.gapToLY)} t
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] text-muted-foreground/60">Gap to Target YTD</div>
+                      <div className={`font-bold mt-0.5 ${cumulativeFooter.gapToTarget >= 0 ? "text-emerald-400" : "text-red-400"}`}>
                         {cumulativeFooter.gapToTarget >= 0 ? "+" : ""}{numberFormatter.format(cumulativeFooter.gapToTarget)} t
                       </div>
                     </div>
