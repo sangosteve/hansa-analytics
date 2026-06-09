@@ -9,6 +9,10 @@ import {
   ArrowRight01Icon,
   Logout01Icon,
   Alert01Icon,
+  Calendar01Icon,
+  Idea01Icon,
+  UserGroupIcon,
+  ArrowDown01Icon,
 } from "hugeicons-react";
 import ReactECharts from "echarts-for-react";
 
@@ -501,12 +505,8 @@ export default function Home() {
           .map(item => `${item.seriesName}: ${numberFormatter.format(item.value)} t`)
           .join("<br />"),
       },
-      legend: {
-        data: ["This Year", "Last Year"],
-        top: "2%",
-        textStyle: { color: "#8b949e", fontSize: 10 },
-      },
-      grid: { left: "8%", right: "5%", bottom: "12%", top: "18%" },
+      legend: { show: false },
+      grid: { left: "8%", right: "5%", bottom: "12%", top: "10%" },
       xAxis: {
         type: "category",
         data: xLabels,
@@ -517,9 +517,7 @@ export default function Home() {
       },
       yAxis: {
         type: "value",
-        name: "Cumul. t",
-        nameTextStyle: { color: "#8b949e", fontSize: 9 },
-        axisLabel: { color: "#8b949e", fontSize: 9 },
+        axisLabel: { color: "#8b949e", fontSize: 9, formatter: (v: number) => `${v} t` },
         splitLine: { lineStyle: { color: "#21262d" } },
       },
       series: [
@@ -529,11 +527,19 @@ export default function Home() {
           data: curData,
           connectNulls: false,
           smooth: false,
-          lineStyle: { width: 2, color: "#34d399" },
+          lineStyle: { width: 2.5, color: "#34d399" },
           itemStyle: { color: "#34d399" },
-          showSymbol: false,
+          showSymbol: true,
           symbol: "circle",
           symbolSize: 5,
+          label: {
+            show: true,
+            position: "top",
+            fontSize: 8.5,
+            color: "#34d399",
+            // @ts-ignore
+            formatter: (p: any) => p.value != null ? `${numberFormatter.format(p.value)}` : "",
+          },
           areaStyle: {
             color: {
               type: "linear", x: 0, y: 0, x2: 0, y2: 1,
@@ -541,11 +547,7 @@ export default function Home() {
             },
           },
           endLabel: {
-            show: true,
-            fontSize: 9,
-            color: "#34d399",
-            // @ts-ignore
-            formatter: (p: any) => p.value != null ? `${numberFormatter.format(p.value)} t` : "",
+            show: false,
           },
         },
         {
@@ -557,12 +559,16 @@ export default function Home() {
           lineStyle: { width: 1.5, color: "#6b7280", type: "dashed" },
           itemStyle: { color: "#6b7280" },
           showSymbol: false,
-          endLabel: {
+          label: {
             show: true,
-            fontSize: 9,
+            position: "bottom",
+            fontSize: 8,
             color: "#6b7280",
             // @ts-ignore
-            formatter: (p: any) => p.value != null ? `${numberFormatter.format(p.value)} t` : "",
+            formatter: (p: any) => p.value != null ? `${numberFormatter.format(p.value)}` : "",
+          },
+          endLabel: {
+            show: false,
           },
         },
       ],
@@ -702,7 +708,8 @@ export default function Home() {
   const cumulativeComparisonOptions = useMemo(() => {
     const annualTarget = DEFAULT_TARGET_TONNES * 12;
     const targetData = Array.from({ length: 12 }, (_, i) => (i + 1) * (annualTarget / 12));
-    const baseSeries = momYears.map((year, index) => ({
+    const yearColor = (year: number) => (year === currentYear ? "#34d399" : "#6b7280");
+    const baseSeries = momYears.map((year) => ({
       name: String(year),
       type: "line",
       data: cumulativeComparisonData.map((d, idx) => {
@@ -712,25 +719,25 @@ export default function Home() {
       }),
       smooth: false,
       connectNulls: false,
-      lineStyle: { width: 2, color: chartColors[index % chartColors.length] },
-      itemStyle: { color: chartColors[index % chartColors.length] },
+      lineStyle: { width: 2, color: yearColor(year), type: year === currentYear ? "solid" : "dashed" },
+      itemStyle: { color: yearColor(year) },
       showSymbol: false,
       endLabel: {
         show: true,
         fontSize: 9,
-        color: chartColors[index % chartColors.length],
+        color: yearColor(year),
         // @ts-ignore
         formatter: (p: any) => p.value != null && p.value > 0 ? `${numberFormatter.format(p.value)} t` : "",
       },
-      areaStyle: {
+      areaStyle: year === currentYear ? {
         color: {
           type: "linear", x: 0, y: 0, x2: 0, y2: 1,
           colorStops: [
-            { offset: 0, color: `${chartColors[index % chartColors.length]}20` },
+            { offset: 0, color: "#34d39920" },
             { offset: 1, color: "transparent" },
           ],
         },
-      },
+      } : undefined,
       ...(year === currentYear && lastCurrentYearMonth > 0 ? {
         markLine: {
           silent: true,
@@ -753,16 +760,30 @@ export default function Home() {
       name: `Target ${currentYear ?? ""}`,
       type: "line",
       data: targetData,
-      lineStyle: { type: "dashed", color: "#6b7280", width: 1.5 },
-      itemStyle: { color: "#6b7280" },
+      lineStyle: { type: "dashed", color: "#fb923c", width: 1.5 },
+      itemStyle: { color: "#fb923c" },
       showSymbol: false,
       endLabel: {
         show: true,
         fontSize: 9,
-        color: "#6b7280",
+        color: "#fb923c",
         // @ts-ignore
         formatter: (p: any) => p.value != null ? `Target: ${numberFormatter.format(p.value)} t` : "",
       },
+    };
+    // YTD Average (running average pace projected linearly across the year)
+    const curYTD = cumulativeComparisonData
+      .map((d) => (d[`year${currentYear}`] as number) ?? 0)
+      .slice(0, lastCurrentYearMonth);
+    const avgPerMonth = curYTD.length > 0 ? (curYTD[curYTD.length - 1] ?? 0) / lastCurrentYearMonth : 0;
+    const ytdAverageData = Array.from({ length: 12 }, (_, i) => avgPerMonth * (i + 1));
+    const ytdAverageSeries = {
+      name: `YTD Average ${currentYear ?? ""}`,
+      type: "line",
+      data: ytdAverageData,
+      lineStyle: { type: "dashed", color: "#38bdf8", width: 1.5 },
+      itemStyle: { color: "#38bdf8" },
+      showSymbol: false,
     };
     return {
       ...darkChartBase,
@@ -777,12 +798,8 @@ export default function Home() {
           .map(item => `${item.seriesName}: ${numberFormatter.format(item.value)} t`)
           .join("<br />"),
       },
-      legend: {
-        data: [...momYears.map(y => String(y)), `Target ${currentYear ?? ""}`],
-        top: "4%",
-        textStyle: { color: "#8b949e" },
-      },
-      grid: { left: "8%", right: "12%", bottom: "12%", top: "18%" },
+      legend: { show: false },
+      grid: { left: "8%", right: "12%", bottom: "8%", top: "8%" },
       xAxis: {
         type: "category",
         data: cumulativeComparisonData.map(d => d.month),
@@ -792,12 +809,10 @@ export default function Home() {
       },
       yAxis: {
         type: "value",
-        name: "Tonnes",
-        nameTextStyle: { color: "#8b949e" },
-        axisLabel: { color: "#8b949e" },
+        axisLabel: { color: "#8b949e", formatter: (v: number) => `${numberFormatter.format(v)} t` },
         splitLine: { lineStyle: { color: "#21262d" } },
       },
-      series: [...baseSeries, targetSeries],
+      series: [...baseSeries, targetSeries, ytdAverageSeries],
     };
   }, [cumulativeComparisonData, momYears, currentYear, lastCurrentYearMonth]);
 
@@ -921,6 +936,19 @@ export default function Home() {
     : null;
   const showDailyChart = dateDiff !== null && dateDiff <= 62;
 
+  const todayLabel = (() => {
+    const d = new Date();
+    const m = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    return `${String(d.getDate()).padStart(2, "0")} ${m[d.getMonth()]} ${d.getFullYear()}`;
+  })();
+
+  const lastUpdatedLabel = (() => {
+    const d = freshness?.last_refresh ? new Date(freshness.last_refresh) : new Date();
+    const m = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    const time = d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+    return `${String(d.getDate()).padStart(2, "0")} ${m[d.getMonth()]} ${d.getFullYear()}, ${time}`;
+  })();
+
   const filterPeriodLabel = (() => {
     if (!dateFrom || !dateTo) return "";
     const today = new Date(); today.setHours(0, 0, 0, 0);
@@ -940,28 +968,42 @@ export default function Home() {
 
           {/* ── Page Header ── */}
           <div className="flex items-start justify-between gap-3 pb-3 border-b border-border">
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-[18px] font-semibold tracking-tight text-foreground">Commercial Overview</h1>
-                <span className="text-[14px] text-muted-foreground/50 cursor-help" title="Real-time analytics from your Hansa ERP data">ⓘ</span>
+            <div className="flex items-center gap-3">
+              <div className="flex flex-col items-center justify-center leading-none">
+                <span className="text-[20px] font-extrabold tracking-tight text-emerald-400">PSS</span>
+                <span className="text-[8px] font-semibold tracking-[0.2em] text-muted-foreground/70 -mt-0.5">DASHBOARD</span>
               </div>
-              <p className="text-[11px] text-muted-foreground mt-0.5">Real-time performance as of today</p>
+              <div className="h-9 w-px bg-border" />
+              <div>
+                <div className="flex items-center gap-2">
+                  <h1 className="text-[18px] font-semibold tracking-tight text-foreground">Commercial Overview</h1>
+                  <span className="text-[14px] text-muted-foreground/50 cursor-help" title="Real-time analytics from your Hansa ERP data">ⓘ</span>
+                </div>
+                <p className="text-[11px] text-muted-foreground mt-0.5">Real-time performance as of today</p>
+              </div>
             </div>
             <div className="flex items-center gap-3 flex-shrink-0">
-              <DataFreshnessIndicator freshness={freshness} />
+              <div className="hidden sm:flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                Last updated: {lastUpdatedLabel}
+                <DataFreshnessIndicator freshness={freshness} />
+              </div>
+              <div className="flex items-center gap-1.5 h-8 px-3 rounded-lg border border-border bg-card text-[12px] font-medium text-foreground">
+                {todayLabel}
+                <Calendar01Icon size={13} className="text-muted-foreground" />
+              </div>
             </div>
           </div>
 
           {/* ── Filter / Comparison Bar ── */}
           <div className="space-y-2.5">
-            <div className="flex flex-wrap items-end gap-2">
+            <div className="flex flex-wrap items-end gap-3 rounded-xl border border-border bg-card p-3">
               {/* Date View (comparison mode) */}
               <div className="flex flex-col gap-1">
-                <span className="text-[9px] uppercase tracking-widest font-semibold text-muted-foreground/60">Date View</span>
+                <span className="text-[10px] text-muted-foreground">Date View</span>
                 <select
                   value={comparisonMode}
                   onChange={e => setComparisonMode(e.target.value as ComparisonMode)}
-                  className="h-8 px-2.5 text-[11px] rounded-lg border border-primary/40 bg-primary/10 text-primary font-medium focus:outline-none focus:ring-1 focus:ring-primary/50 cursor-pointer"
+                  className="h-9 px-2.5 text-[12px] rounded-lg border border-primary/40 bg-primary/10 text-primary font-medium focus:outline-none focus:ring-1 focus:ring-primary/50 cursor-pointer min-w-[200px]"
                 >
                   <option value="same_period_ly">
                     {filterPeriodLabel ? `${filterPeriodLabel} vs LY ${filterPeriodLabel} (Same Day)` : "Same Period (Last Year)"}
@@ -972,28 +1014,32 @@ export default function Home() {
 
               {/* Scope */}
               <div className="flex flex-col gap-1">
-                <span className="text-[9px] uppercase tracking-widest font-semibold text-muted-foreground/60">Scope</span>
-                <div className="h-8 px-2.5 flex items-center gap-1.5 text-[11px] rounded-lg border border-border bg-secondary text-foreground min-w-[95px]">
-                  <span className="text-[12px]">👤</span>
-                  {saleScope === "all" ? "All Sales" : saleScope.charAt(0).toUpperCase() + saleScope.slice(1)}
+                <span className="text-[10px] text-muted-foreground">Scope</span>
+                <div className="h-9 px-2.5 flex items-center justify-between gap-2 text-[12px] rounded-lg border border-border bg-secondary text-foreground min-w-[120px]">
+                  <span className="flex items-center gap-1.5">
+                    <UserGroupIcon size={13} className="text-muted-foreground" />
+                    {saleScope === "all" ? "External" : saleScope.charAt(0).toUpperCase() + saleScope.slice(1)}
+                  </span>
+                  <ArrowDown01Icon size={13} className="text-muted-foreground" />
                 </div>
               </div>
 
               {/* Division */}
               <div className="flex flex-col gap-1">
-                <span className="text-[9px] uppercase tracking-widest font-semibold text-muted-foreground/60">Division</span>
-                <div className="h-8 px-2.5 flex items-center text-[11px] rounded-lg border border-border bg-secondary text-foreground max-w-[160px] truncate">
-                  {companyLabel === "All Companies" ? "All Divisions" : companyLabel}
+                <span className="text-[10px] text-muted-foreground">Division</span>
+                <div className="h-9 px-2.5 flex items-center justify-between gap-2 text-[12px] rounded-lg border border-border bg-secondary text-foreground min-w-[150px] max-w-[170px]">
+                  <span className="truncate">{companyLabel === "All Companies" ? "All Divisions" : companyLabel}</span>
+                  <ArrowDown01Icon size={13} className="text-muted-foreground flex-shrink-0" />
                 </div>
               </div>
 
               {/* Product Group filter */}
               <div className="flex flex-col gap-1">
-                <span className="text-[9px] uppercase tracking-widest font-semibold text-muted-foreground/60">Product Group</span>
+                <span className="text-[10px] text-muted-foreground">Product Group</span>
                 <select
                   value={productGroupFilter}
                   onChange={e => setProductGroupFilter(e.target.value)}
-                  className="h-8 px-2.5 text-[11px] rounded-lg border border-border bg-secondary text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40 cursor-pointer"
+                  className="h-9 px-2.5 text-[12px] rounded-lg border border-border bg-secondary text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40 cursor-pointer min-w-[140px]"
                 >
                   <option value="all">All Groups</option>
                   {productGroupOptions.map(g => (
@@ -1004,18 +1050,19 @@ export default function Home() {
 
               {/* Customer (display only) */}
               <div className="flex flex-col gap-1">
-                <span className="text-[9px] uppercase tracking-widest font-semibold text-muted-foreground/60">Customer</span>
-                <div className="h-8 px-2.5 flex items-center text-[11px] rounded-lg border border-border bg-secondary text-muted-foreground min-w-[110px]">
-                  All Customers
+                <span className="text-[10px] text-muted-foreground">Customer</span>
+                <div className="h-9 px-2.5 flex items-center justify-between gap-2 text-[12px] rounded-lg border border-border bg-secondary text-foreground min-w-[140px]">
+                  <span>All Customers</span>
+                  <ArrowDown01Icon size={13} className="text-muted-foreground" />
                 </div>
               </div>
 
               {/* Clear Filters — always visible */}
-              <div className="flex flex-col gap-1">
-                <span className="text-[9px] uppercase tracking-widest font-semibold text-transparent select-none">·</span>
+              <div className="flex flex-col gap-1 ml-auto">
+                <span className="text-[10px] text-transparent select-none">·</span>
                 <button
                   onClick={() => { setComparisonMode("same_period_ly"); setProductGroupFilter("all"); }}
-                  className="h-8 px-3 flex items-center text-[11px] rounded-lg border border-border/60 text-muted-foreground hover:text-foreground hover:border-border transition-colors"
+                  className="h-9 px-3 flex items-center text-[12px] rounded-lg border border-border text-muted-foreground hover:text-foreground hover:border-border transition-colors"
                 >
                   Clear Filters
                 </button>
@@ -1023,16 +1070,16 @@ export default function Home() {
             </div>
 
             {/* Comparison banner */}
-            <div className="flex items-center gap-2 px-3 py-2 rounded-md border border-primary/15 bg-primary/5 text-[11px]">
-              <span className="text-primary font-bold text-sm flex-shrink-0 leading-none">ℹ</span>
+            <div className="flex items-center gap-2.5 px-4 py-2.5 rounded-xl border border-primary/15 bg-primary/5 text-[12px]">
+              <span className="flex-shrink-0 h-5 w-5 rounded-full bg-primary/15 text-primary font-bold flex items-center justify-center text-[11px] leading-none">i</span>
               <span className="text-muted-foreground flex-1">
                 All comparisons are for the same period:{" "}
-                <span className="text-foreground font-medium">
+                <span className="text-primary font-medium">
                   {getComparisonBannerText(dateFrom, dateTo, comparisonMode)}
                 </span>
               </span>
               <button
-                className="flex-shrink-0 text-primary/60 hover:text-primary transition-colors whitespace-nowrap"
+                className="flex-shrink-0 text-primary/70 hover:text-primary transition-colors whitespace-nowrap"
                 title="Same-period comparison aligns both periods to the same calendar days so you compare like-for-like, not a partial month against a full month."
               >
                 Why same-period comparison? ⓘ
@@ -1081,15 +1128,23 @@ export default function Home() {
 
               {/* MTD Daily Comparison */}
               <div className="rounded-xl border border-border bg-card p-4">
-                <div className="flex items-center justify-between mb-2">
+                <div className="flex items-start justify-between mb-2 gap-2">
                   <div>
-                    <h3 className="text-xs font-semibold text-foreground">
-                      {showDailyChart ? "Daily Comparison (Tonnes)" : "Monthly Comparison (Tonnes)"}
+                    <h3 className="text-[13px] font-semibold text-foreground">
+                      {showDailyChart ? "MTD Daily Comparison (Tonnes)" : "Monthly Comparison (Tonnes)"}
                     </h3>
-                    <p className="text-[10px] text-muted-foreground/60 mt-0.5">
-                      This Year ({currentYear}) — — — Last Year ({previousYear})
-                    </p>
+                    <div className="flex items-center gap-3 mt-1">
+                      <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                        <span className="inline-block w-3 h-[2px] rounded bg-emerald-400" /> This Year ({currentYear})
+                      </span>
+                      <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                        <span className="inline-block w-3 border-t border-dashed border-muted-foreground" /> Last Year ({previousYear})
+                      </span>
+                    </div>
                   </div>
+                  <span className="flex items-center gap-1 h-7 px-2.5 rounded-lg border border-border bg-secondary text-[11px] text-foreground flex-shrink-0">
+                    {filterPeriodLabel || "MTD"} <ArrowDown01Icon size={11} className="text-muted-foreground" />
+                  </span>
                 </div>
                 <div className="h-[220px]">
                   {showDailyChart
@@ -1127,13 +1182,27 @@ export default function Home() {
 
               {/* Cumulative YTD Sales Comparison */}
               <div className="rounded-xl border border-border bg-card p-4">
-                <div className="flex items-center justify-between mb-2">
+                <div className="flex items-start justify-between mb-2 gap-2">
                   <div>
-                    <h3 className="text-xs font-semibold text-foreground">Cumulative YTD Sales Comparison</h3>
-                    <p className="text-[10px] text-muted-foreground/60 mt-0.5">
-                      This Year ({currentYear}) — — — Last Year ({previousYear}) · · · Target
-                    </p>
+                    <h3 className="text-[13px] font-semibold text-foreground">Cumulative YTD Sales Comparison</h3>
+                    <div className="flex items-center gap-3 mt-1 flex-wrap">
+                      <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                        <span className="inline-block w-3 h-[2px] rounded bg-emerald-400" /> This Year ({currentYear})
+                      </span>
+                      <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                        <span className="inline-block w-3 h-[2px] rounded bg-muted-foreground" /> Last Year ({previousYear})
+                      </span>
+                      <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                        <span className="inline-block w-3 border-t border-dashed border-amber-400" /> Target ({currentYear})
+                      </span>
+                      <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                        <span className="inline-block w-3 border-t border-dashed border-sky-400" /> YTD Average ({currentYear})
+                      </span>
+                    </div>
                   </div>
+                  <span className="flex items-center gap-1 h-7 px-2.5 rounded-lg border border-border bg-secondary text-[11px] text-foreground flex-shrink-0">
+                    YTD <ArrowDown01Icon size={11} className="text-muted-foreground" />
+                  </span>
                 </div>
                 <div className="h-[220px]">
                   {momLoading ? loadingOverlay : (
@@ -1172,9 +1241,14 @@ export default function Home() {
 
               {/* Monthly Growth YoY */}
               <div className="rounded-xl border border-border bg-card p-4">
-                <div className="mb-2">
-                  <h3 className="text-xs font-semibold text-foreground">Monthly Growth (YoY)</h3>
-                  <p className="text-[10px] text-muted-foreground/60 mt-0.5">Month-to-date vs same period last year</p>
+                <div className="flex items-start justify-between mb-2 gap-2">
+                  <div>
+                    <h3 className="text-[13px] font-semibold text-foreground">Monthly Growth (YoY)</h3>
+                    <p className="text-[10px] text-muted-foreground/60 mt-0.5">Month-to-date vs same period last year</p>
+                  </div>
+                  <span className="flex items-center gap-1 h-7 px-2.5 rounded-lg border border-border bg-secondary text-[11px] text-foreground flex-shrink-0">
+                    YoY <ArrowDown01Icon size={11} className="text-muted-foreground" />
+                  </span>
                 </div>
                 <div className="h-[190px]">
                   {momLoading ? loadingOverlay : (
@@ -1213,11 +1287,21 @@ export default function Home() {
 
               {/* Quarter by Quarter Comparison */}
               <div className="rounded-xl border border-border bg-card p-4">
-                <div className="mb-2">
-                  <h3 className="text-xs font-semibold text-foreground">Quarter by Quarter Comparison (Tonnes)</h3>
-                  <p className="text-[10px] text-muted-foreground/60 mt-0.5">
-                    — This Year ({currentYear}) — Last Year ({previousYear}) · Quarterly
-                  </p>
+                <div className="flex items-start justify-between mb-2 gap-2">
+                  <div>
+                    <h3 className="text-[13px] font-semibold text-foreground">Quarter by Quarter Comparison (Tonnes)</h3>
+                    <div className="flex items-center gap-3 mt-1">
+                      <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                        <span className="inline-block w-3 h-[2px] rounded bg-emerald-400" /> This Year ({currentYear})
+                      </span>
+                      <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                        <span className="inline-block w-3 h-[2px] rounded bg-muted-foreground" /> Last Year ({previousYear})
+                      </span>
+                    </div>
+                  </div>
+                  <span className="flex items-center gap-1 h-7 px-2.5 rounded-lg border border-border bg-secondary text-[11px] text-foreground flex-shrink-0">
+                    Quarterly <ArrowDown01Icon size={11} className="text-muted-foreground" />
+                  </span>
                 </div>
                 <div className="h-[190px]">
                   {momLoading ? loadingOverlay : quarterlyChartOptions ? (

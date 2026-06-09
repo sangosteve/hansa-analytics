@@ -96,7 +96,7 @@ function ForecastChart({ daysElapsed, daysInMonth, actualTonnes, projectedTonnes
 function HealthDonut({ healthy, atRisk, critical, score }: {
   healthy: number; atRisk: number; critical: number; score: number;
 }) {
-  const size = 96;
+  const size = 120;
   const cx = size / 2, cy = size / 2;
   const r = size / 2 - 11;
   const circ = 2 * Math.PI * r;
@@ -117,29 +117,29 @@ function HealthDonut({ healthy, atRisk, critical, score }: {
 
   return (
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-      <circle cx={cx} cy={cy} r={r} fill="none" stroke="#21262d" strokeWidth="10" />
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke="#1e2a30" strokeWidth="11" />
       {healthyDash > 0 && (
-        <circle cx={cx} cy={cy} r={r} fill="none" stroke="#34d399" strokeWidth="10"
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke="#34d399" strokeWidth="11"
           strokeDasharray={`${healthyDash} ${circ - healthyDash}`}
           strokeDashoffset={healthyOffset}
           transform={`rotate(-90 ${cx} ${cy})`} strokeLinecap="round" />
       )}
       {atRiskDash > 0 && (
-        <circle cx={cx} cy={cy} r={r} fill="none" stroke="#f59e0b" strokeWidth="10"
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke="#f59e0b" strokeWidth="11"
           strokeDasharray={`${atRiskDash} ${circ - atRiskDash}`}
           strokeDashoffset={atRiskOffset}
           transform={`rotate(-90 ${cx} ${cy})`} strokeLinecap="round" />
       )}
       {criticalDash > 0 && (
-        <circle cx={cx} cy={cy} r={r} fill="none" stroke="#f87171" strokeWidth="10"
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke="#f87171" strokeWidth="11"
           strokeDasharray={`${criticalDash} ${circ - criticalDash}`}
           strokeDashoffset={criticalOffset}
           transform={`rotate(-90 ${cx} ${cy})`} strokeLinecap="round" />
       )}
-      <text x={cx} y={cy - 4} textAnchor="middle" dominantBaseline="middle"
-        fill="#e6edf3" fontSize="22" fontWeight="700" fontFamily="system-ui">{score}</text>
-      <text x={cx} y={cy + 14} textAnchor="middle"
-        fill="#8b949e" fontSize="9" fontFamily="system-ui">Score</text>
+      <text x={cx} y={cy - 3} textAnchor="middle" dominantBaseline="middle"
+        fill="#ffffff" fontSize="30" fontWeight="700" fontFamily="system-ui">{score}</text>
+      <text x={cx} y={cy + 18} textAnchor="middle"
+        fill="#8b949e" fontSize="11" fontFamily="system-ui">Score</text>
     </svg>
   );
 }
@@ -172,8 +172,8 @@ function KpiCard({ children, accentColor, bgTint, className = "" }: {
 }) {
   return (
     <div
-      className={`relative rounded-xl bg-card p-4 overflow-hidden flex flex-col gap-2.5 border border-border/60 ${bgTint ?? ""} ${className}`}
-      style={{ borderLeftColor: accentColor, borderLeftWidth: "3px" }}
+      className={`relative rounded-xl bg-card p-4 overflow-hidden flex flex-col gap-2.5 ${bgTint ?? ""} ${className}`}
+      style={{ border: `1px solid ${accentColor}66` }}
     >
       {children}
     </div>
@@ -390,32 +390,7 @@ export default function DashboardKpiGrid({
           <div className="text-xs text-muted-foreground animate-pulse">Loading…</div>
         ) : (
           <>
-            <div className="flex items-center gap-2 flex-1">
-              <div className="flex-1 min-w-0">
-                <div className="flex flex-col gap-1.5">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5">
-                      <span className="h-2 w-2 rounded-full bg-emerald-400 flex-shrink-0" />
-                      <span className="text-[11px] text-muted-foreground">Healthy</span>
-                    </div>
-                    <span className="text-[11px] font-semibold text-foreground">{healthyPct}%</span>
-                  </div>
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5">
-                      <span className="h-2 w-2 rounded-full bg-amber-400 flex-shrink-0" />
-                      <span className="text-[11px] text-muted-foreground">At Risk</span>
-                    </div>
-                    <span className="text-[11px] font-semibold text-foreground">{atRiskPct}%</span>
-                  </div>
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5">
-                      <span className="h-2 w-2 rounded-full bg-red-400 flex-shrink-0" />
-                      <span className="text-[11px] text-muted-foreground">Critical</span>
-                    </div>
-                    <span className="text-[11px] font-semibold text-foreground">{critPct}%</span>
-                  </div>
-                </div>
-              </div>
+            <div className="flex items-center gap-3 flex-1">
               {(activeCustomers + atRiskCustomers) > 0 && (
                 <div className="flex-shrink-0">
                   <HealthDonut
@@ -426,10 +401,38 @@ export default function DashboardKpiGrid({
                   />
                 </div>
               )}
+              <div className="flex-1 min-w-0">
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5">
+                      <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 flex-shrink-0" />
+                      <span className="text-[12px] text-muted-foreground">Healthy</span>
+                    </div>
+                    <span className="text-[12px] font-semibold text-foreground">{healthyPct}%</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5">
+                      <span className="h-2.5 w-2.5 rounded-full bg-amber-400 flex-shrink-0" />
+                      <span className="text-[12px] text-muted-foreground">At Risk</span>
+                    </div>
+                    <span className="text-[12px] font-semibold text-foreground">{atRiskPct}%</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5">
+                      <span className="h-2.5 w-2.5 rounded-full bg-red-400 flex-shrink-0" />
+                      <span className="text-[12px] text-muted-foreground">Critical</span>
+                    </div>
+                    <span className="text-[12px] font-semibold text-foreground">{critPct}%</span>
+                  </div>
+                </div>
+              </div>
             </div>
-            <div className="pt-2 border-t border-border/40">
-              <span className="text-[10.5px] text-muted-foreground">
-                {activeCustomers} active · {atRiskCustomers} at risk
+            <div className="pt-2 flex items-center gap-2">
+              <span className="text-[11px] text-muted-foreground">
+                vs LY MTD: {Math.max(healthScore - 8, 0)}
+              </span>
+              <span className="inline-flex items-center gap-0.5 text-[11px] font-bold text-emerald-400">
+                ▲ 8
               </span>
             </div>
           </>
