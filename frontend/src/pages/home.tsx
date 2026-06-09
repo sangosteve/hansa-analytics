@@ -362,6 +362,23 @@ export default function Home() {
     return { avg, bestMonth: monthLabels[bestIdx], trend };
   }, [growthData, lastCurrentYearMonth]);
 
+  const growthFooter = useMemo(() => {
+    const available = growthData.slice(0, lastCurrentYearMonth).filter(d => d.current > 0);
+    if (!available.length) return null;
+    const mtdGrowth = available[available.length - 1].growth;
+    const avgGrowth = available.reduce((s, d) => s + d.growth, 0) / available.length;
+    const best = available.reduce((b, d) => d.growth > b.growth ? d : b, available[0]);
+    const worst = available.reduce((w, d) => d.growth < w.growth ? d : w, available[0]);
+    return {
+      mtdGrowth,
+      avgGrowth,
+      bestMonth: best.month,
+      bestPct: best.growth,
+      worstMonth: worst.month,
+      worstPct: worst.growth,
+    };
+  }, [growthData, lastCurrentYearMonth]);
+
   const cumulativeChips = useMemo(() => {
     if (!momRows.length || !currentYear || !previousYear) return null;
     const curYTD = momRows.filter(r => r.year === currentYear && r.month <= lastCurrentYearMonth).reduce((s, r) => s + r.total_tonnes, 0);
@@ -370,6 +387,22 @@ export default function Home() {
     const gapToLY = prevYTD - curYTD;
     return { curYTD, vsLYPct, gapToLY };
   }, [momRows, currentYear, previousYear, lastCurrentYearMonth]);
+
+  const cumulativeFooter = useMemo(() => {
+    if (!cumulativeChips) return null;
+    const annualTarget = DEFAULT_TARGET_TONNES * 12;
+    const targetYTD = (lastCurrentYearMonth / 12) * annualTarget;
+    const lyYTD = cumulativeChips.curYTD + cumulativeChips.gapToLY;
+    const gapToTarget = cumulativeChips.curYTD - targetYTD;
+    return {
+      ytd: cumulativeChips.curYTD,
+      lyYTD,
+      gapToLY: -cumulativeChips.gapToLY,
+      targetYTD,
+      gapToTarget,
+      vsLYPct: cumulativeChips.vsLYPct,
+    };
+  }, [cumulativeChips, lastCurrentYearMonth]);
 
   // ── Insight bar text ───────────────────────────────────────────────────────
   const insightText = useMemo(() => {
@@ -623,13 +656,10 @@ export default function Home() {
         // @ts-ignore
         .filter(item => item.value != null)
         // @ts-ignore
-        .map(item => item.seriesName === "Growth %"
-          ? `${item.seriesName}: ${Number(item.value).toFixed(2)}%`
-          : `${item.seriesName}: ${numberFormatter.format(item.value)} t`)
+        .map(item => `${item.seriesName}: ${Number(item.value).toFixed(1)}%`)
         .join("<br />"),
     },
-    legend: { data: ["Current year (t)", "Growth %"], top: "4%", textStyle: { color: "#8b949e" } },
-    grid: { left: "10%", right: "12%", bottom: "14%", top: "22%" },
+    grid: { left: "8%", right: "4%", bottom: "14%", top: "12%" },
     xAxis: {
       type: "category",
       data: growthData.map(d => d.month),
@@ -637,60 +667,36 @@ export default function Home() {
       axisLabel: { color: "#8b949e", fontSize: 9 },
       splitLine: { show: false },
     },
-    yAxis: [
-      {
-        type: "value",
-        name: "Tonnes",
-        nameTextStyle: { color: "#8b949e", fontSize: 9 },
-        axisLabel: { color: "#8b949e", fontSize: 9 },
-        splitLine: { lineStyle: { color: "#21262d" } },
+    yAxis: {
+      type: "value",
+      nameTextStyle: { color: "#8b949e", fontSize: 9 },
+      axisLabel: { color: "#8b949e", fontSize: 9, formatter: "{value}%" },
+      splitLine: { lineStyle: { color: "#21262d" } },
+    },
+    series: [{
+      name: "YoY Growth",
+      type: "bar",
+      data: growthData.map((d, idx) => {
+        if (idx + 1 > lastCurrentYearMonth || d.current === 0) return null;
+        const g = Number(d.growth.toFixed(1));
+        return {
+          value: g,
+          itemStyle: {
+            color: g >= 0 ? "#34d399" : "#f87171",
+            borderRadius: g >= 0 ? [3, 3, 0, 0] : [0, 0, 3, 3],
+          },
+        };
+      }),
+      label: {
+        show: true,
+        // @ts-ignore
+        position: (p: any) => (p.data?.value ?? 0) >= 0 ? "top" : "bottom",
+        fontSize: 8,
+        color: "#8b949e",
+        // @ts-ignore
+        formatter: (p: any) => p.data?.value != null ? `${p.data.value.toFixed(0)}%` : "",
       },
-      {
-        type: "value",
-        name: "Growth %",
-        position: "right",
-        nameTextStyle: { color: "#8b949e", fontSize: 9 },
-        axisLabel: { color: "#8b949e", fontSize: 9, formatter: "{value}%" },
-        splitLine: { show: false },
-      },
-    ],
-    series: [
-      {
-        name: "Current year (t)",
-        type: "bar",
-        data: growthData.map((d, idx) => idx + 1 <= lastCurrentYearMonth ? d.current : null),
-        itemStyle: { color: "#818cf8", borderRadius: [3, 3, 0, 0] },
-        label: {
-          show: true,
-          position: "top",
-          fontSize: 8,
-          color: "#8b949e",
-          // @ts-ignore
-          formatter: (p: any) => p.value != null && p.value > 0 ? `${(p.value / 1000).toFixed(1)}k` : "",
-        },
-      },
-      {
-        name: "Growth %",
-        type: "line",
-        yAxisIndex: 1,
-        data: growthData.map((d, idx) => idx + 1 <= lastCurrentYearMonth && d.current > 0 ? Number(d.growth.toFixed(2)) : null),
-        connectNulls: false,
-        smooth: false,
-        lineStyle: { width: 2, color: "#f87171" },
-        itemStyle: { color: "#f87171" },
-        symbol: "circle",
-        symbolSize: 5,
-        showSymbol: true,
-        label: {
-          show: true,
-          position: "top",
-          fontSize: 8,
-          color: "#f87171",
-          // @ts-ignore
-          formatter: (p: any) => p.value != null ? `${Number(p.value).toFixed(0)}%` : "",
-        },
-      },
-    ],
+    }],
   }), [growthData, lastCurrentYearMonth]);
 
   const cumulativeComparisonOptions = useMemo(() => {
@@ -1013,12 +1019,18 @@ export default function Home() {
             {/* Comparison banner */}
             <div className="flex items-center gap-2 px-3 py-2 rounded-md border border-primary/15 bg-primary/5 text-[11px]">
               <span className="text-primary font-bold text-sm flex-shrink-0 leading-none">ℹ</span>
-              <span className="text-muted-foreground">
-                All comparisons are for the same equivalent period:{" "}
+              <span className="text-muted-foreground flex-1">
+                All comparisons are for the same period:{" "}
                 <span className="text-foreground font-medium">
                   {getComparisonBannerText(dateFrom, dateTo, comparisonMode)}
                 </span>
               </span>
+              <button
+                className="flex-shrink-0 text-primary/60 hover:text-primary transition-colors whitespace-nowrap"
+                title="Same-period comparison aligns both periods to the same calendar days so you compare like-for-like, not a partial month against a full month."
+              >
+                Why same-period comparison? ⓘ
+              </button>
             </div>
           </div>
 
@@ -1055,148 +1067,162 @@ export default function Home() {
           <div className="space-y-3">
             <div className="pb-1 border-b border-border/60">
               <h2 className="text-[13px] font-semibold text-foreground">Performance Trends</h2>
-              <p className="text-[11px] text-muted-foreground mt-0.5">Track momentum and growth patterns over time</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">Track performance and momentum over time</p>
             </div>
 
-            {/* Row 1: Daily comparison (if short range) + Cumulative YTD */}
-            <div className={`grid gap-3 ${showDailyChart ? "grid-cols-1 lg:grid-cols-2" : "grid-cols-1"}`}>
+            {/* Row 1: Daily Comparison + Cumulative YTD */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
 
               {/* MTD Daily Comparison */}
-              {showDailyChart && (
-                <div className="rounded-xl border border-border bg-card p-4">
-                  <div className="flex items-center justify-between mb-1.5">
-                    <h3 className="text-xs font-semibold text-foreground">Daily Comparison</h3>
-                    <span className="text-[9px] text-muted-foreground/50">Cumulative tonnes</span>
+              <div className="rounded-xl border border-border bg-card p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <div>
+                    <h3 className="text-xs font-semibold text-foreground">
+                      {showDailyChart ? "Daily Comparison (Tonnes)" : "Monthly Comparison (Tonnes)"}
+                    </h3>
+                    <p className="text-[10px] text-muted-foreground/60 mt-0.5">
+                      This Year ({currentYear}) — — — Last Year ({previousYear})
+                    </p>
                   </div>
-                  {dailyComparisonOptions && (
-                    <div className="flex flex-wrap gap-1.5 mb-2">
-                      {(() => {
-                        const curEnd = (dailyComparisonOptions as any)._curEnd ?? 0;
-                        const compEnd = (dailyComparisonOptions as any)._compEnd ?? 0;
-                        const diffPct = (dailyComparisonOptions as any)._diffPct;
-                        return (
-                          <>
-                            {diffPct !== null && (
-                              <InsightChip
-                                label={`${diffPct >= 0 ? "▲" : "▼"} ${Math.abs(diffPct).toFixed(1)}% vs ${comparisonLabel}`}
-                                variant={diffPct >= 0 ? "green" : "red"}
-                              />
-                            )}
-                            {curEnd > 0 && <InsightChip label={`This period: ${numberFormatter.format(curEnd)} t`} variant="blue" />}
-                            {compEnd > 0 && <InsightChip label={`Prior: ${numberFormatter.format(compEnd)} t`} variant="neutral" />}
-                          </>
-                        );
-                      })()}
-                    </div>
-                  )}
-                  <div className="h-[240px]">
-                    {dailyLoading ? loadingOverlay : dailyComparisonOptions ? (
-                      <ReactECharts option={dailyComparisonOptions} style={{ width: "100%", height: "100%" }} notMerge lazyUpdate />
-                    ) : (
-                      <div className="flex h-full items-center justify-center text-muted-foreground/50 text-xs">No daily data</div>
-                    )}
-                  </div>
-                  <p className="mt-1.5 text-[9px] text-muted-foreground/50">Cumulative daily totals · All values in tonnes</p>
                 </div>
-              )}
+                <div className="h-[220px]">
+                  {showDailyChart
+                    ? (dailyLoading ? loadingOverlay : dailyComparisonOptions ? (
+                        <ReactECharts option={dailyComparisonOptions} style={{ width: "100%", height: "100%" }} notMerge lazyUpdate />
+                      ) : (
+                        <div className="flex h-full items-center justify-center text-muted-foreground/50 text-xs">No daily data for this range</div>
+                      ))
+                    : (momLoading ? loadingOverlay : (
+                        <ReactECharts option={monthlyComparisonOptions} style={{ width: "100%", height: "100%" }} notMerge lazyUpdate />
+                      ))
+                  }
+                </div>
+                {showDailyChart && dailyComparisonOptions && (() => {
+                  const curEnd = (dailyComparisonOptions as any)._curEnd ?? 0;
+                  const compEnd = (dailyComparisonOptions as any)._compEnd ?? 0;
+                  const diffPct = (dailyComparisonOptions as any)._diffPct;
+                  const diff = curEnd - compEnd;
+                  return (
+                    <div className="mt-2 pt-2 border-t border-border/40 flex items-center gap-4 text-[10px]">
+                      {diffPct !== null && (
+                        <span className={`font-bold ${diffPct >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                          {diffPct >= 0 ? "▲" : "▼"} {Math.abs(diffPct).toFixed(1)}% more than last year (same period)
+                        </span>
+                      )}
+                      {diff !== 0 && (
+                        <span className={diffPct != null && diffPct >= 0 ? "text-emerald-400" : "text-red-400"}>
+                          {diff >= 0 ? "+" : ""}{numberFormatter.format(diff)} t
+                        </span>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
 
               {/* Cumulative YTD Sales Comparison */}
               <div className="rounded-xl border border-border bg-card p-4">
-                <div className="flex flex-wrap items-center gap-3 mb-2">
-                  <h3 className="text-xs font-semibold text-foreground">Cumulative YTD Comparison</h3>
-                  {cumulativeChips && (
-                    <div className="flex flex-wrap gap-1.5">
-                      <InsightChip label={`YTD: ${numberFormatter.format(cumulativeChips.curYTD)} t`} variant="blue" />
-                      {cumulativeChips.vsLYPct != null && (
-                        <InsightChip
-                          label={`${cumulativeChips.vsLYPct >= 0 ? "↑" : "↓"} ${Math.abs(cumulativeChips.vsLYPct).toFixed(0)}% vs ${previousYear}`}
-                          variant={cumulativeChips.vsLYPct >= 0 ? "green" : "red"}
-                        />
-                      )}
-                      {cumulativeChips.gapToLY > 0 && (
-                        <InsightChip label={`Gap to LY: ${numberFormatter.format(cumulativeChips.gapToLY)} t`} variant="amber" />
-                      )}
-                    </div>
-                  )}
+                <div className="flex items-center justify-between mb-2">
+                  <div>
+                    <h3 className="text-xs font-semibold text-foreground">Cumulative YTD Sales Comparison</h3>
+                    <p className="text-[10px] text-muted-foreground/60 mt-0.5">
+                      This Year ({currentYear}) — — — Last Year ({previousYear}) · · · Target
+                    </p>
+                  </div>
                 </div>
-                <div className="h-[240px]">
+                <div className="h-[220px]">
                   {momLoading ? loadingOverlay : (
                     <ReactECharts option={cumulativeComparisonOptions} style={{ width: "100%", height: "100%" }} notMerge lazyUpdate />
                   )}
                 </div>
-                <p className="mt-1.5 text-[9px] text-muted-foreground/50">All values in tonnes</p>
+                {cumulativeFooter && (
+                  <div className="mt-2 pt-2 border-t border-border/40 grid grid-cols-4 gap-2 text-[10px]">
+                    <div>
+                      <div className="text-muted-foreground/60">YTD (as of today)</div>
+                      <div className="font-semibold text-foreground mt-0.5">{numberFormatter.format(cumulativeFooter.ytd)} t</div>
+                    </div>
+                    <div>
+                      <div className="text-muted-foreground/60">LY YTD (same day)</div>
+                      <div className="font-semibold text-foreground mt-0.5">{numberFormatter.format(cumulativeFooter.lyYTD)} t</div>
+                    </div>
+                    <div>
+                      <div className="text-muted-foreground/60">Gap to LY YTD</div>
+                      <div className={`font-semibold mt-0.5 ${cumulativeFooter.gapToLY >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                        {cumulativeFooter.vsLYPct != null ? `${cumulativeFooter.vsLYPct >= 0 ? "+" : ""}${cumulativeFooter.vsLYPct.toFixed(1)}%` : "—"}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-muted-foreground/60">Gap to Target YTD</div>
+                      <div className={`font-semibold mt-0.5 ${cumulativeFooter.gapToTarget >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                        {cumulativeFooter.gapToTarget >= 0 ? "+" : ""}{numberFormatter.format(cumulativeFooter.gapToTarget)} t
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
-            {/* Row 2: Monthly MoM comparison */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-              <div className="rounded-xl border border-border bg-card p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-xs font-semibold text-foreground">Month-on-Month Comparison</h3>
-                </div>
-                {momChips && (
-                  <div className="flex flex-wrap gap-1.5 mb-3">
-                    {momChips.ytdPct != null && (
-                      <InsightChip
-                        label={`${currentYear} vs ${previousYear}: ${momChips.ytdPct >= 0 ? "+" : ""}${momChips.ytdPct.toFixed(0)}%`}
-                        variant={momChips.ytdPct >= 0 ? "green" : "red"}
-                      />
-                    )}
-                    {momChips.peakMonth && <InsightChip label={`↑ Peak: ${momChips.peakMonth}`} variant="green" />}
-                    {momChips.dropMonth && <InsightChip label={`↓ Weakest: ${momChips.dropMonth}`} variant="red" />}
-                  </div>
-                )}
-                <div className="h-[240px]">
-                  {momLoading ? loadingOverlay : (
-                    <ReactECharts option={monthlyComparisonOptions} style={{ width: "100%", height: "100%" }} notMerge lazyUpdate />
-                  )}
-                </div>
-                <p className="mt-1.5 text-[9px] text-muted-foreground/50">Actuals · - - - Not yet available · All values in tonnes</p>
-              </div>
+            {/* Row 2: Monthly Growth YoY | Quarter by Quarter | Product Group Trends */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
 
-              {/* Monthly Growth */}
+              {/* Monthly Growth YoY */}
               <div className="rounded-xl border border-border bg-card p-4">
-                <div className="flex items-center justify-between mb-2">
+                <div className="mb-2">
                   <h3 className="text-xs font-semibold text-foreground">Monthly Growth (YoY)</h3>
+                  <p className="text-[10px] text-muted-foreground/60 mt-0.5">Month-to-date vs same period last year</p>
                 </div>
-                {growthChips && (
-                  <div className="flex flex-wrap gap-1.5 mb-3">
-                    {growthChips.bestMonth && <InsightChip label={`↑ Best: ${growthChips.bestMonth}`} variant="green" />}
-                    {growthChips.avg > 0 && <InsightChip label={`Avg: ${numberFormatter.format(growthChips.avg)} t`} variant="blue" />}
-                    <InsightChip
-                      label={`Trend: ${growthChips.trend}`}
-                      variant={growthChips.trend === "Growing" ? "green" : growthChips.trend === "Declining" ? "red" : "neutral"}
-                    />
-                  </div>
-                )}
-                <div className="h-[240px]">
+                <div className="h-[190px]">
                   {momLoading ? loadingOverlay : (
                     <ReactECharts option={growthOptions} style={{ width: "100%", height: "100%" }} notMerge lazyUpdate />
                   )}
                 </div>
-                <p className="mt-1.5 text-[9px] text-muted-foreground/50">Growth % vs prior year · All values in tonnes</p>
+                {growthFooter && (
+                  <div className="mt-2 pt-2 border-t border-border/40 grid grid-cols-2 gap-x-3 gap-y-1 text-[10px]">
+                    <div>
+                      <span className="text-muted-foreground/60">MTD Growth (YoY)</span>
+                      <span className={`ml-1.5 font-bold ${growthFooter.mtdGrowth >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                        {growthFooter.mtdGrowth.toFixed(1)}%
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground/60">Avg Growth YTD</span>
+                      <span className={`ml-1.5 font-bold ${growthFooter.avgGrowth >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                        {growthFooter.avgGrowth.toFixed(1)}%
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground/60">Best Month</span>
+                      <span className="ml-1.5 font-semibold text-emerald-400">
+                        {growthFooter.bestMonth} (+{growthFooter.bestPct.toFixed(0)}%)
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground/60">Weakest Month</span>
+                      <span className={`ml-1.5 font-semibold ${growthFooter.worstPct < 0 ? "text-red-400" : "text-muted-foreground"}`}>
+                        {growthFooter.worstMonth} ({growthFooter.worstPct >= 0 ? "+" : ""}{growthFooter.worstPct.toFixed(0)}%)
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
-            </div>
 
-            {/* Row 3: Quarterly + Product Group Trends */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-
-              {/* Quarter by Quarter */}
-              {quarterlyChartOptions && (
-                <div className="rounded-xl border border-border bg-card p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-xs font-semibold text-foreground">
-                      Quarter by Quarter ({currentYear} vs {previousYear})
-                    </h3>
-                    <span className="text-[9px] text-muted-foreground/60">Tonnes</span>
-                  </div>
-                  <div className="h-[200px]">
-                    {momLoading ? loadingOverlay : (
-                      <ReactECharts option={quarterlyChartOptions} style={{ width: "100%", height: "100%" }} notMerge lazyUpdate />
-                    )}
-                  </div>
-                  {quarterlyData.length > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-1.5">
+              {/* Quarter by Quarter Comparison */}
+              <div className="rounded-xl border border-border bg-card p-4">
+                <div className="mb-2">
+                  <h3 className="text-xs font-semibold text-foreground">Quarter by Quarter Comparison (Tonnes)</h3>
+                  <p className="text-[10px] text-muted-foreground/60 mt-0.5">
+                    — This Year ({currentYear}) — Last Year ({previousYear}) · Quarterly
+                  </p>
+                </div>
+                <div className="h-[190px]">
+                  {momLoading ? loadingOverlay : quarterlyChartOptions ? (
+                    <ReactECharts option={quarterlyChartOptions} style={{ width: "100%", height: "100%" }} notMerge lazyUpdate />
+                  ) : (
+                    <div className="flex h-full items-center justify-center text-muted-foreground/50 text-xs">No data</div>
+                  )}
+                </div>
+                {quarterlyData.length > 0 && (
+                  <div className="mt-2 pt-2 border-t border-border/40 flex flex-wrap items-center justify-between gap-1">
+                    <div className="flex gap-1.5 flex-wrap">
                       {quarterlyData.filter(q => q.previous > 0).map(q => (
                         <span key={q.q} className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
                           q.pct >= 0 ? "bg-emerald-500/10 text-emerald-400" : "bg-red-500/10 text-red-400"
@@ -1205,53 +1231,57 @@ export default function Home() {
                         </span>
                       ))}
                     </div>
-                  )}
-                </div>
-              )}
+                    <span className="text-[9px] text-primary/60 hover:text-primary cursor-pointer transition-colors">View full quarterly report →</span>
+                  </div>
+                )}
+              </div>
 
-              {/* Product Group Trends Table */}
+              {/* Product Group Trends */}
               <div className="rounded-xl border border-border bg-card p-4">
                 <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-xs font-semibold text-foreground">Product Group Trends</h3>
-                  <span className="text-[9px] text-muted-foreground/60">3-month rolling</span>
+                  <div>
+                    <h3 className="text-xs font-semibold text-foreground">Product Group Trends (YTD)</h3>
+                    <p className="text-[10px] text-muted-foreground/60 mt-0.5">vs same period last year</p>
+                  </div>
                 </div>
                 {predictiveLoading ? loadingOverlay : filteredProductGroups.length === 0 ? (
-                  <div className="flex h-[200px] items-center justify-center text-muted-foreground/50 text-xs">No data</div>
+                  <div className="flex h-[190px] items-center justify-center text-muted-foreground/50 text-xs">No data</div>
                 ) : (
-                  <div className="h-[200px] overflow-y-auto">
-                    <table className="w-full text-[11px]">
-                      <thead className="sticky top-0 bg-card">
+                  <div className="h-[190px] overflow-y-auto">
+                    <table className="w-full text-[10.5px]">
+                      <thead className="sticky top-0 bg-card z-10">
                         <tr className="border-b border-border/50">
-                          <th className="text-left font-semibold text-muted-foreground/70 py-1.5 pr-2">Group</th>
-                          <th className="text-right font-semibold text-muted-foreground/70 py-1.5 px-2">This 3M</th>
-                          <th className="text-right font-semibold text-muted-foreground/70 py-1.5 px-2">Prior 3M</th>
-                          <th className="text-right font-semibold text-muted-foreground/70 py-1.5 pl-2">Signal</th>
+                          <th className="text-left font-semibold text-muted-foreground/60 py-1.5 pr-2">Product Group</th>
+                          <th className="text-right font-semibold text-muted-foreground/60 py-1.5 px-1">This YTD</th>
+                          <th className="text-right font-semibold text-muted-foreground/60 py-1.5 px-1">LY YTD</th>
+                          <th className="text-right font-semibold text-muted-foreground/60 py-1.5 pl-1">Change</th>
                         </tr>
                       </thead>
                       <tbody>
                         {filteredProductGroups
                           .sort((a, b) => Math.abs(b.pct_change ?? 0) - Math.abs(a.pct_change ?? 0))
+                          .slice(0, 8)
                           .map((g, i) => {
                             const pct = g.pct_change ?? 0;
                             return (
-                              <tr key={i} className="border-b border-border/30 last:border-0 hover:bg-white/3 transition-colors">
+                              <tr key={i} className="border-b border-border/25 last:border-0 hover:bg-white/3 transition-colors">
                                 <td className="py-1.5 pr-2">
                                   <div className="flex items-center gap-1.5">
                                     {trendIcon(g.trend)}
-                                    <span className="text-foreground font-medium truncate max-w-[100px]" title={g.name || g.code}>
+                                    <span className="text-foreground font-medium truncate max-w-[90px]" title={g.name || g.code}>
                                       {g.name || g.code}
                                     </span>
                                   </div>
                                 </td>
-                                <td className="text-right py-1.5 px-2 text-muted-foreground">
+                                <td className="text-right py-1.5 px-1 text-muted-foreground whitespace-nowrap">
                                   {numberFormatter.format(g.current_3m_tonnes)} t
                                 </td>
-                                <td className="text-right py-1.5 px-2 text-muted-foreground">
+                                <td className="text-right py-1.5 px-1 text-muted-foreground whitespace-nowrap">
                                   {numberFormatter.format(g.prior_3m_tonnes)} t
                                 </td>
-                                <td className="text-right py-1.5 pl-2">
+                                <td className="text-right py-1.5 pl-1">
                                   <span className={`font-semibold ${trendColor(g.trend)}`}>
-                                    {pct > 0 ? "+" : ""}{pct.toFixed(1)}%
+                                    {pct > 0 ? "▲ " : pct < 0 ? "▼ " : ""}{Math.abs(pct).toFixed(1)}%
                                   </span>
                                 </td>
                               </tr>
@@ -1261,60 +1291,13 @@ export default function Home() {
                     </table>
                   </div>
                 )}
-              </div>
-            </div>
-
-            {/* Division Breakdown (when multiple companies selected) */}
-            {(companyNos.includes("all") || companyNos.length > 1) && divisionBreakdown.length > 0 && (
-              <div className="rounded-xl border border-border bg-card p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-xs font-semibold text-foreground">Sales by Division</h3>
-                  <span className="text-[9px] text-muted-foreground/60">All values in tonnes</span>
-                </div>
-                {loading ? loadingOverlay : divisionChartOptions ? (
-                  <div className="flex gap-2 h-[220px]">
-                    <div className="flex-shrink-0 w-[160px]">
-                      <ReactECharts option={divisionChartOptions} style={{ width: "100%", height: "100%" }} notMerge lazyUpdate />
-                    </div>
-                    <div className="flex-1 min-w-0 flex flex-col justify-center py-2">
-                      <div className="grid grid-cols-[1fr_auto_auto] gap-x-2 pb-1.5 mb-1 border-b border-border/50">
-                        <span className="text-[9px] font-semibold uppercase tracking-wide text-muted-foreground/60">Division</span>
-                        <span className="text-[9px] font-semibold uppercase tracking-wide text-muted-foreground/60 text-right">Tonnes</span>
-                        <span className="text-[9px] font-semibold uppercase tracking-wide text-muted-foreground/60 text-right w-10">Share</span>
-                      </div>
-                      {(() => {
-                        const divTotal = divisionBreakdown.reduce((s, x) => s + x.total_tonnes, 0);
-                        return divisionBreakdown.map(d => {
-                          const share = divTotal > 0 ? (d.total_tonnes / divTotal) * 100 : 0;
-                          const color = divisionColors[d.company_no] ?? "#818cf8";
-                          return (
-                            <div key={d.company_no} className="py-1.5 border-b border-border/40 last:border-0">
-                              <div className="grid grid-cols-[1fr_auto_auto] gap-x-2 items-center mb-1">
-                                <div className="flex items-center gap-1.5 min-w-0">
-                                  <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: color }} />
-                                  <span className="text-[11px] font-medium text-foreground truncate">{d.label}</span>
-                                </div>
-                                <span className="text-[10px] text-muted-foreground whitespace-nowrap text-right">
-                                  {numberFormatter.format(d.total_tonnes)} t
-                                </span>
-                                <span className="text-[10px] font-semibold text-foreground text-right w-10 whitespace-nowrap">
-                                  {share.toFixed(1)}%
-                                </span>
-                              </div>
-                              <div className="h-1 rounded-full bg-white/5 overflow-hidden ml-3.5">
-                                <div className="h-full rounded-full transition-all duration-500" style={{ width: `${share}%`, background: `${color}cc` }} />
-                              </div>
-                            </div>
-                          );
-                        });
-                      })()}
-                    </div>
+                {filteredProductGroups.length > 8 && (
+                  <div className="mt-2 pt-1.5 border-t border-border/30 text-center">
+                    <span className="text-[9px] text-primary/60 hover:text-primary cursor-pointer transition-colors">View all product groups →</span>
                   </div>
-                ) : (
-                  <div className="flex h-[220px] items-center justify-center text-muted-foreground text-sm">No data</div>
                 )}
               </div>
-            )}
+            </div>
 
           </div>
 
@@ -1332,7 +1315,7 @@ export default function Home() {
                 onClick={() => document.dispatchEvent(new Event("open-ai-drawer"))}
                 className="flex-shrink-0 flex items-center gap-1 text-[11px] font-medium text-primary hover:text-primary/80 transition-colors whitespace-nowrap"
               >
-                Ask AI <ArrowRight01Icon size={11} />
+                View all insights <ArrowRight01Icon size={11} />
               </button>
             </div>
           )}
