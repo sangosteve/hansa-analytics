@@ -8,7 +8,6 @@ import {
   ChartUpIcon,
   ArrowRight01Icon,
   Logout01Icon,
-  Alert01Icon,
   Calendar01Icon,
   Idea01Icon,
   UserGroupIcon,
@@ -831,12 +830,8 @@ export default function Home() {
           .map(item => `${item.seriesName}: ${numberFormatter.format(item.value)} t`)
           .join("<br />"),
       },
-      legend: {
-        data: [String(currentYear ?? "Current"), String(previousYear ?? "Prior")],
-        top: "2%",
-        textStyle: { color: "#8b949e", fontSize: 10 },
-      },
-      grid: { left: "10%", right: "4%", bottom: "14%", top: "22%" },
+      legend: { show: false },
+      grid: { left: "12%", right: "4%", bottom: "12%", top: "12%" },
       xAxis: {
         type: "category",
         data: quarterlyData.map(d => d.q),
@@ -846,9 +841,7 @@ export default function Home() {
       },
       yAxis: {
         type: "value",
-        name: "Tonnes",
-        nameTextStyle: { color: "#8b949e", fontSize: 9 },
-        axisLabel: { color: "#8b949e", fontSize: 9 },
+        axisLabel: { color: "#8b949e", fontSize: 9, formatter: (v: number) => `${numberFormatter.format(v)} t` },
         splitLine: { lineStyle: { color: "#21262d" } },
       },
       series: [
@@ -856,7 +849,23 @@ export default function Home() {
           name: String(currentYear ?? "Current"),
           type: "bar",
           data: quarterlyData.map(d => d.current > 0 ? d.current : null),
-          itemStyle: { color: "#818cf8", borderRadius: [3, 3, 0, 0] },
+          itemStyle: { color: "#34d399", borderRadius: [3, 3, 0, 0] },
+          barGap: "15%",
+          label: {
+            show: true,
+            position: "top",
+            fontSize: 9,
+            fontWeight: "bold",
+            color: "#e6edf3",
+            // @ts-ignore
+            formatter: (p: any) => p.value > 0 ? `${numberFormatter.format(p.value)}` : "",
+          },
+        },
+        {
+          name: String(previousYear ?? "Prior"),
+          type: "bar",
+          data: quarterlyData.map(d => d.previous),
+          itemStyle: { color: "#4b5563", borderRadius: [3, 3, 0, 0] },
           barGap: "15%",
           label: {
             show: true,
@@ -864,22 +873,7 @@ export default function Home() {
             fontSize: 9,
             color: "#8b949e",
             // @ts-ignore
-            formatter: (p: any) => p.value > 0 ? `${(p.value / 1000).toFixed(1)}k` : "",
-          },
-        },
-        {
-          name: String(previousYear ?? "Prior"),
-          type: "bar",
-          data: quarterlyData.map(d => d.previous),
-          itemStyle: { color: "#30363d", borderRadius: [3, 3, 0, 0] },
-          barGap: "15%",
-          label: {
-            show: true,
-            position: "top",
-            fontSize: 9,
-            color: "#6b7280",
-            // @ts-ignore
-            formatter: (p: any) => p.value > 0 ? `${(p.value / 1000).toFixed(1)}k` : "",
+            formatter: (p: any) => p.value > 0 ? `${numberFormatter.format(p.value)}` : "",
           },
         },
       ],
@@ -1328,11 +1322,14 @@ export default function Home() {
 
               {/* Product Group Trends */}
               <div className="rounded-xl border border-border bg-card p-4">
-                <div className="flex items-center justify-between mb-2">
+                <div className="flex items-start justify-between mb-2 gap-2">
                   <div>
-                    <h3 className="text-xs font-semibold text-foreground">Product Group Trends (YTD)</h3>
+                    <h3 className="text-[13px] font-semibold text-foreground">Product Group Trends (YTD)</h3>
                     <p className="text-[10px] text-muted-foreground/60 mt-0.5">vs same period last year</p>
                   </div>
+                  <span className="flex items-center gap-1 h-7 px-2.5 rounded-lg border border-border bg-secondary text-[11px] text-foreground flex-shrink-0">
+                    YTD <ArrowDown01Icon size={11} className="text-muted-foreground" />
+                  </span>
                 </div>
                 {predictiveLoading ? loadingOverlay : filteredProductGroups.length === 0 ? (
                   <div className="flex h-[190px] items-center justify-center text-muted-foreground/50 text-xs">No data</div>
@@ -1393,13 +1390,13 @@ export default function Home() {
 
           {/* ── Insight Bar ── */}
           {insightText && (
-            <div className="rounded-xl border border-amber-800/30 bg-amber-950/25 px-4 py-3 flex items-center gap-3">
-              <div className="flex-shrink-0 h-8 w-8 rounded-full bg-amber-500/20 border border-amber-700/30 flex items-center justify-center">
-                <Alert01Icon size={16} className="text-amber-400" />
+            <div className="rounded-xl border border-emerald-800/30 bg-emerald-950/20 px-4 py-3 flex items-center gap-3">
+              <div className="flex-shrink-0 h-8 w-8 rounded-full bg-emerald-500/15 border border-emerald-700/30 flex items-center justify-center">
+                <Idea01Icon size={16} className="text-emerald-400" />
               </div>
               <div className="flex-1 min-w-0">
-                <span className="text-[11px] font-bold text-amber-400 mr-2">Insight</span>
-                <span className="text-[11px] text-foreground/80">{insightText}</span>
+                <span className="text-[12px] font-bold text-emerald-400 mr-2">Insight</span>
+                <span className="text-[12px] text-foreground/80">{insightText}</span>
               </div>
               <button
                 onClick={() => document.dispatchEvent(new Event("open-ai-drawer"))}
