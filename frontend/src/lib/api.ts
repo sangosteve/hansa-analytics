@@ -773,3 +773,22 @@ export async function getMissedReorderWindows(
   if (!res.ok) throw new Error("Failed to fetch reorder windows");
   return res.json();
 }
+
+export type DailySalesRow = {
+  date: string;
+  tonnes: number;
+  cumulative_tonnes: number;
+};
+
+export async function getDailySales(
+  dateFrom: string,
+  dateTo: string,
+  companyNos: string[] = ["all"],
+  saleScope: string = "all",
+): Promise<DailySalesRow[]> {
+  const params = new URLSearchParams({ date_from: dateFrom, date_to: dateTo, sale_scope: saleScope });
+  appendCompanyNos(params, companyNos);
+  const res = await fetch(`${API_BASE_URL}/analytics/daily-sales?${params}`);
+  if (!res.ok) throw new Error("Failed to fetch daily sales");
+  return res.json();
+}

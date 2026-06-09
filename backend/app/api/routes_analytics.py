@@ -496,3 +496,49 @@ def get_item_history(
             for r in customer_rows
         ],
     }
+
+
+@router.get("/daily-sales")
+def get_daily_sales(
+    date_from: str = Query(...),
+    date_to: str = Query(...),
+    company_nos: Optional[list[str]] = Query(default=None),
+    sale_scope: str = Query(default="all"),
+    db: Session = Depends(get_db),
+):
+    """Return daily sales totals (with cumulative) for a given date range."""
+    try:
+        d_from = date.fromisoformat(date_from)
+        d_to = date.fromisoformat(date_to)
+    except ValueError:
+        return []
+
+    resolved = company_nos or [settings.hansa_company_no]
+    co_frag, co_params = build_company_filter(resolved)
+    scope_frag = build_scope_sql(sale_scope)
+
+    rows = db.execute(text(f"""
+        SELECT
+            transaction_date::text AS date,
+            ROUND(SUM(tonnes)::numeric, 2) AS tonnes
+        FROM fact_sales_lines
+        WHERE {co_frag}
+          {scope_frag}
+          AND transaction_date >= :date_from
+          AND transaction_date <= :date_to
+        GROUP BY transaction_date
+        ORDER BY transaction_date
+    """), {**co_params, "date_from": d_from, "date_to": d_to}).mappings().fetchall()
+
+    result = []
+    cumulative = 0.0
+    for r in rows:
+        t = float(r["tonnes"] or 0)
+        cumulative += t
+        result.append({
+            "date": r["date"],
+            "tonnes": round(t, 2),
+            "cumulative_tonnes": round(cumulative, 2),
+        })
+
+    return result
