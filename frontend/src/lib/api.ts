@@ -792,3 +792,47 @@ export async function getDailySales(
   if (!res.ok) throw new Error("Failed to fetch daily sales");
   return res.json();
 }
+
+// ── Sales Targets ────────────────────────────────────────────────────────────
+
+export interface SalesTarget {
+  id: number;
+  year: number;
+  month: number;
+  company_no: string | null;
+  scope: string;
+  target_tonnes: number;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function getTargets(year?: number): Promise<SalesTarget[]> {
+  const params = new URLSearchParams();
+  if (year) params.set("year", year.toString());
+  const res = await fetch(`${API_BASE_URL}/targets?${params}`);
+  if (!res.ok) throw new Error("Failed to fetch targets");
+  return res.json();
+}
+
+export async function createOrUpdateTarget(data: {
+  year: number;
+  month: number;
+  company_no?: string | null;
+  scope: string;
+  target_tonnes: number;
+  notes?: string | null;
+}): Promise<SalesTarget> {
+  const res = await fetch(`${API_BASE_URL}/targets`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error("Failed to save target");
+  return res.json();
+}
+
+export async function deleteTarget(id: number): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}/targets/${id}`, { method: "DELETE" });
+  if (!res.ok && res.status !== 204) throw new Error("Failed to delete target");
+}

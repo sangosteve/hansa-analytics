@@ -921,23 +921,31 @@ export default function Home() {
     : null;
   const showDailyChart = dateDiff !== null && dateDiff <= 62;
 
+  const filterPeriodLabel = (() => {
+    if (!dateFrom || !dateTo) return "";
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const from = new Date(dateFrom);
+    const to = new Date(dateTo); to.setHours(0, 0, 0, 0);
+    if (from.getFullYear() === today.getFullYear() && from.getMonth() === today.getMonth() && from.getDate() === 1 && to.getTime() === today.getTime()) return "MTD";
+    if (from.getFullYear() === today.getFullYear() && from.getMonth() === 0 && from.getDate() === 1 && to.getTime() === today.getTime()) return "YTD";
+    const qStart = new Date(today.getFullYear(), Math.floor(today.getMonth() / 3) * 3, 1);
+    if (from.getTime() === qStart.getTime() && to.getTime() === today.getTime()) return "QTD";
+    return "";
+  })();
+
   return (
     <div className="flex h-full overflow-hidden">
       <div className="flex-1 min-w-0 overflow-y-auto">
         <div className="p-4 md:p-5 space-y-4">
 
           {/* ── Page Header ── */}
-          <div className="flex items-start justify-between gap-3 pb-2 border-b border-border">
+          <div className="flex items-start justify-between gap-3 pb-3 border-b border-border">
             <div>
-              <h1 className="text-base font-semibold tracking-tight text-foreground">Commercial Overview</h1>
-              <p className="text-[11px] text-muted-foreground mt-0.5">
-                Real-time performance · {companyLabel}
-                {!isAllTime && dateFrom && dateTo && (
-                  <span className="ml-1 text-muted-foreground/60">
-                    · {formatDateLabel(dateFrom)} – {formatDateLabel(dateTo)}
-                  </span>
-                )}
-              </p>
+              <div className="flex items-center gap-2">
+                <h1 className="text-[18px] font-semibold tracking-tight text-foreground">Commercial Overview</h1>
+                <span className="text-[14px] text-muted-foreground/50 cursor-help" title="Real-time analytics from your Hansa ERP data">ⓘ</span>
+              </div>
+              <p className="text-[11px] text-muted-foreground mt-0.5">Real-time performance as of today</p>
             </div>
             <div className="flex items-center gap-3 flex-shrink-0">
               <DataFreshnessIndicator freshness={freshness} />
@@ -948,72 +956,70 @@ export default function Home() {
           <div className="space-y-2.5">
             <div className="flex flex-wrap items-end gap-2">
               {/* Date View (comparison mode) */}
-              <div className="flex flex-col gap-0.5">
-                <span className="text-[9px] uppercase tracking-widest font-semibold text-muted-foreground/55">Date View</span>
+              <div className="flex flex-col gap-1">
+                <span className="text-[9px] uppercase tracking-widest font-semibold text-muted-foreground/60">Date View</span>
                 <select
                   value={comparisonMode}
                   onChange={e => setComparisonMode(e.target.value as ComparisonMode)}
-                  className="h-7 px-2 text-[11px] rounded-md border border-border bg-secondary text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40 cursor-pointer"
+                  className="h-8 px-2.5 text-[11px] rounded-lg border border-primary/40 bg-primary/10 text-primary font-medium focus:outline-none focus:ring-1 focus:ring-primary/50 cursor-pointer"
                 >
-                  <option value="same_period_ly">Same Period LY</option>
+                  <option value="same_period_ly">
+                    {filterPeriodLabel ? `${filterPeriodLabel} vs LY ${filterPeriodLabel} (Same Day)` : "Same Period (Last Year)"}
+                  </option>
                   <option value="previous_period">Previous Period</option>
                 </select>
               </div>
 
-              {/* Scope (read-only display from TopBar) */}
-              <div className="flex flex-col gap-0.5">
-                <span className="text-[9px] uppercase tracking-widest font-semibold text-muted-foreground/55">Scope</span>
-                <div className="h-7 px-2.5 flex items-center text-[11px] rounded-md border border-border bg-secondary text-muted-foreground capitalize min-w-[80px]">
-                  {saleScope === "all" ? "All Sales" : saleScope}
+              {/* Scope */}
+              <div className="flex flex-col gap-1">
+                <span className="text-[9px] uppercase tracking-widest font-semibold text-muted-foreground/60">Scope</span>
+                <div className="h-8 px-2.5 flex items-center gap-1.5 text-[11px] rounded-lg border border-border bg-secondary text-foreground min-w-[95px]">
+                  <span className="text-[12px]">👤</span>
+                  {saleScope === "all" ? "All Sales" : saleScope.charAt(0).toUpperCase() + saleScope.slice(1)}
                 </div>
               </div>
 
               {/* Division */}
-              <div className="flex flex-col gap-0.5">
-                <span className="text-[9px] uppercase tracking-widest font-semibold text-muted-foreground/55">Division</span>
-                <div className="h-7 px-2.5 flex items-center text-[11px] rounded-md border border-border bg-secondary text-muted-foreground max-w-[160px] truncate">
-                  {companyLabel}
+              <div className="flex flex-col gap-1">
+                <span className="text-[9px] uppercase tracking-widest font-semibold text-muted-foreground/60">Division</span>
+                <div className="h-8 px-2.5 flex items-center text-[11px] rounded-lg border border-border bg-secondary text-foreground max-w-[160px] truncate">
+                  {companyLabel === "All Companies" ? "All Divisions" : companyLabel}
                 </div>
               </div>
 
               {/* Product Group filter */}
-              {productGroupOptions.length > 0 && (
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-[9px] uppercase tracking-widest font-semibold text-muted-foreground/55">Product Group</span>
-                  <select
-                    value={productGroupFilter}
-                    onChange={e => setProductGroupFilter(e.target.value)}
-                    className="h-7 px-2 text-[11px] rounded-md border border-border bg-secondary text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40 cursor-pointer max-w-[160px]"
-                  >
-                    <option value="all">All Groups</option>
-                    {productGroupOptions.map(g => (
-                      <option key={g} value={g}>{g}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
+              <div className="flex flex-col gap-1">
+                <span className="text-[9px] uppercase tracking-widest font-semibold text-muted-foreground/60">Product Group</span>
+                <select
+                  value={productGroupFilter}
+                  onChange={e => setProductGroupFilter(e.target.value)}
+                  className="h-8 px-2.5 text-[11px] rounded-lg border border-border bg-secondary text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40 cursor-pointer"
+                >
+                  <option value="all">All Groups</option>
+                  {productGroupOptions.map(g => (
+                    <option key={g} value={g}>{g}</option>
+                  ))}
+                </select>
+              </div>
 
-              {/* Period display */}
-              <div className="flex flex-col gap-0.5">
-                <span className="text-[9px] uppercase tracking-widest font-semibold text-muted-foreground/55">Period</span>
-                <div className="h-7 px-2.5 flex items-center text-[11px] rounded-md border border-border bg-secondary text-muted-foreground whitespace-nowrap">
-                  {isAllTime ? "All time" : `${formatDateLabel(dateFrom)} – ${formatDateLabel(dateTo)}`}
+              {/* Customer (display only) */}
+              <div className="flex flex-col gap-1">
+                <span className="text-[9px] uppercase tracking-widest font-semibold text-muted-foreground/60">Customer</span>
+                <div className="h-8 px-2.5 flex items-center text-[11px] rounded-lg border border-border bg-secondary text-muted-foreground min-w-[110px]">
+                  All Customers
                 </div>
               </div>
 
-              {/* Clear filters (only shown if non-defaults) */}
-              {(comparisonMode !== "same_period_ly" || productGroupFilter !== "all") && (
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-[9px] uppercase tracking-widest font-semibold text-transparent select-none">·</span>
-                  <button
-                    onClick={() => { setComparisonMode("same_period_ly"); setProductGroupFilter("all"); }}
-                    className="h-7 px-2.5 flex items-center gap-1.5 text-[11px] rounded-md border border-border/60 text-muted-foreground hover:text-foreground hover:border-border transition-colors"
-                  >
-                    <Logout01Icon size={11} />
-                    Clear filters
-                  </button>
-                </div>
-              )}
+              {/* Clear Filters — always visible */}
+              <div className="flex flex-col gap-1">
+                <span className="text-[9px] uppercase tracking-widest font-semibold text-transparent select-none">·</span>
+                <button
+                  onClick={() => { setComparisonMode("same_period_ly"); setProductGroupFilter("all"); }}
+                  className="h-8 px-3 flex items-center text-[11px] rounded-lg border border-border/60 text-muted-foreground hover:text-foreground hover:border-border transition-colors"
+                >
+                  Clear Filters
+                </button>
+              </div>
             </div>
 
             {/* Comparison banner */}
@@ -1303,17 +1309,17 @@ export default function Home() {
 
           {/* ── Insight Bar ── */}
           {insightText && (
-            <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 flex items-start gap-3">
-              <div className="flex-shrink-0 h-6 w-6 rounded-lg bg-primary/15 flex items-center justify-center mt-0.5">
-                <Alert01Icon size={13} className="text-primary" />
+            <div className="rounded-xl border border-amber-800/30 bg-amber-950/25 px-4 py-3 flex items-center gap-3">
+              <div className="flex-shrink-0 h-8 w-8 rounded-full bg-amber-500/20 border border-amber-700/30 flex items-center justify-center">
+                <Alert01Icon size={16} className="text-amber-400" />
               </div>
               <div className="flex-1 min-w-0">
-                <span className="text-[10px] font-semibold text-primary uppercase tracking-widest mr-2">Insight</span>
-                <span className="text-[11px] text-muted-foreground">{insightText}</span>
+                <span className="text-[11px] font-bold text-amber-400 mr-2">Insight</span>
+                <span className="text-[11px] text-foreground/80">{insightText}</span>
               </div>
               <button
                 onClick={() => document.dispatchEvent(new Event("open-ai-drawer"))}
-                className="flex-shrink-0 flex items-center gap-1 text-[11px] font-medium text-primary hover:text-primary/80 transition-colors whitespace-nowrap"
+                className="flex-shrink-0 flex items-center gap-1 text-[12px] font-medium text-emerald-400 hover:text-emerald-300 transition-colors whitespace-nowrap"
               >
                 View all insights <ArrowRight01Icon size={11} />
               </button>

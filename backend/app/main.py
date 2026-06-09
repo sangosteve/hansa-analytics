@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes_ai import router as ai_router
+from app.api.routes_targets import router as targets_router
 from app.api.routes_oauth import router as oauth_router
 from app.api.routes_analytics import router as analytics_router
 from app.api.routes_customer_movement import router as customer_movement_router
@@ -53,6 +54,7 @@ app.include_router(customer_movement_router)
 app.include_router(movement_router)
 app.include_router(stock_router)
 app.include_router(ai_router)
+app.include_router(targets_router)
 
 
 @app.get("/")

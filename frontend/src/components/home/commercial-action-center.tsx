@@ -5,7 +5,7 @@ import {
   ChartUpIcon,
   UserIcon,
   Package01Icon,
-  Clock01Icon,
+  Calendar01Icon,
   ArrowRight01Icon,
 } from "hugeicons-react";
 import type { PredictiveInsightsResponse, ReorderWindowEntry } from "@/lib/api";
@@ -15,55 +15,51 @@ import { useCompany } from "@/lib/company-context";
 const nf = new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 });
 const fmtT = (v: number) => `${nf.format(Math.abs(v))} t`;
 
-function CompactCard({
-  icon,
-  iconBg,
-  title,
-  countLine,
-  impactLine,
-  trendLine,
-  trendPositive,
-  onViewDetails,
-}: {
+interface CardProps {
   icon: React.ReactNode;
   iconBg: string;
-  title: string;
-  countLine: string;
+  title: React.ReactNode;
+  count: number | string;
+  unit: string;
   impactLine?: string | null;
-  trendLine?: string | null;
+  trendPct?: number | null;
   trendPositive?: boolean;
+  border: string;
+  bg: string;
   onViewDetails?: () => void;
-}) {
+}
+
+function ActionCard({
+  icon, iconBg, title, count, unit, impactLine, trendPct, trendPositive,
+  border, bg, onViewDetails,
+}: CardProps) {
   return (
-    <div className="rounded-xl border border-border bg-card p-4 flex flex-col gap-2.5 min-h-[148px]">
-      <div className="flex items-center gap-2.5">
-        <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${iconBg}`}>
+    <div className={`rounded-xl p-4 flex flex-col gap-2.5 min-h-[165px] border ${border} ${bg}`}>
+      <div className="flex items-start gap-2.5">
+        <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${iconBg}`}>
           {icon}
         </div>
-        <span className="text-[11px] font-semibold text-foreground leading-tight">{title}</span>
+        <span className="text-[12px] font-semibold text-foreground leading-tight">{title}</span>
       </div>
 
       <div className="flex-1">
-        <div className="text-[20px] font-extrabold text-foreground leading-none mt-0.5">
-          {countLine}
+        <div className="leading-none flex items-baseline gap-1">
+          <span className="text-[38px] font-extrabold text-foreground tracking-tight">{count}</span>
+          <span className="text-[12px] text-muted-foreground font-medium">{unit}</span>
         </div>
         {impactLine && (
-          <div className="text-[11px] text-muted-foreground mt-1.5 leading-tight">
-            {impactLine}
-          </div>
+          <div className="text-[11px] text-muted-foreground mt-1.5 leading-tight">{impactLine}</div>
         )}
-        {trendLine && (
-          <div className={`text-[13px] font-bold mt-0.5 leading-tight ${
-            trendPositive ? "text-emerald-400" : "text-red-400"
-          }`}>
-            {trendLine}
+        {trendPct != null && (
+          <div className={`text-[14px] font-bold mt-1 ${trendPositive ? "text-emerald-400" : "text-red-400"}`}>
+            {trendPositive ? "▲" : "▼"} {Math.abs(trendPct).toFixed(1)}%
           </div>
         )}
       </div>
 
       <button
         onClick={onViewDetails}
-        className="flex items-center gap-1 text-[11px] text-primary hover:text-primary/80 transition-colors self-start"
+        className="flex items-center gap-1 text-[11px] text-emerald-400 hover:text-emerald-300 transition-colors self-start font-medium"
       >
         View details <ArrowRight01Icon size={10} />
       </button>
@@ -71,7 +67,7 @@ function CompactCard({
   );
 }
 
-function MissedReorderCompactCard() {
+function MissedReorderCard() {
   const { companyNos, saleScope } = useCompany();
   const [data, setData] = useState<ReorderWindowEntry[] | null>(null);
   const [loading, setLoading] = useState(true);
@@ -85,29 +81,32 @@ function MissedReorderCompactCard() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(companyNos), saleScope]);
 
-  const usualVolumeAtRisk = useMemo(
+  const volumeAtRisk = useMemo(
     () => (data ?? []).reduce((s, r) => s + r.usual_volume, 0),
     [data]
   );
 
   if (loading) {
     return (
-      <div className="rounded-xl border border-border bg-card p-4 animate-pulse min-h-[148px]">
-        <div className="h-8 w-8 rounded-lg bg-muted/60 mb-2.5" />
+      <div className="rounded-xl border border-blue-800/50 bg-blue-950/20 p-4 animate-pulse min-h-[165px]">
+        <div className="h-9 w-9 rounded-lg bg-blue-500/15 mb-2.5" />
         <div className="h-3 w-28 bg-muted/50 rounded mb-2" />
-        <div className="h-5 w-16 bg-muted/60 rounded" />
+        <div className="h-8 w-16 bg-muted/60 rounded" />
       </div>
     );
   }
 
   return (
-    <CompactCard
-      icon={<Clock01Icon size={15} className="text-orange-400" />}
-      iconBg="bg-orange-500/10 border border-orange-500/20"
-      title="Missed Reorder Windows"
-      countLine={`${data?.length ?? 0} customers`}
-      impactLine={usualVolumeAtRisk > 0 ? `${fmtT(usualVolumeAtRisk)} at risk` : "No volume at risk"}
-      trendLine={null}
+    <ActionCard
+      icon={<Calendar01Icon size={18} className="text-blue-400" />}
+      iconBg="bg-blue-500/15"
+      title={<>Missed Reorder<br />Windows</>}
+      count={data?.length ?? 0}
+      unit="customers"
+      impactLine={volumeAtRisk > 0 ? `${fmtT(volumeAtRisk)} at risk` : "No volume at risk"}
+      trendPct={null}
+      border="border-blue-800/50"
+      bg="bg-blue-950/20"
     />
   );
 }
@@ -132,11 +131,11 @@ export default function CommercialActionCenter({
             <div className="h-4 w-52 bg-muted/50 rounded animate-pulse" />
             <div className="h-3 w-72 bg-muted/35 rounded animate-pulse" />
           </div>
-          <div className="h-7 w-28 bg-muted/35 rounded-lg animate-pulse" />
+          <div className="h-7 w-24 bg-muted/35 rounded animate-pulse" />
         </div>
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
           {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="rounded-xl border border-border bg-card h-[148px] animate-pulse" />
+            <div key={i} className="rounded-xl border border-border bg-card h-[165px] animate-pulse" />
           ))}
         </div>
       </div>
@@ -181,71 +180,86 @@ export default function CommercialActionCenter({
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h2 className="text-[13px] font-semibold text-foreground">Commercial Action Center</h2>
+          <h2 className="text-[15px] font-semibold text-foreground">Commercial Action Center</h2>
           <p className="text-[11px] text-muted-foreground mt-0.5">Key areas that need your attention</p>
         </div>
-        <button className="flex-shrink-0 flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground hover:text-primary border border-border/60 hover:border-primary/40 px-3 py-1.5 rounded-lg transition-colors">
-          View all <ArrowRight01Icon size={11} />
+        <button className="flex-shrink-0 flex items-center gap-1 text-[12px] font-medium text-emerald-400 hover:text-emerald-300 transition-colors">
+          View all <ArrowRight01Icon size={12} />
         </button>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
 
         {/* 1. At-Risk Customers */}
-        <CompactCard
-          icon={<AlertCircleIcon size={15} className="text-red-400" />}
-          iconBg="bg-red-500/10 border border-red-500/20"
-          title="At-Risk Customers"
-          countLine={`${atRisk.length} customers`}
+        <ActionCard
+          icon={<AlertCircleIcon size={18} className="text-red-400" />}
+          iconBg="bg-red-500/15"
+          title={<>At-Risk<br />Customers</>}
+          count={atRisk.length}
+          unit="customers"
           impactLine={atRiskVolume > 0 ? `-${fmtT(atRiskVolume)} vs ${cmpLabel}` : "No volume data"}
-          trendLine={atRiskAvgPct > 0 ? `▼ ${atRiskAvgPct.toFixed(1)}%` : null}
+          trendPct={atRiskAvgPct > 0 ? atRiskAvgPct : null}
           trendPositive={false}
+          border="border-red-800/50"
+          bg="bg-red-950/20"
         />
 
         {/* 2. Products to Push */}
-        <CompactCard
-          icon={<Package01Icon size={15} className="text-blue-400" />}
-          iconBg="bg-blue-500/10 border border-blue-500/20"
-          title="Products to Push"
-          countLine={`${productsToPush.length} products`}
+        <ActionCard
+          icon={<Package01Icon size={18} className="text-amber-400" />}
+          iconBg="bg-amber-500/15"
+          title={<>Products to<br />Push</>}
+          count={productsToPush.length}
+          unit="products"
           impactLine={productLost > 0 ? `-${fmtT(productLost)} vs ${cmpLabel}` : "No lost volume"}
-          trendLine={productAvgPct > 0 ? `▼ ${productAvgPct.toFixed(1)}%` : null}
+          trendPct={productAvgPct > 0 ? productAvgPct : null}
           trendPositive={false}
+          border="border-amber-800/50"
+          bg="bg-amber-950/20"
         />
 
         {/* 3. Declining Groups */}
-        <CompactCard
-          icon={<ChartDownIcon size={15} className="text-red-400" />}
-          iconBg="bg-red-500/10 border border-red-500/20"
-          title="Declining Groups"
-          countLine={`${decliningGroups.length} groups`}
+        <ActionCard
+          icon={<ChartDownIcon size={18} className="text-rose-400" />}
+          iconBg="bg-rose-500/15"
+          title={<>Declining<br />Groups</>}
+          count={decliningGroups.length}
+          unit="groups"
           impactLine={decliningLost > 0 ? `-${fmtT(decliningLost)} vs ${cmpLabel}` : "No lost volume"}
-          trendLine={decliningAvgPct > 0 ? `▼ ${decliningAvgPct.toFixed(1)}%` : null}
+          trendPct={decliningAvgPct > 0 ? decliningAvgPct : null}
           trendPositive={false}
+          border="border-rose-800/50"
+          bg="bg-rose-950/20"
         />
 
         {/* 4. Dormant High-Value */}
-        <CompactCard
-          icon={<UserIcon size={15} className="text-amber-400" />}
-          iconBg="bg-amber-500/10 border border-amber-500/20"
-          title="Dormant High-Value"
-          countLine={`${dormant.length} customers`}
+        <ActionCard
+          icon={<UserIcon size={18} className="text-violet-400" />}
+          iconBg="bg-violet-500/15"
+          title={<>Dormant<br />High-Value</>}
+          count={dormant.length}
+          unit="customers"
           impactLine={dormantVolume > 0 ? `-${fmtT(dormantVolume)} at risk` : "No volume at risk"}
-          trendLine={null}
+          trendPct={null}
+          border="border-violet-800/50"
+          bg="bg-violet-950/20"
         />
 
         {/* 5. Missed Reorder Windows */}
-        <MissedReorderCompactCard />
+        <MissedReorderCard />
 
         {/* 6. Growing Groups */}
-        <CompactCard
-          icon={<ChartUpIcon size={15} className="text-emerald-400" />}
-          iconBg="bg-emerald-500/10 border border-emerald-500/20"
-          title="Growing Groups"
-          countLine={`${growingGroups.length} groups`}
+        <ActionCard
+          icon={<ChartUpIcon size={18} className="text-emerald-400" />}
+          iconBg="bg-emerald-500/15"
+          title={<>Growing<br />Groups</>}
+          count={growingGroups.length}
+          unit="groups"
           impactLine={growingGained > 0 ? `+${fmtT(growingGained)} vs ${cmpLabel}` : "No gained volume"}
-          trendLine={growingAvgPct > 0 ? `▲ ${growingAvgPct.toFixed(1)}%` : null}
+          trendPct={growingAvgPct > 0 ? growingAvgPct : null}
           trendPositive={true}
+          border="border-emerald-800/50"
+          bg="bg-emerald-950/20"
         />
 
       </div>

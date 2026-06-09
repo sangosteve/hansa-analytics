@@ -8,11 +8,15 @@ import {
   getOAuthStartUrl,
   disconnectOAuth,
   testHansaConnection,
+  getTargets,
+  createOrUpdateTarget,
+  deleteTarget,
   type RefreshSettings,
   type RefreshHistoryRow,
   type OAuthStatus,
   type OAuthConfig,
   type ConnectionTestResult,
+  type SalesTarget,
 } from "@/lib/api";
 import {
   CheckmarkCircle01Icon,
@@ -23,6 +27,9 @@ import {
   Plug01Icon as PlugInIcon,
   LinkSquare01Icon,
   AlertCircleIcon,
+  Target01Icon,
+  Add01Icon,
+  Delete01Icon,
 } from "hugeicons-react";
 
 const ALL_COMPANIES = [
@@ -57,7 +64,7 @@ const REFRESH_MODES = [
 
 const BUFFER_OPTIONS = [2, 7, 14, 30];
 
-type Tab = "config" | "history" | "integrations";
+type Tab = "config" | "history" | "integrations" | "targets";
 
 function StatusBadge({ status }: { status: string }) {
   const s = status?.toLowerCase();
@@ -498,6 +505,10 @@ export default function SettingsPage() {
           <PlugInIcon size={14} />
           Integrations
         </button>
+        <button className={tabCls("targets")} onClick={() => setTab("targets")}>
+          <Target01Icon size={14} />
+          Targets
+        </button>
       </div>
 
       <div className="flex-1 overflow-y-auto">
@@ -886,7 +897,257 @@ export default function SettingsPage() {
 
         {/* Integrations Tab */}
         {tab === "integrations" && <IntegrationsTab />}
+
+        {/* Targets Tab */}
+        {tab === "targets" && <TargetsTab />}
       </div>
+    </div>
+  );
+}
+
+const MONTHS = [
+  "January","February","March","April","May","June",
+  "July","August","September","October","November","December",
+];
+
+function TargetsTab() {
+  const currentYear = new Date().getFullYear();
+  const [targets, setTargets] = useState<SalesTarget[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedYear, setSelectedYear] = useState(currentYear);
+  const [showForm, setShowForm] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+
+  const [formYear, setFormYear] = useState(currentYear);
+  const [formMonth, setFormMonth] = useState(new Date().getMonth() + 1);
+  const [formScope, setFormScope] = useState("all");
+  const [formTonnes, setFormTonnes] = useState("");
+  const [formNotes, setFormNotes] = useState("");
+
+  function resetForm() {
+    setFormYear(currentYear);
+    setFormMonth(new Date().getMonth() + 1);
+    setFormScope("all");
+    setFormTonnes("");
+    setFormNotes("");
+  }
+
+  function loadTargets() {
+    setLoading(true);
+    setError(null);
+    getTargets(selectedYear)
+      .then(setTargets)
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
+  }
+
+  useEffect(() => { loadTargets(); }, [selectedYear]);
+
+  async function handleSave(e: React.FormEvent) {
+    e.preventDefault();
+    if (!formTonnes || isNaN(parseFloat(formTonnes))) return;
+    setSaving(true);
+    try {
+      await createOrUpdateTarget({
+        year: formYear,
+        month: formMonth,
+        scope: formScope,
+        target_tonnes: parseFloat(formTonnes),
+        notes: formNotes || null,
+      });
+      setShowForm(false);
+      resetForm();
+      loadTargets();
+    } catch (e: any) {
+      alert(e?.message ?? "Save failed");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete(id: number) {
+    if (!confirm("Delete this target?")) return;
+    setDeletingId(id);
+    try {
+      await deleteTarget(id);
+      setTargets(prev => prev.filter(t => t.id !== id));
+    } catch (e: any) {
+      alert(e?.message ?? "Delete failed");
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  const yearOptions = Array.from({ length: 5 }, (_, i) => currentYear - 1 + i);
+
+  return (
+    <div className="max-w-3xl mx-auto px-6 py-6 space-y-6">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-semibold text-foreground">Sales Targets</h2>
+          <p className="text-[11px] text-muted-foreground mt-0.5">
+            Set monthly tonne targets used in the KPI cards and performance trends.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <select
+            value={selectedYear}
+            onChange={e => setSelectedYear(+e.target.value)}
+            className="h-7 px-2 text-xs rounded-md border border-border bg-secondary text-foreground"
+          >
+            {yearOptions.map(y => (
+              <option key={y} value={y}>{y}</option>
+            ))}
+          </select>
+          <button
+            onClick={() => { resetForm(); setFormYear(selectedYear); setShowForm(true); }}
+            className="h-7 px-3 flex items-center gap-1.5 text-xs font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+          >
+            <Add01Icon size={12} /> Add Target
+          </button>
+        </div>
+      </div>
+
+      {/* Add / Edit Form */}
+      {showForm && (
+        <div className="rounded-xl border border-border bg-card p-4 space-y-4">
+          <h3 className="text-xs font-semibold text-foreground">New Monthly Target</h3>
+          <form onSubmit={handleSave} className="space-y-3">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">Year</label>
+                <select
+                  value={formYear}
+                  onChange={e => setFormYear(+e.target.value)}
+                  className="h-7 px-2 text-xs rounded-md border border-border bg-secondary text-foreground"
+                >
+                  {yearOptions.map(y => <option key={y} value={y}>{y}</option>)}
+                </select>
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">Month</label>
+                <select
+                  value={formMonth}
+                  onChange={e => setFormMonth(+e.target.value)}
+                  className="h-7 px-2 text-xs rounded-md border border-border bg-secondary text-foreground"
+                >
+                  {MONTHS.map((m, i) => <option key={i + 1} value={i + 1}>{m}</option>)}
+                </select>
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">Scope</label>
+                <select
+                  value={formScope}
+                  onChange={e => setFormScope(e.target.value)}
+                  className="h-7 px-2 text-xs rounded-md border border-border bg-secondary text-foreground"
+                >
+                  <option value="all">All</option>
+                  <option value="external">External</option>
+                  <option value="internal">Internal</option>
+                </select>
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">Target Tonnes</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  required
+                  value={formTonnes}
+                  onChange={e => setFormTonnes(e.target.value)}
+                  placeholder="e.g. 1200"
+                  className="h-7 px-2 text-xs rounded-md border border-border bg-secondary text-foreground placeholder:text-muted-foreground/50"
+                />
+              </div>
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">Notes (optional)</label>
+              <input
+                type="text"
+                value={formNotes}
+                onChange={e => setFormNotes(e.target.value)}
+                placeholder="e.g. Q1 stretch target"
+                className="h-7 px-2 text-xs rounded-md border border-border bg-secondary text-foreground placeholder:text-muted-foreground/50"
+              />
+            </div>
+            <div className="flex items-center gap-2 pt-1">
+              <button
+                type="submit"
+                disabled={saving}
+                className="h-7 px-4 text-xs font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
+              >
+                {saving ? "Saving…" : "Save Target"}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setShowForm(false); resetForm(); }}
+                className="h-7 px-3 text-xs font-medium rounded-md border border-border text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Targets Table */}
+      {loading ? (
+        <div className="space-y-2">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="h-10 rounded-lg bg-muted/30 animate-pulse" />
+          ))}
+        </div>
+      ) : error ? (
+        <div className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-4 py-3">
+          {error}
+        </div>
+      ) : targets.length === 0 ? (
+        <div className="text-center py-12 text-muted-foreground">
+          <Target01Icon size={32} className="mx-auto mb-3 opacity-30" />
+          <p className="text-sm font-medium">No targets set for {selectedYear}</p>
+          <p className="text-xs mt-1">Click "Add Target" to set your first monthly target.</p>
+        </div>
+      ) : (
+        <div className="rounded-xl border border-border overflow-hidden">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b border-border bg-muted/20">
+                <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground">Month</th>
+                <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground">Scope</th>
+                <th className="text-right px-4 py-2.5 font-semibold text-muted-foreground">Target (t)</th>
+                <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground">Notes</th>
+                <th className="text-right px-4 py-2.5 font-semibold text-muted-foreground">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {targets.map(t => (
+                <tr key={t.id} className="hover:bg-muted/10 transition-colors">
+                  <td className="px-4 py-2.5 font-medium text-foreground">
+                    {MONTHS[(t.month ?? 1) - 1]} {t.year}
+                  </td>
+                  <td className="px-4 py-2.5 text-muted-foreground capitalize">{t.scope}</td>
+                  <td className="px-4 py-2.5 text-right font-semibold text-foreground">
+                    {new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 }).format(t.target_tonnes)}
+                  </td>
+                  <td className="px-4 py-2.5 text-muted-foreground max-w-[200px] truncate">{t.notes ?? "—"}</td>
+                  <td className="px-4 py-2.5 text-right">
+                    <button
+                      onClick={() => handleDelete(t.id)}
+                      disabled={deletingId === t.id}
+                      className="inline-flex items-center gap-1 text-red-400 hover:text-red-300 disabled:opacity-50 transition-colors"
+                    >
+                      <Delete01Icon size={13} />
+                      {deletingId === t.id ? "…" : "Delete"}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

@@ -62,42 +62,10 @@ function getCompShortLabel(mode: ComparisonMode, periodLabel: string): string {
   return "Prior Period";
 }
 
-function Sparkline({ data, color = "#34d399", w = 104, h = 54 }: {
-  data: number[]; color?: string; w?: number; h?: number;
-}) {
-  if (data.length < 2) return null;
-  const max = Math.max(...data, 0.01);
-  const min = Math.min(...data, 0);
-  const range = max - min || 1;
-  const pad = 3;
-  const pts = data.map((v, i) => ({
-    x: pad + (i / (data.length - 1)) * (w - pad * 2),
-    y: (h - pad) - ((v - min) / range) * (h - pad * 2),
-  }));
-  const line = pts.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
-  const area = `M ${pts[0].x},${h - pad} ` +
-    pts.map(p => `L ${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ") +
-    ` L ${pts[pts.length - 1].x},${h - pad} Z`;
-  const gradId = `sg-${color.slice(1)}`;
-  return (
-    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} fill="none">
-      <defs>
-        <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity="0.35" />
-          <stop offset="100%" stopColor={color} stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      <path d={area} fill={`url(#${gradId})`} />
-      <polyline points={line} stroke={color} strokeWidth="1.8" fill="none" strokeLinejoin="round" strokeLinecap="round" />
-      <circle cx={pts[pts.length - 1].x} cy={pts[pts.length - 1].y} r="2.5" fill={color} />
-    </svg>
-  );
-}
-
 function ForecastChart({ daysElapsed, daysInMonth, actualTonnes, projectedTonnes }: {
   daysElapsed: number; daysInMonth: number; actualTonnes: number; projectedTonnes: number;
 }) {
-  const W = 120, H = 56;
+  const W = 110, H = 52;
   const pL = 4, pR = 6, pT = 12, pB = 4;
   const maxY = Math.max(projectedTonnes, actualTonnes, 0.01) * 1.2;
   const todayFrac = Math.min(daysElapsed / (daysInMonth || 1), 1);
@@ -128,9 +96,9 @@ function ForecastChart({ daysElapsed, daysInMonth, actualTonnes, projectedTonnes
 function HealthDonut({ healthy, atRisk, critical, score }: {
   healthy: number; atRisk: number; critical: number; score: number;
 }) {
-  const size = 92;
+  const size = 96;
   const cx = size / 2, cy = size / 2;
-  const r = size / 2 - 10;
+  const r = size / 2 - 11;
   const circ = 2 * Math.PI * r;
   const total = Math.max(healthy + atRisk + critical, 1);
   const gap = 2;
@@ -149,44 +117,39 @@ function HealthDonut({ healthy, atRisk, critical, score }: {
 
   return (
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-      <circle cx={cx} cy={cy} r={r} fill="none" stroke="#21262d" strokeWidth="9" />
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke="#21262d" strokeWidth="10" />
       {healthyDash > 0 && (
-        <circle cx={cx} cy={cy} r={r} fill="none" stroke="#34d399" strokeWidth="9"
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke="#34d399" strokeWidth="10"
           strokeDasharray={`${healthyDash} ${circ - healthyDash}`}
           strokeDashoffset={healthyOffset}
           transform={`rotate(-90 ${cx} ${cy})`} strokeLinecap="round" />
       )}
       {atRiskDash > 0 && (
-        <circle cx={cx} cy={cy} r={r} fill="none" stroke="#f59e0b" strokeWidth="9"
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke="#f59e0b" strokeWidth="10"
           strokeDasharray={`${atRiskDash} ${circ - atRiskDash}`}
           strokeDashoffset={atRiskOffset}
           transform={`rotate(-90 ${cx} ${cy})`} strokeLinecap="round" />
       )}
       {criticalDash > 0 && (
-        <circle cx={cx} cy={cy} r={r} fill="none" stroke="#f87171" strokeWidth="9"
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke="#f87171" strokeWidth="10"
           strokeDasharray={`${criticalDash} ${circ - criticalDash}`}
           strokeDashoffset={criticalOffset}
           transform={`rotate(-90 ${cx} ${cy})`} strokeLinecap="round" />
       )}
-      <text x={cx} y={cy - 3} textAnchor="middle" dominantBaseline="middle"
-        fill="#e6edf3" fontSize="20" fontWeight="700" fontFamily="system-ui">{score}</text>
-      <text x={cx} y={cy + 13} textAnchor="middle"
-        fill="#8b949e" fontSize="8" fontFamily="system-ui">Score</text>
+      <text x={cx} y={cy - 4} textAnchor="middle" dominantBaseline="middle"
+        fill="#e6edf3" fontSize="22" fontWeight="700" fontFamily="system-ui">{score}</text>
+      <text x={cx} y={cy + 14} textAnchor="middle"
+        fill="#8b949e" fontSize="9" fontFamily="system-ui">Score</text>
     </svg>
   );
 }
 
 function TargetBar({ pct }: { pct: number }) {
   const fill = Math.min(Math.max(pct, 0), 100);
-  const color =
-    fill >= 80 ? "#34d399" :
-    fill >= 50 ? "#818cf8" :
-    fill >= 20 ? "#60a5fa" :
-    "#f59e0b";
   return (
     <div className="w-full h-1.5 rounded-full bg-white/10 overflow-hidden">
       <div className="h-full rounded-full transition-all duration-700"
-        style={{ width: `${fill}%`, background: `linear-gradient(90deg, ${color}80, ${color})` }} />
+        style={{ width: `${fill}%`, background: "linear-gradient(90deg, #34d39980, #34d399)" }} />
     </div>
   );
 }
@@ -201,9 +164,17 @@ function KpiSkeleton() {
   );
 }
 
-function KpiCard({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+function KpiCard({ children, accentColor, bgTint, className = "" }: {
+  children: React.ReactNode;
+  accentColor: string;
+  bgTint?: string;
+  className?: string;
+}) {
   return (
-    <div className={`relative rounded-xl border border-border bg-card p-4 overflow-hidden flex flex-col gap-2.5 ${className}`}>
+    <div
+      className={`relative rounded-xl bg-card p-4 overflow-hidden flex flex-col gap-2.5 border border-border/60 ${bgTint ?? ""} ${className}`}
+      style={{ borderLeftColor: accentColor, borderLeftWidth: "3px" }}
+    >
       {children}
     </div>
   );
@@ -230,7 +201,6 @@ export default function DashboardKpiGrid({
   totalTonnes,
   comparisonTonnes,
   comparisonLabel,
-  salesRows,
   mtd,
   atRiskCustomers,
   activeCustomers,
@@ -244,7 +214,7 @@ export default function DashboardKpiGrid({
 }: DashboardKpiGridProps) {
   const periodLabel = inferPeriodLabel(dateFrom, dateTo);
   const kpiTitle = getKpiTitle(dateFrom, dateTo);
-  const compShort = getCompShortLabel(comparisonMode, periodLabel);
+  const compShort = comparisonLabel ?? getCompShortLabel(comparisonMode, periodLabel);
 
   const yoyPct = comparisonTonnes > 0
     ? ((totalTonnes - comparisonTonnes) / comparisonTonnes) * 100
@@ -252,14 +222,15 @@ export default function DashboardKpiGrid({
   const tonneDiff = totalTonnes - comparisonTonnes;
 
   const progressPct = targetTonnes > 0 ? (totalTonnes / targetTonnes) * 100 : 0;
-  const remaining = targetTonnes - totalTonnes;
+  const comparisonProgressPct = comparisonTonnes > 0 && targetTonnes > 0
+    ? (comparisonTonnes / targetTonnes) * 100
+    : null;
+  const ppDiff = comparisonProgressPct !== null ? progressPct - comparisonProgressPct : null;
 
   const projectedEOM = mtd?.projected_eom_tonnes ?? null;
   const projVsTarget = projectedEOM != null ? projectedEOM - targetTonnes : null;
   const projVsTargetPct = projectedEOM != null && targetTonnes > 0
     ? ((projectedEOM - targetTonnes) / targetTonnes) * 100 : null;
-
-  const sparkData = salesRows.map(r => r.total_tonnes);
 
   const healthyCount = Math.max(activeCustomers - atRiskCustomers, 0);
   const critCount = Math.min(criticalCustomers, atRiskCustomers);
@@ -268,7 +239,7 @@ export default function DashboardKpiGrid({
   const healthScore = Math.round((healthyCount / totalForHealth) * 100);
   const healthyPct = Math.round((healthyCount / totalForHealth) * 100);
   const atRiskPct = Math.round((atRiskOnlyCount / totalForHealth) * 100);
-  const critPct = 100 - healthyPct - atRiskPct;
+  const critPct = Math.max(100 - healthyPct - atRiskPct, 0);
 
   if (loading && totalTonnes === 0) {
     return (
@@ -281,99 +252,85 @@ export default function DashboardKpiGrid({
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
 
-      {/* ── 1. Period Tonnes ── */}
-      <KpiCard>
+      {/* ── 1. Period Tonnes (green) ── */}
+      <KpiCard accentColor="#10b981" bgTint="bg-emerald-950/10">
         <div className="flex items-center gap-2">
-          <ChartUpIcon size={13} className="text-emerald-400 flex-shrink-0" />
-          <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground truncate">
+          <ChartUpIcon size={14} className="text-emerald-400 flex-shrink-0" />
+          <span className="text-[10.5px] font-semibold text-muted-foreground truncate">
             {kpiTitle}
           </span>
         </div>
-        <div className="flex items-end justify-between gap-2">
-          <div className="min-w-0 flex-1">
-            <div className="text-[30px] font-extrabold text-foreground leading-none tracking-tight whitespace-nowrap">
-              {fmtT(totalTonnes)}
-            </div>
-            {comparisonTonnes > 0 && (
-              <div className="mt-1.5 text-[11px] text-muted-foreground whitespace-nowrap">
-                vs {fmtT(comparisonTonnes)} {compShort}
-              </div>
-            )}
-            <div className="mt-2 flex items-center gap-1.5 flex-wrap">
-              {yoyPct !== null ? (
-                <>
-                  <span className={`inline-flex items-center gap-0.5 text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${
-                    yoyPct >= 0 ? "bg-emerald-500/15 text-emerald-400" : "bg-red-500/15 text-red-400"
-                  }`}>
-                    {yoyPct >= 0 ? "▲" : "▼"} {Math.abs(yoyPct).toFixed(1)}%
-                  </span>
-                  <span className={`text-[11px] font-semibold whitespace-nowrap ${yoyPct >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                    {fmtTSigned(tonneDiff)}
-                  </span>
-                </>
-              ) : (
-                <span className="text-[11px] text-muted-foreground/50 italic">No comparison data</span>
-              )}
-            </div>
-            <div className="mt-1 text-[10px] text-muted-foreground/60">
-              {comparisonMode === "same_period_ly" ? "Same period last year" : "Previous period"}
-            </div>
+        <div>
+          <div className="text-[32px] font-extrabold text-foreground leading-none tracking-tight">
+            {fmtT(totalTonnes)}
           </div>
-          {sparkData.length >= 2 && (
-            <div className="flex-shrink-0 self-end pb-0.5 opacity-80">
-              <Sparkline data={sparkData} color="#34d399" />
+          {comparisonTonnes > 0 && (
+            <div className="mt-1.5 text-[11px] text-muted-foreground">
+              vs {fmtT(comparisonTonnes)} {compShort}
             </div>
           )}
+          <div className="mt-2 flex items-center gap-2 flex-wrap">
+            {yoyPct !== null ? (
+              <>
+                <span className={`inline-flex items-center gap-0.5 text-[11px] font-bold px-1.5 py-0.5 rounded-full ${
+                  yoyPct >= 0 ? "bg-emerald-500/15 text-emerald-400" : "bg-red-500/15 text-red-400"
+                }`}>
+                  {yoyPct >= 0 ? "▲" : "▼"} {Math.abs(yoyPct).toFixed(1)}%
+                </span>
+                <span className={`text-[11px] font-semibold ${yoyPct >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                  {fmtTSigned(tonneDiff)}
+                </span>
+              </>
+            ) : (
+              <span className="text-[11px] text-muted-foreground/50 italic">No comparison data</span>
+            )}
+          </div>
+          <div className="mt-1.5 text-[10px] text-muted-foreground/55">
+            {comparisonMode === "same_period_ly" ? "Same period last year" : "Previous period"}
+          </div>
         </div>
       </KpiCard>
 
-      {/* ── 2. Target Progress ── */}
-      <KpiCard>
+      {/* ── 2. Target Progress (amber) ── */}
+      <KpiCard accentColor="#f59e0b" bgTint="bg-amber-950/10">
         <div className="flex items-center gap-2">
-          <CheckmarkCircle01Icon size={13} className="text-blue-400 flex-shrink-0" />
-          <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground whitespace-nowrap">
+          <CheckmarkCircle01Icon size={14} className="text-amber-400 flex-shrink-0" />
+          <span className="text-[10.5px] font-semibold text-muted-foreground whitespace-nowrap">
             Target Progress ({periodLabel})
           </span>
         </div>
         <div className="flex flex-col gap-1.5">
-          <div className="flex items-baseline gap-2">
+          <div className="flex items-baseline gap-2 flex-wrap">
             <span className="text-[32px] font-extrabold text-foreground leading-none tracking-tight">
               {progressPct.toFixed(1)}%
             </span>
-            {yoyPct !== null && (
-              <span className={`text-[11px] font-semibold ${yoyPct >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                vs {compShort}
+            {comparisonProgressPct !== null && (
+              <span className="text-[11px] text-muted-foreground whitespace-nowrap">
+                vs {comparisonProgressPct.toFixed(1)}% {compShort}
               </span>
             )}
           </div>
-          <div className="mt-1">
+          {ppDiff !== null && (
+            <div className={`text-[13px] font-bold leading-none ${ppDiff >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+              {ppDiff >= 0 ? "▲" : "▼"} {Math.abs(ppDiff).toFixed(1)} pp
+            </div>
+          )}
+          <div className="mt-0.5">
             <TargetBar pct={progressPct} />
           </div>
-          <div className="flex items-center justify-between mt-1">
-            <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${
-              progressPct >= 100 ? "bg-emerald-500/15 text-emerald-400" :
-              progressPct >= 70 ? "bg-blue-500/15 text-blue-400" :
-              "bg-amber-500/15 text-amber-400"
-            }`}>
-              {progressPct >= 100 ? "Target achieved!" : `${progressPct.toFixed(0)}% achieved`}
-            </span>
-          </div>
-          <div className="text-[11px] text-muted-foreground mt-0.5">
-            Target: {fmtT(targetTonnes)}
-          </div>
-          <div className="text-[11px] text-muted-foreground/70">
-            {fmtT(totalTonnes)} / {fmtT(targetTonnes)}
-            {remaining > 0 && <span className="ml-1 text-amber-400/80">· {fmtT(remaining)} to go</span>}
+          <div className="flex items-center justify-between text-[10.5px] text-muted-foreground mt-0.5">
+            <span>Target: {fmtT(targetTonnes)}</span>
+            <span>{fmtT(totalTonnes)} / {fmtT(targetTonnes)}</span>
           </div>
         </div>
       </KpiCard>
 
-      {/* ── 3. Projected EOM ── */}
-      <KpiCard>
+      {/* ── 3. Projected Month-End (violet) ── */}
+      <KpiCard accentColor="#8b5cf6" bgTint="bg-violet-950/10">
         <div className="flex items-center gap-2">
-          <Activity01Icon size={13} className="text-purple-400 flex-shrink-0" />
-          <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground whitespace-nowrap">
-            {mtd ? `Projected ${mtd.month.split(" ")[0]} EOM` : "Projected Month-End"}
+          <Activity01Icon size={14} className="text-violet-400 flex-shrink-0" />
+          <span className="text-[10.5px] font-semibold text-muted-foreground whitespace-nowrap">
+            Projected Month-End
           </span>
         </div>
         {predictiveLoading ? (
@@ -381,28 +338,28 @@ export default function DashboardKpiGrid({
         ) : projectedEOM !== null ? (
           <div className="flex items-end justify-between gap-2">
             <div className="min-w-0 flex-1">
-              <div className="text-[30px] font-extrabold text-foreground leading-none tracking-tight whitespace-nowrap">
+              <div className="text-[32px] font-extrabold text-foreground leading-none tracking-tight">
                 {fmtT(projectedEOM)}
               </div>
-              <div className="mt-1.5 text-[11px] text-muted-foreground whitespace-nowrap">
+              <div className="mt-1.5 text-[11px] text-muted-foreground">
                 vs Target: {fmtT(targetTonnes)}
               </div>
               {projVsTargetPct !== null && (
-                <div className="mt-2 flex items-center gap-1.5 flex-wrap">
-                  <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${
+                <div className="mt-2 flex items-center gap-2 flex-wrap">
+                  <span className={`inline-flex items-center gap-0.5 text-[11px] font-bold px-1.5 py-0.5 rounded-full ${
                     projVsTargetPct >= 0 ? "bg-emerald-500/15 text-emerald-400" : "bg-red-500/15 text-red-400"
                   }`}>
                     {projVsTargetPct >= 0 ? "▲" : "▼"} {Math.abs(projVsTargetPct).toFixed(1)}%
                   </span>
                   {projVsTarget !== null && (
-                    <span className={`text-[11px] font-semibold whitespace-nowrap ${projVsTarget >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                    <span className={`text-[11px] font-semibold ${projVsTarget >= 0 ? "text-emerald-400" : "text-red-400"}`}>
                       {fmtTSigned(projVsTarget)}
                     </span>
                   )}
                 </div>
               )}
-              <div className="mt-1 text-[10px] text-muted-foreground/55 leading-tight">
-                Based on run-rate &amp; same period LY
+              <div className="mt-1.5 text-[10px] text-muted-foreground/55 leading-tight">
+                Based on run-rate, last 3 months<br />and same period last year
               </div>
             </div>
             {mtd && (
@@ -421,59 +378,61 @@ export default function DashboardKpiGrid({
         )}
       </KpiCard>
 
-      {/* ── 4. Customer Health ── */}
-      <KpiCard>
+      {/* ── 4. Customer Health (cyan) ── */}
+      <KpiCard accentColor="#06b6d4" bgTint="bg-cyan-950/10">
         <div className="flex items-center gap-2">
-          <UserGroupIcon size={13} className="text-teal-400 flex-shrink-0" />
-          <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground whitespace-nowrap">
+          <UserGroupIcon size={14} className="text-cyan-400 flex-shrink-0" />
+          <span className="text-[10.5px] font-semibold text-muted-foreground whitespace-nowrap">
             Customer Health ({periodLabel})
           </span>
         </div>
         {predictiveLoading ? (
           <div className="text-xs text-muted-foreground animate-pulse">Loading…</div>
         ) : (
-          <div className="flex items-center gap-3">
-            <div className="flex-1 min-w-0">
-              <div className="flex flex-col gap-1.5 mt-1">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-1.5">
-                    <span className="h-2 w-2 rounded-full bg-emerald-400 flex-shrink-0" />
-                    <span className="text-[11px] text-muted-foreground">Healthy</span>
+          <>
+            <div className="flex items-center gap-2 flex-1">
+              <div className="flex-1 min-w-0">
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-full bg-emerald-400 flex-shrink-0" />
+                      <span className="text-[11px] text-muted-foreground">Healthy</span>
+                    </div>
+                    <span className="text-[11px] font-semibold text-foreground">{healthyPct}%</span>
                   </div>
-                  <span className="text-[11px] font-semibold text-foreground">{healthyPct}%</span>
-                </div>
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-1.5">
-                    <span className="h-2 w-2 rounded-full bg-amber-400 flex-shrink-0" />
-                    <span className="text-[11px] text-muted-foreground">At Risk</span>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-full bg-amber-400 flex-shrink-0" />
+                      <span className="text-[11px] text-muted-foreground">At Risk</span>
+                    </div>
+                    <span className="text-[11px] font-semibold text-foreground">{atRiskPct}%</span>
                   </div>
-                  <span className="text-[11px] font-semibold text-foreground">{atRiskPct}%</span>
-                </div>
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-1.5">
-                    <span className="h-2 w-2 rounded-full bg-red-400 flex-shrink-0" />
-                    <span className="text-[11px] text-muted-foreground">Critical</span>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-full bg-red-400 flex-shrink-0" />
+                      <span className="text-[11px] text-muted-foreground">Critical</span>
+                    </div>
+                    <span className="text-[11px] font-semibold text-foreground">{critPct}%</span>
                   </div>
-                  <span className="text-[11px] font-semibold text-foreground">{Math.max(critPct, 0)}%</span>
                 </div>
               </div>
-              <div className="mt-2.5 pt-2 border-t border-border/40">
-                <div className="text-[10px] text-muted-foreground">
-                  {activeCustomers} active · {atRiskCustomers} at risk
+              {(activeCustomers + atRiskCustomers) > 0 && (
+                <div className="flex-shrink-0">
+                  <HealthDonut
+                    healthy={healthyCount}
+                    atRisk={atRiskOnlyCount}
+                    critical={critCount}
+                    score={healthScore}
+                  />
                 </div>
-              </div>
+              )}
             </div>
-            {(activeCustomers + atRiskCustomers) > 0 && (
-              <div className="flex-shrink-0">
-                <HealthDonut
-                  healthy={healthyCount}
-                  atRisk={atRiskOnlyCount}
-                  critical={critCount}
-                  score={healthScore}
-                />
-              </div>
-            )}
-          </div>
+            <div className="pt-2 border-t border-border/40">
+              <span className="text-[10.5px] text-muted-foreground">
+                {activeCustomers} active · {atRiskCustomers} at risk
+              </span>
+            </div>
+          </>
         )}
       </KpiCard>
 
