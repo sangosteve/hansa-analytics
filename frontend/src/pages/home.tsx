@@ -1206,9 +1206,9 @@ export default function Home() {
           {/* ── Filter / Comparison Bar ── */}
           <div className="space-y-2.5">
             <div className="flex flex-wrap items-end gap-3 rounded-xl border border-border bg-card p-3">
-              {/* Date View (comparison mode) */}
+              {/* Compare With (comparison mode) */}
               <div className="flex flex-col gap-1">
-                <span className="text-[10px] text-muted-foreground">Date View</span>
+                <span className="text-[10px] text-muted-foreground">Compare With</span>
                 <select
                   value={comparisonMode}
                   onChange={e => setComparisonMode(e.target.value as ComparisonMode)}
@@ -1301,7 +1301,9 @@ export default function Home() {
                 <div className="flex items-start justify-between mb-2 gap-2">
                   <div>
                     <h3 className="text-[13px] font-semibold text-foreground">
-                      {showDailyChart ? "MTD Daily Comparison (Tonnes)" : "Monthly Comparison (Tonnes)"}
+                      {showDailyChart
+                        ? `${filterPeriodLabel || "Period"} Daily Comparison (Tonnes)`
+                        : "Monthly Comparison (Tonnes)"}
                     </h3>
                     <div className="flex items-center gap-3 mt-1">
                       <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
@@ -1438,8 +1440,12 @@ export default function Home() {
               <div className="rounded-xl border border-border bg-card p-4">
                 <div className="flex items-start justify-between mb-2 gap-2">
                   <div>
-                    <h3 className="text-[13px] font-semibold text-foreground">Monthly Growth (YoY)</h3>
-                    <p className="text-[10px] text-muted-foreground/60 mt-0.5">Month-to-date vs same period last year</p>
+                    <h3 className="text-[13px] font-semibold text-foreground">
+                      {growthView === "Volume" ? "Monthly Volume Comparison" : "Monthly Growth (YoY)"}
+                    </h3>
+                    <p className="text-[10px] text-muted-foreground/60 mt-0.5">
+                      {growthView === "Volume" ? "Current year vs same period last year" : "YoY % change by month"}
+                    </p>
                   </div>
                   <DropdownBadge
                     value={growthView}
@@ -1486,7 +1492,9 @@ export default function Home() {
               <div className="rounded-xl border border-border bg-card p-4">
                 <div className="flex items-start justify-between mb-2 gap-2">
                   <div>
-                    <h3 className="text-[13px] font-semibold text-foreground">Quarter by Quarter Comparison (Tonnes)</h3>
+                    <h3 className="text-[13px] font-semibold text-foreground">
+                      {quarterlyView === "Half Year" ? "Half-Year Comparison (Tonnes)" : "Quarter-by-Quarter Comparison (Tonnes)"}
+                    </h3>
                     <div className="flex items-center gap-3 mt-1">
                       <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
                         <span className="inline-block w-3 h-[2px] rounded bg-emerald-400" /> This Year ({currentYear})
@@ -1557,6 +1565,7 @@ export default function Home() {
                           <th className="text-left font-semibold text-muted-foreground/60 py-1.5 pr-2">Product Group</th>
                           <th className="text-right font-semibold text-muted-foreground/60 py-1.5 px-1">This YTD</th>
                           <th className="text-right font-semibold text-muted-foreground/60 py-1.5 px-1">LY YTD</th>
+                          <th className="text-right font-semibold text-muted-foreground/60 py-1.5 px-1">Gap</th>
                           <th className="text-right font-semibold text-muted-foreground/60 py-1.5 pl-1">Change</th>
                         </tr>
                       </thead>
@@ -1583,6 +1592,16 @@ export default function Home() {
                                 </td>
                                 <td className="text-right py-1.5 px-1 text-muted-foreground whitespace-nowrap">
                                   {numberFormatter.format(g.prior_3m_tonnes)} t
+                                </td>
+                                <td className="text-right py-1.5 px-1 whitespace-nowrap">
+                                  {(() => {
+                                    const gap = g.current_3m_tonnes - g.prior_3m_tonnes;
+                                    return (
+                                      <span className={`font-semibold ${gap >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                                        {gap >= 0 ? "+" : ""}{numberFormatter.format(gap)} t
+                                      </span>
+                                    );
+                                  })()}
                                 </td>
                                 <td className="text-right py-1.5 pl-1">
                                   <span className={`font-semibold ${trendColor(g.trend)}`}>

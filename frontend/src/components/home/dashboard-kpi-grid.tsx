@@ -256,16 +256,19 @@ export default function DashboardKpiGrid({
       </KpiCard>
 
       {/* ── 2. Target Progress (amber) ── */}
-      <KpiCard accentColor="#f59e0b" bgTint="bg-amber-950/10">
+      <KpiCard accentColor={progressPct >= 100 ? "#10b981" : "#f59e0b"} bgTint={progressPct >= 100 ? "bg-emerald-950/10" : "bg-amber-950/10"}>
         <div className="flex items-center gap-2">
-          <CheckmarkCircle01Icon size={14} className="text-amber-400 flex-shrink-0" />
-          <span className="text-[10.5px] font-semibold text-muted-foreground whitespace-nowrap">
-            Target Progress ({periodLabel})
+          <CheckmarkCircle01Icon size={14} className={`flex-shrink-0 ${progressPct >= 100 ? "text-emerald-400" : "text-amber-400"}`} />
+          <span className="text-[10.5px] font-semibold text-muted-foreground whitespace-nowrap flex-1">
+            {progressPct >= 100 ? "Target Achieved" : `Target Progress (${periodLabel})`}
           </span>
+          {progressPct >= 100 && (
+            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 whitespace-nowrap">✓ Achieved</span>
+          )}
         </div>
         <div className="flex flex-col gap-1.5">
           <div className="flex items-baseline gap-2 flex-wrap">
-            <span className="text-[32px] font-extrabold text-foreground leading-none tracking-tight">
+            <span className={`text-[32px] font-extrabold leading-none tracking-tight ${progressPct >= 100 ? "text-emerald-400" : "text-foreground"}`}>
               {progressPct.toFixed(1)}%
             </span>
             {comparisonProgressPct !== null && (
@@ -283,8 +286,17 @@ export default function DashboardKpiGrid({
             <TargetBar pct={progressPct} />
           </div>
           <div className="flex items-center justify-between text-[10.5px] text-muted-foreground mt-0.5">
-            <span>Target: {fmtT(targetTonnes)}</span>
-            <span>{fmtT(totalTonnes)} / {fmtT(targetTonnes)}</span>
+            {progressPct >= 100 ? (
+              <>
+                <span>{fmtT(totalTonnes)} / {fmtT(targetTonnes)}</span>
+                <span className="text-emerald-400 font-semibold">+{fmtT(totalTonnes - targetTonnes)} above</span>
+              </>
+            ) : (
+              <>
+                <span>Target: {fmtT(targetTonnes)}</span>
+                <span className="text-red-400 font-semibold">Gap: -{fmtT(targetTonnes - totalTonnes)}</span>
+              </>
+            )}
           </div>
         </div>
       </KpiCard>
@@ -330,20 +342,32 @@ export default function DashboardKpiGrid({
               <div className="mt-2">
                 <DailyAvgSparkBar dailyAvg={dailyAvg} targetDailyRate={targetDailyRate} />
               </div>
-              <div className="mt-1 text-[10.5px] text-muted-foreground/55">
-                Target rate: {nf.format(targetDailyRate)} t/day · {daysInPeriod}d period
+              <div className="mt-1 flex items-center justify-between gap-1">
+                <span className="text-[10.5px] text-muted-foreground/55">
+                  Required: {nf.format(targetDailyRate)} t/day · {daysInPeriod}d
+                </span>
+                <span className={`text-[9.5px] font-semibold px-1.5 py-0.5 rounded-full whitespace-nowrap ${
+                  dailyAvg >= targetDailyRate
+                    ? "bg-emerald-500/15 text-emerald-400"
+                    : "bg-amber-500/15 text-amber-400"
+                }`}>
+                  {dailyAvg >= targetDailyRate ? "Ahead of pace" : "Behind pace"}
+                </span>
               </div>
             </>
           )}
         </div>
       </KpiCard>
 
-      {/* ── 4. Projected Month-End (violet) ── */}
+      {/* ── 4. Projected EOM / Run-Rate Forecast (violet) ── */}
       <KpiCard accentColor="#8b5cf6" bgTint="bg-violet-950/10">
         <div className="flex items-center gap-2">
           <Activity01Icon size={14} className="text-violet-400 flex-shrink-0" />
           <span className="text-[10.5px] font-semibold text-muted-foreground whitespace-nowrap">
-            Projected Month-End
+            {periodLabel === "MTD" ? "Projected Month-End"
+              : periodLabel === "QTD" ? "Projected Quarter-End"
+              : periodLabel === "YTD" ? "Projected Year-End"
+              : "Run-Rate Forecast"}
           </span>
         </div>
         {predictiveLoading ? (
