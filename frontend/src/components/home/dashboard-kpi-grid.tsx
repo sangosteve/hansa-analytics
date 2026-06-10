@@ -16,8 +16,8 @@ const fmtTSigned = (v: number) => `${v >= 0 ? "+" : "-"}${fmtT(v)}`;
 const MONTH_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
 function inferPeriodLabel(dateFrom: string, dateTo: string): string {
-  const from = new Date(dateFrom);
-  const to = new Date(dateTo);
+  const from = new Date(dateFrom + "T00:00:00");
+  const to = new Date(dateTo + "T00:00:00");
   const today = new Date(); today.setHours(0,0,0,0);
   to.setHours(0,0,0,0);
   const isMTD =

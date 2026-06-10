@@ -21,11 +21,13 @@ import {
   getRefreshFreshness,
   getMovementSummary,
   getDailySales,
+  getTargets,
   type SalesSummaryResponse,
   type PredictiveInsightsResponse,
   type RefreshFreshness,
   type MovementSummary,
   type DailySalesRow,
+  type SalesTarget,
 } from "@/lib/api";
 import DashboardKpiGrid, { DEFAULT_TARGET_TONNES } from "@/components/home/dashboard-kpi-grid";
 import CommercialActionCenter from "@/components/home/commercial-action-center";
@@ -197,6 +199,7 @@ export default function Home() {
   const [compDailySales, setCompDailySales] = useState<DailySalesRow[] | null>(null);
   const [dailyLoading, setDailyLoading] = useState(false);
   const [productGroupFilter, setProductGroupFilter] = useState("all");
+  const [targets, setTargets] = useState<SalesTarget[]>([]);
   const [cumulView, setCumulView] = useState<"Cumulative" | "Monthly">("Cumulative");
   const [growthView, setGrowthView] = useState<"YoY %" | "Volume">("YoY %");
   const [quarterlyView, setQuarterlyView] = useState<"Quarterly" | "Half Year">("Quarterly");
@@ -285,6 +288,11 @@ export default function Home() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { loadMom(); loadMovSummary(); }, [JSON.stringify(companyNos), saleScope]);
   useEffect(() => { loadFreshness(); }, []);
+  useEffect(() => {
+    const year = new Date(dateFrom + "T00:00:00").getFullYear();
+    getTargets(year).then(setTargets).catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [new Date(dateFrom + "T00:00:00").getFullYear()]);
 
   useEffect(() => {
     const handler = () => {
@@ -1059,6 +1067,20 @@ export default function Home() {
     };
   }, [halfYearData, currentYear, previousYear]);
 
+  const currentMonthTarget = useMemo(() => {
+    const d = new Date(dateFrom + "T00:00:00");
+    const year = d.getFullYear();
+    const month = d.getMonth() + 1;
+    const singleCompany = companyNos.length === 1 && !companyNos.includes("all") ? companyNos[0] : null;
+    return (
+      targets.find(t => t.year === year && t.month === month && t.company_no === singleCompany && t.scope === saleScope) ??
+      targets.find(t => t.year === year && t.month === month && t.company_no === null && t.scope === saleScope) ??
+      targets.find(t => t.year === year && t.month === month && t.company_no === singleCompany && t.scope === "all") ??
+      targets.find(t => t.year === year && t.month === month && t.company_no === null && t.scope === "all") ??
+      null
+    );
+  }, [targets, dateFrom, companyNos, saleScope]);
+
   const divisionChartOptions = useMemo(() => {
     if (!divisionBreakdown.length) return null;
     const total = divisionBreakdown.reduce((s, d) => s + d.total_tonnes, 0);
@@ -1125,8 +1147,8 @@ export default function Home() {
   const filterPeriodLabel = (() => {
     if (!dateFrom || !dateTo) return "";
     const today = new Date(); today.setHours(0, 0, 0, 0);
-    const from = new Date(dateFrom);
-    const to = new Date(dateTo); to.setHours(0, 0, 0, 0);
+    const from = new Date(dateFrom + "T00:00:00");
+    const to = new Date(dateTo + "T00:00:00"); to.setHours(0, 0, 0, 0);
     if (from.getFullYear() === today.getFullYear() && from.getMonth() === today.getMonth() && from.getDate() === 1 && to.getTime() === today.getTime()) return "MTD";
     if (from.getFullYear() === today.getFullYear() && from.getMonth() === 0 && from.getDate() === 1 && to.getTime() === today.getTime()) return "YTD";
     const qStart = new Date(today.getFullYear(), Math.floor(today.getMonth() / 3) * 3, 1);
@@ -1254,6 +1276,7 @@ export default function Home() {
             atRiskCustomers={predictive?.customer_lapse_risk.length ?? 0}
             activeCustomers={movementSummary?.active_customers ?? 0}
             criticalCustomers={criticalCustomers}
+            targetTonnes={currentMonthTarget?.target_tonnes ?? DEFAULT_TARGET_TONNES}
             loading={loading}
             predictiveLoading={predictiveLoading}
             dateFrom={dateFrom}

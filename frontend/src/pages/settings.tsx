@@ -10,6 +10,7 @@ import {
   testHansaConnection,
   getTargets,
   createOrUpdateTarget,
+  updateTarget,
   deleteTarget,
   type RefreshSettings,
   type RefreshHistoryRow,
@@ -919,19 +920,28 @@ function TargetsTab() {
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
 
   const [formYear, setFormYear] = useState(currentYear);
   const [formMonth, setFormMonth] = useState(new Date().getMonth() + 1);
+  const [formCompany, setFormCompany] = useState<string | null>(null);
   const [formScope, setFormScope] = useState("all");
   const [formTonnes, setFormTonnes] = useState("");
   const [formNotes, setFormNotes] = useState("");
 
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editTonnes, setEditTonnes] = useState("");
+  const [editNotes, setEditNotes] = useState("");
+  const [editSaving, setEditSaving] = useState(false);
+
   function resetForm() {
     setFormYear(currentYear);
     setFormMonth(new Date().getMonth() + 1);
+    setFormCompany(null);
     setFormScope("all");
     setFormTonnes("");
     setFormNotes("");
+    setFormError(null);
   }
 
   function loadTargets() {
@@ -945,23 +955,38 @@ function TargetsTab() {
 
   useEffect(() => { loadTargets(); }, [selectedYear]);
 
+  const existingMatch = targets.find(
+    t => t.year === formYear && t.month === formMonth &&
+      (t.company_no ?? null) === formCompany && t.scope === formScope
+  );
+
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
-    if (!formTonnes || isNaN(parseFloat(formTonnes))) return;
+    const tonnes = parseFloat(formTonnes);
+    if (!formTonnes || isNaN(tonnes)) return;
+    if (existingMatch) {
+      setFormError(
+        `A target of ${existingMatch.target_tonnes} t already exists for this period/division. ` +
+        `Use the Edit button on the existing row to change it, or delete it first.`
+      );
+      return;
+    }
+    setFormError(null);
     setSaving(true);
     try {
       await createOrUpdateTarget({
         year: formYear,
         month: formMonth,
+        company_no: formCompany,
         scope: formScope,
-        target_tonnes: parseFloat(formTonnes),
+        target_tonnes: tonnes,
         notes: formNotes || null,
       });
       setShowForm(false);
       resetForm();
       loadTargets();
     } catch (e: any) {
-      alert(e?.message ?? "Save failed");
+      setFormError(e?.message ?? "Save failed");
     } finally {
       setSaving(false);
     }
@@ -980,7 +1005,33 @@ function TargetsTab() {
     }
   }
 
+  function startEdit(t: SalesTarget) {
+    setEditingId(t.id);
+    setEditTonnes(String(t.target_tonnes));
+    setEditNotes(t.notes ?? "");
+  }
+
+  async function saveEdit(id: number) {
+    const tonnes = parseFloat(editTonnes);
+    if (isNaN(tonnes) || tonnes <= 0) return;
+    setEditSaving(true);
+    try {
+      const updated = await updateTarget(id, { target_tonnes: tonnes, notes: editNotes || null });
+      setTargets(prev => prev.map(t => t.id === id ? updated : t));
+      setEditingId(null);
+    } catch (e: any) {
+      alert(e?.message ?? "Update failed");
+    } finally {
+      setEditSaving(false);
+    }
+  }
+
   const yearOptions = Array.from({ length: 5 }, (_, i) => currentYear - 1 + i);
+
+  const companyLabel = (co: string | null) => {
+    if (!co) return "Global (all)";
+    return ALL_COMPANIES.find(c => c.value === co)?.label ?? co;
+  };
 
   return (
     <div className="max-w-3xl mx-auto px-6 py-6 space-y-6">
@@ -988,7 +1039,7 @@ function TargetsTab() {
         <div>
           <h2 className="text-sm font-semibold text-foreground">Sales Targets</h2>
           <p className="text-[11px] text-muted-foreground mt-0.5">
-            Set monthly tonne targets used in the KPI cards and performance trends.
+            Set monthly tonne targets per division — used live in the KPI cards and performance trends.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -997,12 +1048,10 @@ function TargetsTab() {
             onChange={e => setSelectedYear(+e.target.value)}
             className="h-7 px-2 text-xs rounded-md border border-border bg-secondary text-foreground"
           >
-            {yearOptions.map(y => (
-              <option key={y} value={y}>{y}</option>
-            ))}
+            {yearOptions.map(y => <option key={y} value={y}>{y}</option>)}
           </select>
           <button
-            onClick={() => { resetForm(); setFormYear(selectedYear); setShowForm(true); }}
+            onClick={() => { resetForm(); setFormYear(selectedYear); setShowForm(v => !v); }}
             className="h-7 px-3 flex items-center gap-1.5 text-xs font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
           >
             <Add01Icon size={12} /> Add Target
@@ -1010,39 +1059,50 @@ function TargetsTab() {
         </div>
       </div>
 
-      {/* Add / Edit Form */}
+      {/* Add Form */}
       {showForm && (
         <div className="rounded-xl border border-border bg-card p-4 space-y-4">
           <h3 className="text-xs font-semibold text-foreground">New Monthly Target</h3>
+
+          {formError && (
+            <div className="text-[11px] text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+              {formError}
+            </div>
+          )}
+          {existingMatch && !formError && (
+            <div className="text-[11px] text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
+              A target of <strong>{existingMatch.target_tonnes} t</strong> already exists for this combination. Edit the existing row or choose a different period/division.
+            </div>
+          )}
+
           <form onSubmit={handleSave} className="space-y-3">
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
               <div className="flex flex-col gap-1">
                 <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">Year</label>
-                <select
-                  value={formYear}
-                  onChange={e => setFormYear(+e.target.value)}
-                  className="h-7 px-2 text-xs rounded-md border border-border bg-secondary text-foreground"
-                >
+                <select value={formYear} onChange={e => { setFormYear(+e.target.value); setFormError(null); }}
+                  className="h-7 px-2 text-xs rounded-md border border-border bg-secondary text-foreground">
                   {yearOptions.map(y => <option key={y} value={y}>{y}</option>)}
                 </select>
               </div>
               <div className="flex flex-col gap-1">
                 <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">Month</label>
-                <select
-                  value={formMonth}
-                  onChange={e => setFormMonth(+e.target.value)}
-                  className="h-7 px-2 text-xs rounded-md border border-border bg-secondary text-foreground"
-                >
+                <select value={formMonth} onChange={e => { setFormMonth(+e.target.value); setFormError(null); }}
+                  className="h-7 px-2 text-xs rounded-md border border-border bg-secondary text-foreground">
                   {MONTHS.map((m, i) => <option key={i + 1} value={i + 1}>{m}</option>)}
                 </select>
               </div>
               <div className="flex flex-col gap-1">
+                <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">Division / Company</label>
+                <select value={formCompany ?? ""} onChange={e => { setFormCompany(e.target.value || null); setFormError(null); }}
+                  className="h-7 px-2 text-xs rounded-md border border-border bg-secondary text-foreground">
+                  <option value="">Global (all companies)</option>
+                  {ALL_COMPANIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+                </select>
+              </div>
+              <div className="flex flex-col gap-1">
                 <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">Scope</label>
-                <select
-                  value={formScope}
-                  onChange={e => setFormScope(e.target.value)}
-                  className="h-7 px-2 text-xs rounded-md border border-border bg-secondary text-foreground"
-                >
+                <select value={formScope} onChange={e => { setFormScope(e.target.value); setFormError(null); }}
+                  className="h-7 px-2 text-xs rounded-md border border-border bg-secondary text-foreground">
                   <option value="all">All</option>
                   <option value="external">External</option>
                   <option value="internal">Internal</option>
@@ -1050,41 +1110,24 @@ function TargetsTab() {
               </div>
               <div className="flex flex-col gap-1">
                 <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">Target Tonnes</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  required
-                  value={formTonnes}
-                  onChange={e => setFormTonnes(e.target.value)}
-                  placeholder="e.g. 1200"
-                  className="h-7 px-2 text-xs rounded-md border border-border bg-secondary text-foreground placeholder:text-muted-foreground/50"
-                />
+                <input type="number" step="0.01" min="0" required value={formTonnes}
+                  onChange={e => setFormTonnes(e.target.value)} placeholder="e.g. 1200"
+                  className="h-7 px-2 text-xs rounded-md border border-border bg-secondary text-foreground placeholder:text-muted-foreground/50" />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">Notes (optional)</label>
+                <input type="text" value={formNotes} onChange={e => setFormNotes(e.target.value)}
+                  placeholder="e.g. Q1 stretch target"
+                  className="h-7 px-2 text-xs rounded-md border border-border bg-secondary text-foreground placeholder:text-muted-foreground/50" />
               </div>
             </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">Notes (optional)</label>
-              <input
-                type="text"
-                value={formNotes}
-                onChange={e => setFormNotes(e.target.value)}
-                placeholder="e.g. Q1 stretch target"
-                className="h-7 px-2 text-xs rounded-md border border-border bg-secondary text-foreground placeholder:text-muted-foreground/50"
-              />
-            </div>
             <div className="flex items-center gap-2 pt-1">
-              <button
-                type="submit"
-                disabled={saving}
-                className="h-7 px-4 text-xs font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
-              >
+              <button type="submit" disabled={saving || !!existingMatch}
+                className="h-7 px-4 text-xs font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors">
                 {saving ? "Saving…" : "Save Target"}
               </button>
-              <button
-                type="button"
-                onClick={() => { setShowForm(false); resetForm(); }}
-                className="h-7 px-3 text-xs font-medium rounded-md border border-border text-muted-foreground hover:text-foreground transition-colors"
-              >
+              <button type="button" onClick={() => { setShowForm(false); resetForm(); }}
+                className="h-7 px-3 text-xs font-medium rounded-md border border-border text-muted-foreground hover:text-foreground transition-colors">
                 Cancel
               </button>
             </div>
@@ -1100,9 +1143,7 @@ function TargetsTab() {
           ))}
         </div>
       ) : error ? (
-        <div className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-4 py-3">
-          {error}
-        </div>
+        <div className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-4 py-3">{error}</div>
       ) : targets.length === 0 ? (
         <div className="text-center py-12 text-muted-foreground">
           <Target01Icon size={32} className="mx-auto mb-3 opacity-30" />
@@ -1114,9 +1155,10 @@ function TargetsTab() {
           <table className="w-full text-xs">
             <thead>
               <tr className="border-b border-border bg-muted/20">
-                <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground">Month</th>
+                <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground whitespace-nowrap">Month</th>
+                <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground whitespace-nowrap">Division / Company</th>
                 <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground">Scope</th>
-                <th className="text-right px-4 py-2.5 font-semibold text-muted-foreground">Target (t)</th>
+                <th className="text-right px-4 py-2.5 font-semibold text-muted-foreground whitespace-nowrap">Target (t)</th>
                 <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground">Notes</th>
                 <th className="text-right px-4 py-2.5 font-semibold text-muted-foreground">Actions</th>
               </tr>
@@ -1124,23 +1166,54 @@ function TargetsTab() {
             <tbody className="divide-y divide-border">
               {targets.map(t => (
                 <tr key={t.id} className="hover:bg-muted/10 transition-colors">
-                  <td className="px-4 py-2.5 font-medium text-foreground">
+                  <td className="px-4 py-2.5 font-medium text-foreground whitespace-nowrap">
                     {MONTHS[(t.month ?? 1) - 1]} {t.year}
                   </td>
+                  <td className="px-4 py-2.5 text-muted-foreground whitespace-nowrap">{companyLabel(t.company_no)}</td>
                   <td className="px-4 py-2.5 text-muted-foreground capitalize">{t.scope}</td>
                   <td className="px-4 py-2.5 text-right font-semibold text-foreground">
-                    {new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 }).format(t.target_tonnes)}
+                    {editingId === t.id ? (
+                      <input type="number" step="0.01" min="0" value={editTonnes}
+                        onChange={e => setEditTonnes(e.target.value)} autoFocus
+                        className="w-24 h-6 px-1.5 text-xs text-right rounded border border-primary/60 bg-secondary text-foreground outline-none" />
+                    ) : (
+                      new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 }).format(t.target_tonnes)
+                    )}
                   </td>
-                  <td className="px-4 py-2.5 text-muted-foreground max-w-[200px] truncate">{t.notes ?? "—"}</td>
-                  <td className="px-4 py-2.5 text-right">
-                    <button
-                      onClick={() => handleDelete(t.id)}
-                      disabled={deletingId === t.id}
-                      className="inline-flex items-center gap-1 text-red-400 hover:text-red-300 disabled:opacity-50 transition-colors"
-                    >
-                      <Delete01Icon size={13} />
-                      {deletingId === t.id ? "…" : "Delete"}
-                    </button>
+                  <td className="px-4 py-2.5 text-muted-foreground max-w-[160px]">
+                    {editingId === t.id ? (
+                      <input type="text" value={editNotes} onChange={e => setEditNotes(e.target.value)}
+                        placeholder="Notes…"
+                        className="w-full h-6 px-1.5 text-xs rounded border border-border bg-secondary text-foreground placeholder:text-muted-foreground/40 outline-none" />
+                    ) : (
+                      <span className="truncate block">{t.notes ?? "—"}</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-2.5 text-right whitespace-nowrap">
+                    {editingId === t.id ? (
+                      <div className="flex items-center justify-end gap-3">
+                        <button onClick={() => saveEdit(t.id)} disabled={editSaving}
+                          className="text-emerald-400 hover:text-emerald-300 disabled:opacity-50 transition-colors text-xs font-medium">
+                          {editSaving ? "…" : "Save"}
+                        </button>
+                        <button onClick={() => setEditingId(null)}
+                          className="text-muted-foreground hover:text-foreground transition-colors text-xs">
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-end gap-3">
+                        <button onClick={() => startEdit(t)}
+                          className="text-muted-foreground hover:text-foreground transition-colors text-xs font-medium">
+                          Edit
+                        </button>
+                        <button onClick={() => handleDelete(t.id)} disabled={deletingId === t.id}
+                          className="inline-flex items-center gap-1 text-red-400 hover:text-red-300 disabled:opacity-50 transition-colors">
+                          <Delete01Icon size={13} />
+                          {deletingId === t.id ? "…" : "Delete"}
+                        </button>
+                      </div>
+                    )}
                   </td>
                 </tr>
               ))}
