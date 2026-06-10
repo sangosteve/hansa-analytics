@@ -1273,9 +1273,7 @@ export default function Home() {
             comparisonLabel={comparisonLabel}
             salesRows={salesRows}
             mtd={predictive?.mtd_projection ?? null}
-            atRiskCustomers={predictive?.customer_lapse_risk.length ?? 0}
-            activeCustomers={movementSummary?.active_customers ?? 0}
-            criticalCustomers={criticalCustomers}
+
             targetTonnes={currentMonthTarget?.target_tonnes ?? DEFAULT_TARGET_TONNES}
             loading={loading}
             predictiveLoading={predictiveLoading}

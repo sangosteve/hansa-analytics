@@ -1,7 +1,7 @@
 import {
   ChartUpIcon,
   Activity01Icon,
-  UserGroupIcon,
+  Calendar03Icon,
   CheckmarkCircle01Icon,
 } from "hugeicons-react";
 import type { SalesSummaryMonthlyRow, PredictiveInsightsResponse } from "@/lib/api";
@@ -93,63 +93,24 @@ function ForecastChart({ daysElapsed, daysInMonth, actualTonnes, projectedTonnes
   );
 }
 
-function HealthDonut({ healthy, atRisk, critical, score }: {
-  healthy: number; atRisk: number; critical: number; score: number;
-}) {
-  const size = 120;
-  const cx = size / 2, cy = size / 2;
-  const r = size / 2 - 11;
-  const circ = 2 * Math.PI * r;
-  const total = Math.max(healthy + atRisk + critical, 1);
-  const gap = 2;
-
-  const healthyFrac = healthy / total;
-  const atRiskFrac = atRisk / total;
-  const criticalFrac = critical / total;
-
-  const healthyDash = Math.max(healthyFrac * circ - gap, 0);
-  const atRiskDash = Math.max(atRiskFrac * circ - gap, 0);
-  const criticalDash = Math.max(criticalFrac * circ - gap, 0);
-
-  const healthyOffset = gap / 2;
-  const atRiskOffset = -(healthyDash + gap * 1.5);
-  const criticalOffset = -(healthyDash + atRiskDash + gap * 2.5);
-
-  return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-      <circle cx={cx} cy={cy} r={r} fill="none" stroke="#1e2a30" strokeWidth="11" />
-      {healthyDash > 0 && (
-        <circle cx={cx} cy={cy} r={r} fill="none" stroke="#34d399" strokeWidth="11"
-          strokeDasharray={`${healthyDash} ${circ - healthyDash}`}
-          strokeDashoffset={healthyOffset}
-          transform={`rotate(-90 ${cx} ${cy})`} strokeLinecap="round" />
-      )}
-      {atRiskDash > 0 && (
-        <circle cx={cx} cy={cy} r={r} fill="none" stroke="#f59e0b" strokeWidth="11"
-          strokeDasharray={`${atRiskDash} ${circ - atRiskDash}`}
-          strokeDashoffset={atRiskOffset}
-          transform={`rotate(-90 ${cx} ${cy})`} strokeLinecap="round" />
-      )}
-      {criticalDash > 0 && (
-        <circle cx={cx} cy={cy} r={r} fill="none" stroke="#f87171" strokeWidth="11"
-          strokeDasharray={`${criticalDash} ${circ - criticalDash}`}
-          strokeDashoffset={criticalOffset}
-          transform={`rotate(-90 ${cx} ${cy})`} strokeLinecap="round" />
-      )}
-      <text x={cx} y={cy - 3} textAnchor="middle" dominantBaseline="middle"
-        fill="#ffffff" fontSize="30" fontWeight="700" fontFamily="system-ui">{score}</text>
-      <text x={cx} y={cy + 18} textAnchor="middle"
-        fill="#8b949e" fontSize="11" fontFamily="system-ui">Score</text>
-    </svg>
-  );
-}
-
 function TargetBar({ pct }: { pct: number }) {
   const fill = Math.min(Math.max(pct, 0), 100);
   return (
     <div className="w-full h-1.5 rounded-full bg-white/10 overflow-hidden">
       <div className="h-full rounded-full transition-all duration-700"
         style={{ width: `${fill}%`, background: "linear-gradient(90deg, #34d39980, #34d399)" }} />
+    </div>
+  );
+}
+
+function DailyAvgSparkBar({ dailyAvg, targetDailyRate }: { dailyAvg: number; targetDailyRate: number | null }) {
+  if (!targetDailyRate || targetDailyRate <= 0) return null;
+  const pct = Math.min((dailyAvg / targetDailyRate) * 100, 130);
+  const color = dailyAvg >= targetDailyRate ? "#34d399" : dailyAvg >= targetDailyRate * 0.8 ? "#f59e0b" : "#f87171";
+  return (
+    <div className="w-full h-1.5 rounded-full bg-white/10 overflow-hidden">
+      <div className="h-full rounded-full transition-all duration-700"
+        style={{ width: `${Math.min(pct, 100)}%`, background: color }} />
     </div>
   );
 }
@@ -186,9 +147,6 @@ export interface DashboardKpiGridProps {
   comparisonLabel?: string;
   salesRows: SalesSummaryMonthlyRow[];
   mtd: PredictiveInsightsResponse["mtd_projection"] | null;
-  atRiskCustomers: number;
-  activeCustomers: number;
-  criticalCustomers?: number;
   targetTonnes?: number;
   loading: boolean;
   predictiveLoading: boolean;
@@ -202,9 +160,6 @@ export default function DashboardKpiGrid({
   comparisonTonnes,
   comparisonLabel,
   mtd,
-  atRiskCustomers,
-  activeCustomers,
-  criticalCustomers = 0,
   targetTonnes = DEFAULT_TARGET_TONNES,
   loading,
   predictiveLoading,
@@ -232,14 +187,23 @@ export default function DashboardKpiGrid({
   const projVsTargetPct = projectedEOM != null && targetTonnes > 0
     ? ((projectedEOM - targetTonnes) / targetTonnes) * 100 : null;
 
-  const healthyCount = Math.max(activeCustomers - atRiskCustomers, 0);
-  const critCount = Math.min(criticalCustomers, atRiskCustomers);
-  const atRiskOnlyCount = Math.max(atRiskCustomers - critCount, 0);
-  const totalForHealth = Math.max(healthyCount + atRiskOnlyCount + critCount, 1);
-  const healthScore = Math.round((healthyCount / totalForHealth) * 100);
-  const healthyPct = Math.round((healthyCount / totalForHealth) * 100);
-  const atRiskPct = Math.round((atRiskOnlyCount / totalForHealth) * 100);
-  const critPct = Math.max(100 - healthyPct - atRiskPct, 0);
+  const daysInPeriod = (() => {
+    if (!dateFrom || !dateTo) return 1;
+    const from = new Date(dateFrom + "T00:00:00");
+    const to = new Date(dateTo + "T00:00:00");
+    return Math.max(Math.round((to.getTime() - from.getTime()) / 86400000) + 1, 1);
+  })();
+  const dailyAvg = totalTonnes / daysInPeriod;
+  const lyDailyAvg = comparisonTonnes > 0 ? comparisonTonnes / daysInPeriod : null;
+  const dailyAvgDiff = lyDailyAvg !== null ? dailyAvg - lyDailyAvg : null;
+  const dailyAvgPct = lyDailyAvg !== null && lyDailyAvg > 0 ? ((dailyAvg - lyDailyAvg) / lyDailyAvg) * 100 : null;
+
+  const targetDailyRate = (() => {
+    if (!targetTonnes || !dateFrom) return null;
+    const d = new Date(dateFrom + "T00:00:00");
+    const daysInMonth = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+    return targetTonnes / daysInMonth;
+  })();
 
   if (loading && totalTonnes === 0) {
     return (
@@ -325,7 +289,56 @@ export default function DashboardKpiGrid({
         </div>
       </KpiCard>
 
-      {/* ── 3. Projected Month-End (violet) ── */}
+      {/* ── 3. Daily Average Tonnes (cyan) ── */}
+      <KpiCard accentColor="#06b6d4" bgTint="bg-cyan-950/10">
+        <div className="flex items-center gap-2">
+          <Calendar03Icon size={14} className="text-cyan-400 flex-shrink-0" />
+          <span className="text-[10.5px] font-semibold text-muted-foreground whitespace-nowrap">
+            Daily Avg Tonnes ({periodLabel})
+          </span>
+        </div>
+        <div>
+          <div className="text-[32px] font-extrabold text-foreground leading-none tracking-tight">
+            {nf.format(dailyAvg)} t
+          </div>
+          <div className="mt-1 text-[10.5px] text-muted-foreground">per day</div>
+          {lyDailyAvg !== null && (
+            <div className="mt-1.5 text-[11px] text-muted-foreground">
+              vs {nf.format(lyDailyAvg)} t/day {compShort}
+            </div>
+          )}
+          <div className="mt-2 flex items-center gap-2 flex-wrap">
+            {dailyAvgPct !== null ? (
+              <>
+                <span className={`inline-flex items-center gap-0.5 text-[11px] font-bold px-1.5 py-0.5 rounded-full ${
+                  dailyAvgPct >= 0 ? "bg-emerald-500/15 text-emerald-400" : "bg-red-500/15 text-red-400"
+                }`}>
+                  {dailyAvgPct >= 0 ? "▲" : "▼"} {Math.abs(dailyAvgPct).toFixed(1)}%
+                </span>
+                {dailyAvgDiff !== null && (
+                  <span className={`text-[11px] font-semibold ${dailyAvgDiff >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                    {fmtTSigned(dailyAvgDiff)}/day
+                  </span>
+                )}
+              </>
+            ) : (
+              <span className="text-[11px] text-muted-foreground/50 italic">No comparison data</span>
+            )}
+          </div>
+          {targetDailyRate !== null && (
+            <>
+              <div className="mt-2">
+                <DailyAvgSparkBar dailyAvg={dailyAvg} targetDailyRate={targetDailyRate} />
+              </div>
+              <div className="mt-1 text-[10.5px] text-muted-foreground/55">
+                Target rate: {nf.format(targetDailyRate)} t/day · {daysInPeriod}d period
+              </div>
+            </>
+          )}
+        </div>
+      </KpiCard>
+
+      {/* ── 4. Projected Month-End (violet) ── */}
       <KpiCard accentColor="#8b5cf6" bgTint="bg-violet-950/10">
         <div className="flex items-center gap-2">
           <Activity01Icon size={14} className="text-violet-400 flex-shrink-0" />
@@ -375,67 +388,6 @@ export default function DashboardKpiGrid({
           </div>
         ) : (
           <div className="text-[28px] font-extrabold text-foreground">—</div>
-        )}
-      </KpiCard>
-
-      {/* ── 4. Customer Health (cyan) ── */}
-      <KpiCard accentColor="#06b6d4" bgTint="bg-cyan-950/10">
-        <div className="flex items-center gap-2">
-          <UserGroupIcon size={14} className="text-cyan-400 flex-shrink-0" />
-          <span className="text-[10.5px] font-semibold text-muted-foreground whitespace-nowrap">
-            Customer Health ({periodLabel})
-          </span>
-        </div>
-        {predictiveLoading ? (
-          <div className="text-xs text-muted-foreground animate-pulse">Loading…</div>
-        ) : (
-          <>
-            <div className="flex items-center gap-3 flex-1">
-              {(activeCustomers + atRiskCustomers) > 0 && (
-                <div className="flex-shrink-0">
-                  <HealthDonut
-                    healthy={healthyCount}
-                    atRisk={atRiskOnlyCount}
-                    critical={critCount}
-                    score={healthScore}
-                  />
-                </div>
-              )}
-              <div className="flex-1 min-w-0">
-                <div className="flex flex-col gap-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5">
-                      <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 flex-shrink-0" />
-                      <span className="text-[12px] text-muted-foreground">Healthy</span>
-                    </div>
-                    <span className="text-[12px] font-semibold text-foreground">{healthyPct}%</span>
-                  </div>
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5">
-                      <span className="h-2.5 w-2.5 rounded-full bg-amber-400 flex-shrink-0" />
-                      <span className="text-[12px] text-muted-foreground">At Risk</span>
-                    </div>
-                    <span className="text-[12px] font-semibold text-foreground">{atRiskPct}%</span>
-                  </div>
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5">
-                      <span className="h-2.5 w-2.5 rounded-full bg-red-400 flex-shrink-0" />
-                      <span className="text-[12px] text-muted-foreground">Critical</span>
-                    </div>
-                    <span className="text-[12px] font-semibold text-foreground">{critPct}%</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div className="pt-2 flex items-center gap-2">
-              <span className="text-[11px] text-muted-foreground">
-                vs LY MTD: {Math.max(healthScore - 8, 0)}
-              </span>
-              <span className="inline-flex items-center gap-0.5 text-[11px] font-bold text-emerald-400">
-                ▲ 8
-              </span>
-            </div>
-          </>
         )}
       </KpiCard>
 
