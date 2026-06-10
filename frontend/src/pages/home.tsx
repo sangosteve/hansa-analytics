@@ -749,15 +749,19 @@ export default function Home() {
       }] : [],
       series: [
         {
-          name: "This Year", type: "bar", data: curData, barMaxWidth: 18,
-          itemStyle: { color: "#34d399", borderRadius: [3, 3, 0, 0] },
-          label: { show: true, position: "top", fontSize: 8, color: "#34d399",
+          name: "This Year", type: "line", data: curData, connectNulls: false, smooth: false,
+          lineStyle: { width: 2.5, color: "#34d399" }, itemStyle: { color: "#34d399" },
+          showSymbol: true, symbol: "circle", symbolSize: 5,
+          label: { show: true, position: "top", fontSize: 8.5, color: "#34d399",
             // @ts-ignore
             formatter: (p: any) => p.value != null && p.value > 0 ? numberFormatter.format(p.value) : "" },
+          areaStyle: { color: { type: "linear", x: 0, y: 0, x2: 0, y2: 1,
+            colorStops: [{ offset: 0, color: "#34d39930" }, { offset: 1, color: "transparent" }] } },
         },
         {
-          name: "Last Year", type: "bar", data: compData, barMaxWidth: 18,
-          itemStyle: { color: "#6b728045", borderRadius: [3, 3, 0, 0] },
+          name: "Last Year", type: "line", data: compData, connectNulls: false, smooth: false,
+          lineStyle: { width: 1.5, color: "#6b7280", type: "dashed" }, itemStyle: { color: "#6b7280" },
+          showSymbol: false,
           label: { show: false },
         },
       ],
