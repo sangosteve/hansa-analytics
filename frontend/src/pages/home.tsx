@@ -313,11 +313,21 @@ export default function Home() {
     getTargets(new Date().getFullYear()).then(setTargets).catch(() => {});
   }, []);
 
-  // Chart-specific daily data — independent of global date range
+  // Auto-sync chart period to match global date filter when it aligns
+  useEffect(() => {
+    const period = computeActivePeriod(dateFrom, dateTo);
+    if (period === "This Month") setChartPeriod("MTD");
+    else if (period === "This Quarter") setChartPeriod("QTD");
+    else if (period === "This Year") setChartPeriod("YTD");
+  }, [dateFrom, dateTo]);
+
+  // Chart-specific daily data — synced to chart period
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     const today = new Date();
-    const todayISO = today.toISOString().slice(0, 10);
+    const localDate = (d: Date) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const todayStr = localDate(today);
     let from: string;
     if (chartPeriod === "MTD") {
       from = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-01`;
@@ -327,7 +337,7 @@ export default function Home() {
     } else {
       from = `${today.getFullYear()}-01-01`;
     }
-    loadChartDailySales(from, todayISO);
+    loadChartDailySales(from, todayStr);
   }, [chartPeriod, JSON.stringify(companyNos), saleScope]);
 
   useEffect(() => {
