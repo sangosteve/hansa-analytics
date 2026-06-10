@@ -198,7 +198,6 @@ export default function Home() {
   const [dailySales, setDailySales] = useState<DailySalesRow[] | null>(null);
   const [compDailySales, setCompDailySales] = useState<DailySalesRow[] | null>(null);
   const [dailyLoading, setDailyLoading] = useState(false);
-  const [productGroupFilter, setProductGroupFilter] = useState("all");
   const [targets, setTargets] = useState<SalesTarget[]>([]);
   const [cumulView, setCumulView] = useState<"Cumulative" | "Monthly">("Cumulative");
   const [growthView, setGrowthView] = useState<"YoY %" | "Volume">("YoY %");
@@ -530,14 +529,6 @@ export default function Home() {
     () => predictive?.product_group_trends ?? [],
     [predictive]
   );
-  const productGroupOptions = useMemo(() => {
-    const names = Array.from(new Set(allProductGroups.map(g => g.name || g.code).filter(Boolean)));
-    return names.sort();
-  }, [allProductGroups]);
-  const filteredProductGroups = useMemo(() => {
-    if (productGroupFilter === "all") return allProductGroups;
-    return allProductGroups.filter(g => (g.name || g.code) === productGroupFilter);
-  }, [allProductGroups, productGroupFilter]);
 
   // ── Daily comparison chart ─────────────────────────────────────────────────
   const dailyComparisonOptions = useMemo(() => {
@@ -706,9 +697,11 @@ export default function Home() {
     const compFromDate = new Date(compFrom + "T00:00:00");
     const curMap = new Map(chartDailySales.map(r => [r.date, r.cumulative_tonnes]));
     const compMap = new Map(chartCompDailySales.map(r => [r.date, r.cumulative_tonnes]));
+    const curDailyMap = new Map(chartDailySales.map(r => [r.date, r.tonnes]));
     const xLabels: string[] = [];
     const curData: (number | null)[] = [];
     const compData: (number | null)[] = [];
+    const curDailyPoints: (number | null)[] = [];
     let lastCur = 0, lastComp = 0;
     const maxCurDay = chartDailySales.length > 0
       ? Math.round((new Date(chartDailySales[chartDailySales.length - 1].date + "T00:00:00").getTime() - fromDate.getTime()) / msPerDay)
@@ -726,6 +719,7 @@ export default function Home() {
       if (compMap.has(compKey)) lastComp = compMap.get(compKey)!;
       curData.push(i <= maxCurDay ? lastCur : null);
       compData.push(i <= maxCompDay ? lastComp : null);
+      curDailyPoints.push(i <= maxCurDay ? (curDailyMap.get(curKey) ?? 0) : null);
     }
     const curFinal = curData.filter(v => v !== null);
     const compFinal = compData.filter(v => v !== null);
@@ -761,7 +755,7 @@ export default function Home() {
           showSymbol: true, symbol: "circle", symbolSize: 5,
           label: { show: true, position: "top", fontSize: 8.5, color: "#34d399",
             // @ts-ignore
-            formatter: (p: any) => p.value != null ? `${numberFormatter.format(p.value)}` : "" },
+            formatter: (p: any) => { const d = curDailyPoints[p.dataIndex]; return d != null && d > 0 ? numberFormatter.format(d) : ""; } },
           areaStyle: { color: { type: "linear", x: 0, y: 0, x2: 0, y2: 1,
             colorStops: [{ offset: 0, color: "#34d39930" }, { offset: 1, color: "transparent" }] } },
           endLabel: { show: false },
@@ -770,9 +764,7 @@ export default function Home() {
           name: "Last Year", type: "line", data: compData, connectNulls: false, smooth: false,
           lineStyle: { width: 1.5, color: "#6b7280", type: "dashed" }, itemStyle: { color: "#6b7280" },
           showSymbol: false,
-          label: { show: true, position: "bottom", fontSize: 8, color: "#6b7280",
-            // @ts-ignore
-            formatter: (p: any) => p.value != null ? `${numberFormatter.format(p.value)}` : "" },
+          label: { show: false },
           endLabel: { show: false },
         },
       ],
@@ -781,6 +773,76 @@ export default function Home() {
       _diffPct: diffPct,
     };
   }, [chartDailySales, chartCompDailySales, chartFrom, chartTo]);
+
+  // ── QTD monthly bar chart ──────────────────────────────────────────────────
+  const chartQtdBarOptions = useMemo(() => {
+    if (chartPeriod !== "QTD" || !chartDailySales || !chartCompDailySales) return null;
+    if (chartDailySales.length === 0 && chartCompDailySales.length === 0) return null;
+    const from = new Date(chartFrom + "T00:00:00");
+    const qStartMonth = Math.floor(from.getMonth() / 3) * 3;
+    const months = [qStartMonth, qStartMonth + 1, qStartMonth + 2];
+    const monthNames = months.map(m => monthLabels[m]);
+    const curMonthly: Record<number, number> = {};
+    chartDailySales.forEach(r => {
+      const m = new Date(r.date + "T00:00:00").getMonth();
+      curMonthly[m] = (curMonthly[m] ?? 0) + r.tonnes;
+    });
+    const compMonthly: Record<number, number> = {};
+    chartCompDailySales.forEach(r => {
+      const m = new Date(r.date + "T00:00:00").getMonth();
+      compMonthly[m] = (compMonthly[m] ?? 0) + r.tonnes;
+    });
+    const curBars = months.map(m => Math.round((curMonthly[m] ?? 0) * 100) / 100);
+    const compBars = months.map(m => Math.round((compMonthly[m] ?? 0) * 100) / 100);
+    const curTotal = curBars.reduce((s, v) => s + v, 0);
+    const compTotal = compBars.reduce((s, v) => s + v, 0);
+    const diffPct = compTotal > 0 ? ((curTotal - compTotal) / compTotal) * 100 : null;
+    return {
+      ...darkChartBase,
+      tooltip: {
+        ...darkChartBase.tooltip, trigger: "axis",
+        // @ts-ignore
+        formatter: (params: any) => params
+          .filter((item: any) => item.value > 0)
+          .map((item: any) => `${item.seriesName}: ${numberFormatter.format(item.value)} t`)
+          .join("<br />"),
+      },
+      legend: { show: false },
+      grid: { left: "8%", right: "5%", bottom: "12%", top: "10%" },
+      xAxis: {
+        type: "category", data: monthNames,
+        axisLine: { lineStyle: { color: "#30363d" } },
+        axisLabel: { color: "#8b949e", fontSize: 10 },
+        splitLine: { show: false },
+      },
+      yAxis: {
+        type: "value",
+        axisLabel: { color: "#8b949e", fontSize: 9, formatter: (v: number) => `${v} t` },
+        splitLine: { lineStyle: { color: "#21262d" } },
+      },
+      series: [
+        {
+          name: `This Year (${from.getFullYear()})`,
+          type: "bar", data: curBars, barMaxWidth: 56,
+          itemStyle: { color: "#34d399", borderRadius: [4, 4, 0, 0] },
+          label: { show: true, position: "top", fontSize: 9, color: "#34d399",
+            // @ts-ignore
+            formatter: (p: any) => p.value > 0 ? numberFormatter.format(p.value) : "" },
+        },
+        {
+          name: `Last Year (${from.getFullYear() - 1})`,
+          type: "bar", data: compBars, barMaxWidth: 56,
+          itemStyle: { color: "#6b728055", borderRadius: [4, 4, 0, 0] },
+          label: { show: true, position: "top", fontSize: 8.5, color: "#6b7280",
+            // @ts-ignore
+            formatter: (p: any) => p.value > 0 ? numberFormatter.format(p.value) : "" },
+        },
+      ],
+      _curEnd: curTotal,
+      _compEnd: compTotal,
+      _diffPct: diffPct,
+    };
+  }, [chartPeriod, chartDailySales, chartCompDailySales, chartFrom]);
 
   // ── Monthly comparison chart ───────────────────────────────────────────────
   const monthlyComparisonOptions = useMemo(() => ({
@@ -1375,26 +1437,11 @@ export default function Home() {
                 </select>
               </div>
 
-              {/* Product Group filter */}
-              <div className="flex flex-col gap-1">
-                <span className="text-[10px] text-muted-foreground">Product Group</span>
-                <select
-                  value={productGroupFilter}
-                  onChange={e => setProductGroupFilter(e.target.value)}
-                  className="h-9 px-2.5 text-[12px] rounded-lg border border-border bg-secondary text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40 cursor-pointer min-w-[140px]"
-                >
-                  <option value="all">All Groups</option>
-                  {productGroupOptions.map(g => (
-                    <option key={g} value={g}>{g}</option>
-                  ))}
-                </select>
-              </div>
-
               {/* Clear Filters — always visible */}
               <div className="flex flex-col gap-1 ml-auto">
                 <span className="text-[10px] text-transparent select-none">·</span>
                 <button
-                  onClick={() => { setComparisonMode("same_period_ly"); setProductGroupFilter("all"); }}
+                  onClick={() => { setComparisonMode("same_period_ly"); }}
                   className="h-9 px-3 flex items-center text-[12px] rounded-lg border border-border text-muted-foreground hover:text-foreground hover:border-border transition-colors"
                 >
                   Clear Filters
@@ -1455,14 +1502,20 @@ export default function Home() {
                 <div className="flex items-start justify-between mb-2 gap-2">
                   <div>
                     <h3 className="text-[13px] font-semibold text-foreground">
-                      {chartPeriod} Daily Comparison (Tonnes)
+                      {chartPeriod === "QTD" ? "QTD Monthly Comparison (Tonnes)" : `${chartPeriod} Daily Comparison (Tonnes)`}
                     </h3>
                     <div className="flex items-center gap-3 mt-1">
                       <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                        <span className="inline-block w-3 h-[2px] rounded bg-emerald-400" /> This Year ({chartThisYearLabel})
+                        {chartPeriod === "QTD"
+                          ? <span className="inline-block w-3 h-2.5 rounded-sm bg-emerald-400 opacity-80" />
+                          : <span className="inline-block w-3 h-[2px] rounded bg-emerald-400" />}
+                        {" "}This Year ({chartThisYearLabel})
                       </span>
                       <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                        <span className="inline-block w-3 border-t border-dashed border-muted-foreground" /> Last Year ({chartLastYearLabel})
+                        {chartPeriod === "QTD"
+                          ? <span className="inline-block w-3 h-2.5 rounded-sm bg-muted-foreground/40" />
+                          : <span className="inline-block w-3 border-t border-dashed border-muted-foreground" />}
+                        {" "}Last Year ({chartLastYearLabel})
                       </span>
                     </div>
                   </div>
@@ -1473,16 +1526,23 @@ export default function Home() {
                   />
                 </div>
                 <div className="h-[220px]">
-                  {chartDailyLoading ? loadingOverlay : chartDailyComparisonOptions ? (
+                  {chartDailyLoading ? loadingOverlay : chartPeriod === "QTD" ? (
+                    chartQtdBarOptions ? (
+                      <ReactECharts option={chartQtdBarOptions} style={{ width: "100%", height: "100%" }} notMerge lazyUpdate />
+                    ) : (
+                      <div className="flex h-full items-center justify-center text-muted-foreground/50 text-xs">No data for this quarter</div>
+                    )
+                  ) : chartDailyComparisonOptions ? (
                     <ReactECharts option={chartDailyComparisonOptions} style={{ width: "100%", height: "100%" }} notMerge lazyUpdate />
                   ) : (
                     <div className="flex h-full items-center justify-center text-muted-foreground/50 text-xs">No daily data for this range</div>
                   )}
                 </div>
-                {chartDailyComparisonOptions && (() => {
-                  const curEnd = (chartDailyComparisonOptions as any)._curEnd ?? 0;
-                  const compEnd = (chartDailyComparisonOptions as any)._compEnd ?? 0;
-                  const diffPct = (chartDailyComparisonOptions as any)._diffPct;
+                {(chartPeriod === "QTD" ? chartQtdBarOptions : chartDailyComparisonOptions) && (() => {
+                  const _opts = chartPeriod === "QTD" ? chartQtdBarOptions : chartDailyComparisonOptions;
+                  const curEnd = (_opts as any)._curEnd ?? 0;
+                  const compEnd = (_opts as any)._compEnd ?? 0;
+                  const diffPct = (_opts as any)._diffPct;
                   const diff = curEnd - compEnd;
                   return (
                     <div className="mt-3 pt-3 border-t border-border/40 flex items-center justify-between gap-4 text-[12px]">
@@ -1691,7 +1751,7 @@ export default function Home() {
                     onChange={(v) => setProductSort(v as "By Growth" | "By Volume")}
                   />
                 </div>
-                {predictiveLoading ? loadingOverlay : filteredProductGroups.length === 0 ? (
+                {predictiveLoading ? loadingOverlay : allProductGroups.length === 0 ? (
                   <div className="flex h-[190px] items-center justify-center text-muted-foreground/50 text-xs">No data</div>
                 ) : (
                   <div className="h-[190px] overflow-y-auto">
@@ -1706,7 +1766,7 @@ export default function Home() {
                         </tr>
                       </thead>
                       <tbody>
-                        {[...filteredProductGroups]
+                        {[...allProductGroups]
                           .sort((a, b) => productSort === "By Volume"
                             ? b.current_3m_tonnes - a.current_3m_tonnes
                             : Math.abs(b.pct_change ?? 0) - Math.abs(a.pct_change ?? 0))
@@ -1751,7 +1811,7 @@ export default function Home() {
                     </table>
                   </div>
                 )}
-                {filteredProductGroups.length > 8 && (
+                {allProductGroups.length > 8 && (
                   <div className="mt-2 pt-1.5 border-t border-border/30 text-center">
                     <span className="text-[9px] text-primary/60 hover:text-primary cursor-pointer transition-colors">View all product groups →</span>
                   </div>

@@ -93,13 +93,23 @@ function ForecastChart({ daysElapsed, daysInMonth, actualTonnes, projectedTonnes
   );
 }
 
-function TargetBar({ pct }: { pct: number }) {
-  const fill = Math.min(Math.max(pct, 0), 100);
+function DonutProgress({ pct, color, size = 80 }: { pct: number; color: string; size?: number }) {
+  const r = (size / 2) - 10;
+  const cx = size / 2;
+  const cy = size / 2;
+  const circ = 2 * Math.PI * r;
+  const filled = Math.min(Math.max(pct / 100, 0), 1) * circ;
+  const offset = circ / 4;
   return (
-    <div className="w-full h-1.5 rounded-full bg-white/10 overflow-hidden">
-      <div className="h-full rounded-full transition-all duration-700"
-        style={{ width: `${fill}%`, background: "linear-gradient(90deg, #34d39980, #34d399)" }} />
-    </div>
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ transform: "rotate(0deg)" }}>
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth={9} />
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke={color} strokeWidth={9}
+        strokeDasharray={`${filled} ${circ - filled}`}
+        strokeDashoffset={offset}
+        strokeLinecap="round"
+        style={{ transition: "stroke-dasharray 0.8s ease" }}
+      />
+    </svg>
   );
 }
 
@@ -255,51 +265,60 @@ export default function DashboardKpiGrid({
         </div>
       </KpiCard>
 
-      {/* ── 2. Target Progress (amber) ── */}
-      <KpiCard accentColor={progressPct >= 100 ? "#10b981" : "#f59e0b"} bgTint={progressPct >= 100 ? "bg-emerald-950/10" : "bg-amber-950/10"}>
-        <div className="flex items-center gap-2">
-          <CheckmarkCircle01Icon size={14} className={`flex-shrink-0 ${progressPct >= 100 ? "text-emerald-400" : "text-amber-400"}`} />
-          <span className="text-[10.5px] font-semibold text-muted-foreground whitespace-nowrap flex-1">
-            {progressPct >= 100 ? "Target Achieved" : `Target Progress (${periodLabel})`}
-          </span>
-          {progressPct >= 100 && (
-            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 whitespace-nowrap">✓ Achieved</span>
-          )}
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <div className="flex items-baseline gap-2 flex-wrap">
-            <span className={`text-[32px] font-extrabold leading-none tracking-tight ${progressPct >= 100 ? "text-emerald-400" : "text-foreground"}`}>
-              {progressPct.toFixed(1)}%
-            </span>
-            {comparisonProgressPct !== null && (
-              <span className="text-[11px] text-muted-foreground whitespace-nowrap">
-                vs {comparisonProgressPct.toFixed(1)}% {compShort}
+      {/* ── 2. Target Progress — Donut (amber/green) ── */}
+      {(() => {
+        const donutColor = progressPct >= 100 ? "#10b981" : progressPct >= 80 ? "#f59e0b" : "#f87171";
+        return (
+          <KpiCard accentColor={progressPct >= 100 ? "#10b981" : "#f59e0b"} bgTint={progressPct >= 100 ? "bg-emerald-950/10" : "bg-amber-950/10"}>
+            <div className="flex items-center gap-2">
+              <CheckmarkCircle01Icon size={14} className={`flex-shrink-0 ${progressPct >= 100 ? "text-emerald-400" : "text-amber-400"}`} />
+              <span className="text-[10.5px] font-semibold text-muted-foreground whitespace-nowrap flex-1">
+                {progressPct >= 100 ? "Target Achieved" : `Target Progress (${periodLabel})`}
               </span>
-            )}
-          </div>
-          {ppDiff !== null && (
-            <div className={`text-[13px] font-bold leading-none ${ppDiff >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-              {ppDiff >= 0 ? "▲" : "▼"} {Math.abs(ppDiff).toFixed(1)} pp
+              {progressPct >= 100 && (
+                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 whitespace-nowrap">✓ Achieved</span>
+              )}
             </div>
-          )}
-          <div className="mt-0.5">
-            <TargetBar pct={progressPct} />
-          </div>
-          <div className="flex items-center justify-between text-[10.5px] text-muted-foreground mt-0.5">
-            {progressPct >= 100 ? (
-              <>
-                <span>{fmtT(totalTonnes)} / {fmtT(targetTonnes)}</span>
-                <span className="text-emerald-400 font-semibold">+{fmtT(totalTonnes - targetTonnes)} above</span>
-              </>
-            ) : (
-              <>
-                <span>Target: {fmtT(targetTonnes)}</span>
-                <span className="text-red-400 font-semibold">Gap: -{fmtT(targetTonnes - totalTonnes)}</span>
-              </>
-            )}
-          </div>
-        </div>
-      </KpiCard>
+            <div className="flex items-center gap-3">
+              {/* Donut */}
+              <div className="relative flex-shrink-0" style={{ width: 80, height: 80 }}>
+                <DonutProgress pct={progressPct} color={donutColor} size={80} />
+                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                  <span className={`text-[13px] font-extrabold leading-none ${progressPct >= 100 ? "text-emerald-400" : "text-foreground"}`}>
+                    {progressPct.toFixed(1)}%
+                  </span>
+                  <span className="text-[7.5px] text-muted-foreground/60 mt-0.5">of target</span>
+                </div>
+              </div>
+              {/* Stats */}
+              <div className="flex-1 min-w-0 space-y-1.5">
+                <div>
+                  <div className="text-[9px] text-muted-foreground/55">Actual</div>
+                  <div className="text-[12.5px] font-bold text-foreground leading-tight">{fmtT(totalTonnes)}</div>
+                </div>
+                <div>
+                  <div className="text-[9px] text-muted-foreground/55">Target</div>
+                  <div className="text-[11.5px] font-semibold text-muted-foreground leading-tight">{fmtT(targetTonnes)}</div>
+                </div>
+                <div>
+                  <div className="text-[9px] text-muted-foreground/55">Gap</div>
+                  <div className={`text-[11.5px] font-bold leading-tight ${progressPct >= 100 ? "text-emerald-400" : "text-red-400"}`}>
+                    {progressPct >= 100 ? `+${fmtT(totalTonnes - targetTonnes)}` : `-${fmtT(targetTonnes - totalTonnes)}`}
+                  </div>
+                </div>
+                {ppDiff !== null && (
+                  <div>
+                    <div className="text-[9px] text-muted-foreground/55">vs {compShort}</div>
+                    <div className={`text-[10.5px] font-bold leading-tight ${ppDiff >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                      {ppDiff >= 0 ? "▲" : "▼"} {Math.abs(ppDiff).toFixed(1)} pp
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </KpiCard>
+        );
+      })()}
 
       {/* ── 3. Daily Average Tonnes (cyan) ── */}
       <KpiCard accentColor="#06b6d4" bgTint="bg-cyan-950/10">
