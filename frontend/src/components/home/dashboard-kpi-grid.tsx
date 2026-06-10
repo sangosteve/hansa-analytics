@@ -163,6 +163,9 @@ export interface DashboardKpiGridProps {
   dateFrom: string;
   dateTo: string;
   comparisonMode: ComparisonMode;
+  todayTonnes: number;
+  mtdTonnes: number;
+  lyMtdTonnes: number;
 }
 
 export default function DashboardKpiGrid({
@@ -176,6 +179,9 @@ export default function DashboardKpiGrid({
   dateFrom,
   dateTo,
   comparisonMode,
+  todayTonnes,
+  mtdTonnes,
+  lyMtdTonnes,
 }: DashboardKpiGridProps) {
   const periodLabel = inferPeriodLabel(dateFrom, dateTo);
   const kpiTitle = getKpiTitle(dateFrom, dateTo);
@@ -217,55 +223,76 @@ export default function DashboardKpiGrid({
 
   if (loading && totalTonnes === 0) {
     return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiSkeleton /><KpiSkeleton /><KpiSkeleton /><KpiSkeleton />
+      <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+        <KpiSkeleton /><KpiSkeleton /><KpiSkeleton /><KpiSkeleton /><KpiSkeleton />
       </div>
     );
   }
 
-  return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+  const mtdPct = lyMtdTonnes > 0 ? ((mtdTonnes - lyMtdTonnes) / lyMtdTonnes) * 100 : null;
+  const mtdDiff = mtdTonnes - lyMtdTonnes;
+  const today = new Date();
 
-      {/* ── 1. Period Tonnes (green) ── */}
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+
+      {/* ── 1. Today's Tonnage (green) ── */}
       <KpiCard accentColor="#10b981" bgTint="bg-emerald-950/10">
         <div className="flex items-center gap-2">
           <ChartUpIcon size={14} className="text-emerald-400 flex-shrink-0" />
           <span className="text-[10.5px] font-semibold text-muted-foreground truncate">
-            {kpiTitle}
+            Today's Tonnes
           </span>
         </div>
         <div>
           <div className="text-[32px] font-extrabold text-foreground leading-none tracking-tight">
-            {fmtT(totalTonnes)}
-          </div>
-          {comparisonTonnes > 0 && (
-            <div className="mt-1.5 text-[11px] text-muted-foreground">
-              vs {fmtT(comparisonTonnes)} {compShort}
-            </div>
-          )}
-          <div className="mt-2 flex items-center gap-2 flex-wrap">
-            {yoyPct !== null ? (
-              <>
-                <span className={`inline-flex items-center gap-0.5 text-[11px] font-bold px-1.5 py-0.5 rounded-full ${
-                  yoyPct >= 0 ? "bg-emerald-500/15 text-emerald-400" : "bg-red-500/15 text-red-400"
-                }`}>
-                  {yoyPct >= 0 ? "▲" : "▼"} {Math.abs(yoyPct).toFixed(1)}%
-                </span>
-                <span className={`text-[11px] font-semibold ${yoyPct >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                  {fmtTSigned(tonneDiff)}
-                </span>
-              </>
-            ) : (
-              <span className="text-[11px] text-muted-foreground/50 italic">No comparison data</span>
-            )}
+            {fmtT(todayTonnes)}
           </div>
           <div className="mt-1.5 text-[10px] text-muted-foreground/55">
-            {comparisonMode === "same_period_ly" ? "Same period last year" : "Previous period"}
+            {String(today.getDate()).padStart(2, "0")} {MONTH_SHORT[today.getMonth()]} {today.getFullYear()} only
+          </div>
+          {todayTonnes === 0 && (
+            <div className="mt-2 text-[11px] text-muted-foreground/40 italic">No data yet today</div>
+          )}
+        </div>
+      </KpiCard>
+
+      {/* ── 2. MTD Tonnage (teal) ── */}
+      <KpiCard accentColor="#06b6d4" bgTint="bg-cyan-950/10">
+        <div className="flex items-center gap-2">
+          <Calendar03Icon size={14} className="text-cyan-400 flex-shrink-0" />
+          <span className="text-[10.5px] font-semibold text-muted-foreground truncate">
+            MTD Tonnes
+          </span>
+        </div>
+        <div>
+          <div className="text-[32px] font-extrabold text-foreground leading-none tracking-tight">
+            {fmtT(mtdTonnes)}
+          </div>
+          {lyMtdTonnes > 0 && (
+            <div className="mt-1.5 text-[11px] text-muted-foreground">
+              vs {fmtT(lyMtdTonnes)} LY MTD
+            </div>
+          )}
+          {mtdPct !== null && (
+            <div className="mt-2 flex items-center gap-2 flex-wrap">
+              <span className={`inline-flex items-center gap-0.5 text-[11px] font-bold px-1.5 py-0.5 rounded-full ${
+                mtdPct >= 0 ? "bg-emerald-500/15 text-emerald-400" : "bg-red-500/15 text-red-400"
+              }`}>
+                {mtdPct >= 0 ? "▲" : "▼"} {Math.abs(mtdPct).toFixed(1)}%
+              </span>
+              <span className={`text-[11px] font-semibold ${mtdDiff >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                {fmtTSigned(mtdDiff)}
+              </span>
+            </div>
+          )}
+          <div className="mt-1.5 text-[10px] text-muted-foreground/55">
+            01 {MONTH_SHORT[today.getMonth()]} – {String(today.getDate()).padStart(2, "0")} {MONTH_SHORT[today.getMonth()]} {today.getFullYear()}
           </div>
         </div>
       </KpiCard>
 
-      {/* ── 2. Target Progress — Donut (amber/green) ── */}
+      {/* ── 3. Target Progress — Donut (amber/green) ── */}
       {(() => {
         const donutColor = progressPct >= 100 ? "#10b981" : progressPct >= 80 ? "#f59e0b" : "#f87171";
         return (

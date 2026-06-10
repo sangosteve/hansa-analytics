@@ -208,6 +208,8 @@ export default function Home() {
   const [chartDailySales, setChartDailySales] = useState<DailySalesRow[] | null>(null);
   const [chartCompDailySales, setChartCompDailySales] = useState<DailySalesRow[] | null>(null);
   const [chartDailyLoading, setChartDailyLoading] = useState(false);
+  const [mtdDailySales, setMtdDailySales] = useState<DailySalesRow[] | null>(null);
+  const [mtdCompDailySales, setMtdCompDailySales] = useState<DailySalesRow[] | null>(null);
 
   const loadFiltered = async () => {
     setLoading(true);
@@ -271,6 +273,24 @@ export default function Home() {
       // non-critical
     } finally {
       setChartDailyLoading(false);
+    }
+  };
+
+  const loadMtdKpiData = async () => {
+    const today = new Date();
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const todayStr = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
+    const mtdFrom = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-01`;
+    try {
+      const { from: lyFrom, to: lyTo } = getComparisonPeriod(mtdFrom, todayStr, "same_period_ly");
+      const [cur, comp] = await Promise.all([
+        getDailySales(mtdFrom, todayStr, companyNos, saleScope),
+        getDailySales(lyFrom, lyTo, companyNos, saleScope),
+      ]);
+      setMtdDailySales(cur);
+      setMtdCompDailySales(comp);
+    } catch {
+      // non-critical
     }
   };
 
@@ -340,6 +360,9 @@ export default function Home() {
     loadChartDailySales(from, todayStr);
   }, [chartPeriod, JSON.stringify(companyNos), saleScope]);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { loadMtdKpiData(); }, [JSON.stringify(companyNos), saleScope]);
+
   useEffect(() => {
     const handler = () => {
       loadFiltered();
@@ -347,6 +370,7 @@ export default function Home() {
       loadMom();
       loadMovSummary();
       loadFreshness();
+      loadMtdKpiData();
     };
     window.addEventListener("hansa-data-refreshed", handler);
     return () => window.removeEventListener("hansa-data-refreshed", handler);
@@ -414,6 +438,24 @@ export default function Home() {
   const totalTonnes = useMemo(() => salesRows.reduce((sum, r) => sum + r.total_tonnes, 0), [salesRows]);
   const comparisonTonnes = useMemo(() => (compSummary?.monthly_sales ?? []).reduce((s, r) => s + r.total_tonnes, 0), [compSummary]);
   const comparisonLabel = buildComparisonModeLabel(dateFrom, dateTo, comparisonMode);
+
+  const todayTonnes = useMemo(() => {
+    if (!mtdDailySales || mtdDailySales.length === 0) return 0;
+    const t = new Date();
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const tStr = `${t.getFullYear()}-${pad(t.getMonth() + 1)}-${pad(t.getDate())}`;
+    return mtdDailySales.find(r => r.date === tStr)?.tonnes ?? 0;
+  }, [mtdDailySales]);
+
+  const mtdTonnes = useMemo(() => {
+    if (!mtdDailySales) return 0;
+    return mtdDailySales.reduce((s, r) => s + r.tonnes, 0);
+  }, [mtdDailySales]);
+
+  const lyMtdTonnes = useMemo(() => {
+    if (!mtdCompDailySales) return 0;
+    return mtdCompDailySales.reduce((s, r) => s + r.tonnes, 0);
+  }, [mtdCompDailySales]);
 
   const divisionBreakdown = summary?.division_breakdown ?? [];
 
@@ -781,6 +823,91 @@ export default function Home() {
       _diffPct: diffPct,
     };
   }, [chartDailySales, chartCompDailySales, chartFrom, chartTo]);
+
+  // ── MTD Daily Performance — combo chart (bars = daily, line = cumulative) ──
+  const chartMtdOptions = useMemo(() => {
+    if (chartPeriod !== "MTD") return null;
+    if (!chartDailySales || chartDailySales.length === 0) return null;
+    const xLabels = chartDailySales.map(r => {
+      const d = new Date(r.date + "T00:00:00");
+      return `${String(d.getDate()).padStart(2, "0")} ${monthLabels[d.getMonth()]}`;
+    });
+    const barData = chartDailySales.map(r => Math.round(r.tonnes * 100) / 100);
+    const lineData = chartDailySales.map(r => Math.round(r.cumulative_tonnes * 100) / 100);
+    return {
+      ...darkChartBase,
+      tooltip: {
+        ...darkChartBase.tooltip,
+        trigger: "axis",
+        // @ts-ignore
+        formatter: (params: any) => params
+          .filter((p: any) => p.value != null && p.value > 0)
+          .map((p: any) => `${p.seriesName}: ${numberFormatter.format(p.value)} t`)
+          .join("<br />"),
+      },
+      legend: {
+        data: ["Daily tonnes", "Cumulative MTD"],
+        top: 4,
+        textStyle: { color: "#8b949e", fontSize: 9 },
+      },
+      grid: { left: "8%", right: "8%", bottom: "12%", top: "22%" },
+      xAxis: {
+        type: "category",
+        data: xLabels,
+        axisLine: { lineStyle: { color: "#30363d" } },
+        axisLabel: { color: "#8b949e", fontSize: 9, interval: Math.max(0, Math.floor(chartDailySales.length / 8) - 1) },
+        splitLine: { show: false },
+      },
+      yAxis: [
+        {
+          type: "value",
+          name: "Daily t",
+          nameTextStyle: { color: "#8b949e", fontSize: 8 },
+          axisLabel: { color: "#8b949e", fontSize: 8, formatter: (v: number) => `${numberFormatter.format(v)}` },
+          splitLine: { lineStyle: { color: "#21262d" } },
+        },
+        {
+          type: "value",
+          name: "Cumul t",
+          nameTextStyle: { color: "#8b949e", fontSize: 8 },
+          axisLabel: { color: "#8b949e", fontSize: 8, formatter: (v: number) => `${numberFormatter.format(v)}` },
+          splitLine: { show: false },
+        },
+      ],
+      series: [
+        {
+          name: "Daily tonnes",
+          type: "bar",
+          data: barData,
+          yAxisIndex: 0,
+          itemStyle: { color: "#34d399", borderRadius: [2, 2, 0, 0] },
+          label: {
+            show: true,
+            position: "top",
+            fontSize: 7.5,
+            color: "#34d399",
+            // @ts-ignore
+            formatter: (p: any) => p.value != null && p.value > 0 ? numberFormatter.format(p.value) : "",
+          },
+        },
+        {
+          name: "Cumulative MTD",
+          type: "line",
+          data: lineData,
+          yAxisIndex: 1,
+          smooth: false,
+          lineStyle: { color: "#818cf8", width: 2 },
+          itemStyle: { color: "#818cf8" },
+          showSymbol: true,
+          symbol: "circle",
+          symbolSize: 4,
+          label: {
+            show: false,
+          },
+        },
+      ],
+    };
+  }, [chartPeriod, chartDailySales]);
 
   // ── QTD monthly bar chart ──────────────────────────────────────────────────
   const chartQtdBarOptions = useMemo(() => {
@@ -1489,13 +1616,15 @@ export default function Home() {
             comparisonLabel={comparisonLabel}
             salesRows={salesRows}
             mtd={predictive?.mtd_projection ?? null}
-
             targetTonnes={currentMonthTarget?.target_tonnes ?? DEFAULT_TARGET_TONNES}
             loading={loading}
             predictiveLoading={predictiveLoading}
             dateFrom={dateFrom}
             dateTo={dateTo}
             comparisonMode={comparisonMode}
+            todayTonnes={todayTonnes}
+            mtdTonnes={mtdTonnes}
+            lyMtdTonnes={lyMtdTonnes}
           />
 
           {error && (
@@ -1517,21 +1646,36 @@ export default function Home() {
                 <div className="flex items-start justify-between mb-2 gap-2">
                   <div>
                     <h3 className="text-[13px] font-semibold text-foreground">
-                      {chartPeriod === "QTD" ? "QTD Monthly Comparison (Tonnes)" : `${chartPeriod} Daily Comparison (Tonnes)`}
+                      {chartPeriod === "QTD" ? "QTD Monthly Comparison (Tonnes)" : chartPeriod === "MTD" ? "MTD Daily Performance" : `${chartPeriod} Daily Comparison (Tonnes)`}
                     </h3>
                     <div className="flex items-center gap-3 mt-1">
-                      <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                        {chartPeriod === "QTD"
-                          ? <span className="inline-block w-3 h-2.5 rounded-sm bg-emerald-400 opacity-80" />
-                          : <span className="inline-block w-3 h-[2px] rounded bg-emerald-400" />}
-                        {" "}This Year ({chartThisYearLabel})
-                      </span>
-                      <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                        {chartPeriod === "QTD"
-                          ? <span className="inline-block w-3 h-2.5 rounded-sm bg-muted-foreground/40" />
-                          : <span className="inline-block w-3 border-t border-dashed border-muted-foreground" />}
-                        {" "}Last Year ({chartLastYearLabel})
-                      </span>
+                      {chartPeriod === "MTD" ? (
+                        <>
+                          <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                            <span className="inline-block w-3 h-2.5 rounded-sm bg-emerald-400 opacity-80" />
+                            {" "}Daily tonnes
+                          </span>
+                          <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                            <span className="inline-block w-3 h-[2px] rounded bg-violet-400" />
+                            {" "}Cumulative MTD
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                            {chartPeriod === "QTD"
+                              ? <span className="inline-block w-3 h-2.5 rounded-sm bg-emerald-400 opacity-80" />
+                              : <span className="inline-block w-3 h-[2px] rounded bg-emerald-400" />}
+                            {" "}This Year ({chartThisYearLabel})
+                          </span>
+                          <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                            {chartPeriod === "QTD"
+                              ? <span className="inline-block w-3 h-2.5 rounded-sm bg-muted-foreground/40" />
+                              : <span className="inline-block w-3 border-t border-dashed border-muted-foreground" />}
+                            {" "}Last Year ({chartLastYearLabel})
+                          </span>
+                        </>
+                      )}
                     </div>
                   </div>
                   <DropdownBadge
@@ -1547,13 +1691,41 @@ export default function Home() {
                     ) : (
                       <div className="flex h-full items-center justify-center text-muted-foreground/50 text-xs">No data for this quarter</div>
                     )
+                  ) : chartPeriod === "MTD" ? (
+                    chartMtdOptions ? (
+                      <ReactECharts option={chartMtdOptions} style={{ width: "100%", height: "100%" }} notMerge lazyUpdate />
+                    ) : (
+                      <div className="flex h-full items-center justify-center text-muted-foreground/50 text-xs">No data for this month</div>
+                    )
                   ) : chartDailyComparisonOptions ? (
                     <ReactECharts option={chartDailyComparisonOptions} style={{ width: "100%", height: "100%" }} notMerge lazyUpdate />
                   ) : (
                     <div className="flex h-full items-center justify-center text-muted-foreground/50 text-xs">No daily data for this range</div>
                   )}
                 </div>
-                {(chartPeriod === "QTD" ? chartQtdBarOptions : chartDailyComparisonOptions) && (() => {
+                {chartPeriod === "MTD" ? (
+                  <div className="mt-3 pt-3 border-t border-border/40 grid grid-cols-4 gap-2 text-[11px]">
+                    <div>
+                      <div className="text-[10px] text-muted-foreground/60">Today</div>
+                      <div className="font-bold text-emerald-400 mt-0.5">{numberFormatter.format(Math.round(todayTonnes * 100) / 100)} t</div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] text-muted-foreground/60">MTD Total</div>
+                      <div className="font-bold text-foreground mt-0.5">{numberFormatter.format(Math.round(mtdTonnes * 100) / 100)} t</div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] text-muted-foreground/60">LY MTD</div>
+                      <div className="font-bold text-muted-foreground mt-0.5">{numberFormatter.format(Math.round(lyMtdTonnes * 100) / 100)} t</div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] text-muted-foreground/60">Gap</div>
+                      {(() => {
+                        const gap = mtdTonnes - lyMtdTonnes;
+                        return <div className={`font-bold mt-0.5 ${gap >= 0 ? "text-emerald-400" : "text-red-400"}`}>{gap >= 0 ? "+" : ""}{numberFormatter.format(Math.round(gap * 100) / 100)} t</div>;
+                      })()}
+                    </div>
+                  </div>
+                ) : (chartPeriod === "QTD" ? chartQtdBarOptions : chartDailyComparisonOptions) && (() => {
                   const _opts = chartPeriod === "QTD" ? chartQtdBarOptions : chartDailyComparisonOptions;
                   const curEnd = (_opts as any)._curEnd ?? 0;
                   const compEnd = (_opts as any)._compEnd ?? 0;
