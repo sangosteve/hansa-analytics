@@ -457,6 +457,17 @@ export default function Home() {
     return mtdCompDailySales.reduce((s, r) => s + r.tonnes, 0);
   }, [mtdCompDailySales]);
 
+  const lyTodayTonnes = useMemo(() => {
+    if (!mtdCompDailySales || mtdCompDailySales.length === 0) return 0;
+    return mtdCompDailySales[mtdCompDailySales.length - 1]?.tonnes ?? 0;
+  }, [mtdCompDailySales]);
+
+  const daysInMtd = useMemo(() => new Date().getDate(), []);
+  const daysInMonth = useMemo(() => {
+    const t = new Date();
+    return new Date(t.getFullYear(), t.getMonth() + 1, 0).getDate();
+  }, []);
+
   const divisionBreakdown = summary?.division_breakdown ?? [];
 
   const quarterlyData = useMemo(() => {
@@ -824,7 +835,7 @@ export default function Home() {
     };
   }, [chartDailySales, chartCompDailySales, chartFrom, chartTo]);
 
-  // ── MTD Daily Performance — combo chart (bars = daily, line = cumulative) ──
+  // ── MTD Daily Performance — combo chart (bars=daily, solid line=cumul actual, dashed=cumul LY) ──
   const chartMtdOptions = useMemo(() => {
     if (chartPeriod !== "MTD") return null;
     if (!chartDailySales || chartDailySales.length === 0) return null;
@@ -834,19 +845,34 @@ export default function Home() {
     });
     const barData = chartDailySales.map(r => Math.round(r.tonnes * 100) / 100);
     const lineData = chartDailySales.map(r => Math.round(r.cumulative_tonnes * 100) / 100);
+    const lyLineData = chartDailySales.map((_: any, i: number) => {
+      const comp = mtdCompDailySales?.[i];
+      return comp != null ? Math.round(comp.cumulative_tonnes * 100) / 100 : null;
+    });
+    const lastLyIdx = lyLineData.reduce((acc: number, v: number | null, i: number) => v != null ? i : acc, -1);
     return {
       ...darkChartBase,
       tooltip: {
         ...darkChartBase.tooltip,
         trigger: "axis",
         // @ts-ignore
-        formatter: (params: any) => params
-          .filter((p: any) => p.value != null && p.value > 0)
-          .map((p: any) => `${p.seriesName}: ${numberFormatter.format(p.value)} t`)
-          .join("<br />"),
+        formatter: (params: any) => {
+          if (!params || params.length === 0) return "";
+          const idx = params[0].dataIndex;
+          const dateLbl = chartDailySales[idx]
+            ? (() => {
+                const d = new Date(chartDailySales[idx].date + "T00:00:00");
+                return `${String(d.getDate()).padStart(2, "0")} ${monthLabels[d.getMonth()]} ${d.getFullYear()}`;
+              })()
+            : "";
+          const lines = params
+            .filter((p: any) => p.value != null && p.value > 0)
+            .map((p: any) => `<span style="display:inline-block;width:8px;height:8px;border-radius:${p.componentSubType === 'bar' ? '2px' : '50%'};background:${p.color};margin-right:4px;vertical-align:middle"></span>${p.seriesName}: <strong>${numberFormatter.format(p.value)} t</strong>`);
+          return `<div style="font-weight:600;margin-bottom:4px;color:#e6edf3">${dateLbl}</div>${lines.join("<br />")}`;
+        },
       },
       legend: {
-        data: ["Daily tonnes", "Cumulative MTD"],
+        data: ["Daily Tonnes (Actual)", "Cumulative MTD (Actual)", "Cumulative MTD (LY)"],
         top: 4,
         textStyle: { color: "#8b949e", fontSize: 9 },
       },
@@ -876,7 +902,7 @@ export default function Home() {
       ],
       series: [
         {
-          name: "Daily tonnes",
+          name: "Daily Tonnes (Actual)",
           type: "bar",
           data: barData,
           yAxisIndex: 0,
@@ -891,23 +917,51 @@ export default function Home() {
           },
         },
         {
-          name: "Cumulative MTD",
+          name: "Cumulative MTD (Actual)",
           type: "line",
           data: lineData,
           yAxisIndex: 1,
           smooth: false,
-          lineStyle: { color: "#818cf8", width: 2 },
-          itemStyle: { color: "#818cf8" },
+          lineStyle: { color: "#34d399", width: 2 },
+          itemStyle: { color: "#34d399" },
           showSymbol: true,
           symbol: "circle",
           symbolSize: 4,
           label: {
-            show: false,
+            show: true,
+            position: "top",
+            fontSize: 7.5,
+            color: "#34d399",
+            // @ts-ignore
+            formatter: (p: any) => p.dataIndex === lineData.length - 1 && p.value != null && p.value > 0
+              ? numberFormatter.format(p.value) : "",
+          },
+        },
+        {
+          name: "Cumulative MTD (LY)",
+          type: "line",
+          data: lyLineData,
+          yAxisIndex: 1,
+          smooth: false,
+          connectNulls: false,
+          lineStyle: { color: "#8b949e", width: 1.5, type: "dashed" },
+          itemStyle: { color: "#8b949e" },
+          showSymbol: true,
+          symbol: "circle",
+          symbolSize: 3,
+          label: {
+            show: true,
+            position: "top",
+            fontSize: 7.5,
+            color: "#8b949e",
+            // @ts-ignore
+            formatter: (p: any) => p.dataIndex === lastLyIdx && p.value != null && p.value > 0
+              ? numberFormatter.format(p.value) : "",
           },
         },
       ],
     };
-  }, [chartPeriod, chartDailySales]);
+  }, [chartPeriod, chartDailySales, mtdCompDailySales]);
 
   // ── QTD monthly bar chart ──────────────────────────────────────────────────
   const chartQtdBarOptions = useMemo(() => {
@@ -1625,6 +1679,9 @@ export default function Home() {
             todayTonnes={todayTonnes}
             mtdTonnes={mtdTonnes}
             lyMtdTonnes={lyMtdTonnes}
+            lyTodayTonnes={lyTodayTonnes}
+            daysInMtd={daysInMtd}
+            daysInMonth={daysInMonth}
           />
 
           {error && (
@@ -1704,27 +1761,58 @@ export default function Home() {
                   )}
                 </div>
                 {chartPeriod === "MTD" ? (
-                  <div className="mt-3 pt-3 border-t border-border/40 grid grid-cols-4 gap-2 text-[11px]">
-                    <div>
-                      <div className="text-[10px] text-muted-foreground/60">Today</div>
-                      <div className="font-bold text-emerald-400 mt-0.5">{numberFormatter.format(Math.round(todayTonnes * 100) / 100)} t</div>
-                    </div>
-                    <div>
-                      <div className="text-[10px] text-muted-foreground/60">MTD Total</div>
-                      <div className="font-bold text-foreground mt-0.5">{numberFormatter.format(Math.round(mtdTonnes * 100) / 100)} t</div>
-                    </div>
-                    <div>
-                      <div className="text-[10px] text-muted-foreground/60">LY MTD</div>
-                      <div className="font-bold text-muted-foreground mt-0.5">{numberFormatter.format(Math.round(lyMtdTonnes * 100) / 100)} t</div>
-                    </div>
-                    <div>
-                      <div className="text-[10px] text-muted-foreground/60">Gap</div>
+                  <>
+                    <div className="mt-3 pt-3 border-t border-border/40 rounded-lg border border-border/60 bg-muted/5 p-3 grid grid-cols-2 sm:grid-cols-5 gap-3 text-[11px]">
                       {(() => {
+                        const t = new Date();
+                        const MS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+                        const mS = MS[t.getMonth()];
+                        const dd = String(t.getDate()).padStart(2, "0");
+                        const yr = t.getFullYear();
+                        const lyYr = yr - 1;
                         const gap = mtdTonnes - lyMtdTonnes;
-                        return <div className={`font-bold mt-0.5 ${gap >= 0 ? "text-emerald-400" : "text-red-400"}`}>{gap >= 0 ? "+" : ""}{numberFormatter.format(Math.round(gap * 100) / 100)} t</div>;
+                        const growthPct = lyMtdTonnes > 0 ? ((mtdTonnes - lyMtdTonnes) / lyMtdTonnes) * 100 : null;
+                        return (
+                          <>
+                            <div className="flex flex-col">
+                              <div className="text-[9.5px] text-muted-foreground/60 font-medium">Today</div>
+                              <div className="text-[14px] font-bold text-foreground mt-0.5">{numberFormatter.format(Math.round(todayTonnes * 100) / 100)} t</div>
+                            </div>
+                            <div className="flex flex-col">
+                              <div className="text-[9.5px] text-muted-foreground/60 font-medium">MTD Total (01 {mS} – {dd} {mS})</div>
+                              <div className="text-[14px] font-bold text-foreground mt-0.5">{numberFormatter.format(Math.round(mtdTonnes * 100) / 100)} t</div>
+                            </div>
+                            <div className="flex flex-col">
+                              <div className="text-[9.5px] text-muted-foreground/60 font-medium">LY MTD (01 {mS} – {dd} {mS} {lyYr})</div>
+                              <div className="text-[14px] font-bold text-muted-foreground mt-0.5">{numberFormatter.format(Math.round(lyMtdTonnes * 100) / 100)} t</div>
+                            </div>
+                            <div className="flex flex-col">
+                              <div className="text-[9.5px] text-muted-foreground/60 font-medium">MTD Gap</div>
+                              <div className={`text-[14px] font-bold mt-0.5 ${gap >= 0 ? "text-emerald-400" : "text-red-400"}`}>{gap >= 0 ? "+" : ""}{numberFormatter.format(Math.round(gap * 100) / 100)} t</div>
+                            </div>
+                            <div className="flex flex-col">
+                              <div className="text-[9.5px] text-muted-foreground/60 font-medium">MTD Growth</div>
+                              {growthPct !== null
+                                ? <div className={`text-[14px] font-bold mt-0.5 ${growthPct >= 0 ? "text-emerald-400" : "text-red-400"}`}>{growthPct >= 0 ? "+" : ""}{growthPct.toFixed(1)}%</div>
+                                : <div className="text-[14px] font-bold mt-0.5 text-muted-foreground">—</div>
+                              }
+                            </div>
+                          </>
+                        );
                       })()}
                     </div>
-                  </div>
+                    {(() => {
+                      const t = new Date();
+                      const MS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+                      const dIM = new Date(t.getFullYear(), t.getMonth() + 1, 0).getDate();
+                      return (
+                        <div className="mt-2 px-3 py-2 rounded-lg bg-primary/5 border border-primary/10 text-[10.5px] text-muted-foreground/70 flex items-start gap-1.5">
+                          <span className="text-primary/60 flex-shrink-0 font-bold mt-px">ⓘ</span>
+                          <span>MTD includes sales from the start of the month to the selected end date ({String(t.getDate()).padStart(2, "0")} {MS[t.getMonth()]} {t.getFullYear()}). Targets are prorated for the same period ({t.getDate()} of {dIM} days).</span>
+                        </div>
+                      );
+                    })()}
+                  </>
                 ) : (chartPeriod === "QTD" ? chartQtdBarOptions : chartDailyComparisonOptions) && (() => {
                   const _opts = chartPeriod === "QTD" ? chartQtdBarOptions : chartDailyComparisonOptions;
                   const curEnd = (_opts as any)._curEnd ?? 0;

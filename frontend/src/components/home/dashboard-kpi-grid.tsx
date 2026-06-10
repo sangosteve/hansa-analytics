@@ -166,6 +166,9 @@ export interface DashboardKpiGridProps {
   todayTonnes: number;
   mtdTonnes: number;
   lyMtdTonnes: number;
+  lyTodayTonnes: number;
+  daysInMtd: number;
+  daysInMonth: number;
 }
 
 export default function DashboardKpiGrid({
@@ -182,49 +185,27 @@ export default function DashboardKpiGrid({
   todayTonnes,
   mtdTonnes,
   lyMtdTonnes,
+  lyTodayTonnes,
+  daysInMtd,
+  daysInMonth,
 }: DashboardKpiGridProps) {
   const periodLabel = inferPeriodLabel(dateFrom, dateTo);
-  const kpiTitle = getKpiTitle(dateFrom, dateTo);
   const compShort = comparisonLabel ?? getCompShortLabel(comparisonMode, periodLabel);
 
-  const yoyPct = comparisonTonnes > 0
-    ? ((totalTonnes - comparisonTonnes) / comparisonTonnes) * 100
-    : null;
-  const tonneDiff = totalTonnes - comparisonTonnes;
-
-  const progressPct = targetTonnes > 0 ? (totalTonnes / targetTonnes) * 100 : 0;
-  const comparisonProgressPct = comparisonTonnes > 0 && targetTonnes > 0
-    ? (comparisonTonnes / targetTonnes) * 100
-    : null;
-  const ppDiff = comparisonProgressPct !== null ? progressPct - comparisonProgressPct : null;
-
-  const projectedEOM = mtd?.projected_eom_tonnes ?? null;
-  const projVsTarget = projectedEOM != null ? projectedEOM - targetTonnes : null;
-  const projVsTargetPct = projectedEOM != null && targetTonnes > 0
-    ? ((projectedEOM - targetTonnes) / targetTonnes) * 100 : null;
-
-  const daysInPeriod = (() => {
-    if (!dateFrom || !dateTo) return 1;
-    const from = new Date(dateFrom + "T00:00:00");
-    const to = new Date(dateTo + "T00:00:00");
-    return Math.max(Math.round((to.getTime() - from.getTime()) / 86400000) + 1, 1);
-  })();
-  const dailyAvg = totalTonnes / daysInPeriod;
-  const lyDailyAvg = comparisonTonnes > 0 ? comparisonTonnes / daysInPeriod : null;
-  const dailyAvgDiff = lyDailyAvg !== null ? dailyAvg - lyDailyAvg : null;
-  const dailyAvgPct = lyDailyAvg !== null && lyDailyAvg > 0 ? ((dailyAvg - lyDailyAvg) / lyDailyAvg) * 100 : null;
-
-  const targetDailyRate = (() => {
-    if (!targetTonnes || !dateFrom) return null;
-    const d = new Date(dateFrom + "T00:00:00");
-    const daysInMonth = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
-    return targetTonnes / daysInMonth;
-  })();
+  // MTD-specific computed values (prorated target, daily avg, etc.)
+  const proratedTarget = daysInMonth > 0 ? targetTonnes * (daysInMtd / daysInMonth) : targetTonnes;
+  const mtdProgressPct = proratedTarget > 0 ? (mtdTonnes / proratedTarget) * 100 : 0;
+  const lyMtdProgressPct = proratedTarget > 0 ? (lyMtdTonnes / proratedTarget) * 100 : 0;
+  const mtdTargetGap = mtdTonnes - proratedTarget;
+  const ppVsLyMtd = mtdProgressPct - lyMtdProgressPct;
+  const mtdDailyAvg = daysInMtd > 0 ? mtdTonnes / daysInMtd : 0;
+  const lyMtdDailyAvgVal = daysInMtd > 0 ? lyMtdTonnes / daysInMtd : 0;
+  const requiredPace = daysInMonth > 0 ? targetTonnes / daysInMonth : 0;
 
   if (loading && totalTonnes === 0) {
     return (
-      <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-        <KpiSkeleton /><KpiSkeleton /><KpiSkeleton /><KpiSkeleton /><KpiSkeleton />
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <KpiSkeleton /><KpiSkeleton /><KpiSkeleton /><KpiSkeleton />
       </div>
     );
   }
@@ -234,44 +215,61 @@ export default function DashboardKpiGrid({
   const today = new Date();
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
 
       {/* ── 1. Today's Tonnage (green) ── */}
       <KpiCard accentColor="#10b981" bgTint="bg-emerald-950/10">
-        <div className="flex items-center gap-2">
-          <ChartUpIcon size={14} className="text-emerald-400 flex-shrink-0" />
-          <span className="text-[10.5px] font-semibold text-muted-foreground truncate">
-            Today's Tonnes
-          </span>
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-[10px] font-bold tracking-widest text-emerald-400 uppercase">Today's Tonnage</span>
+          <ChartUpIcon size={13} className="text-emerald-400/60 flex-shrink-0" />
         </div>
         <div>
-          <div className="text-[32px] font-extrabold text-foreground leading-none tracking-tight">
+          <div className="text-[30px] font-extrabold text-foreground leading-none tracking-tight">
             {fmtT(todayTonnes)}
           </div>
+          {lyTodayTonnes > 0 && (
+            <div className="mt-1.5 text-[11px] text-muted-foreground">
+              vs same day last year: {fmtT(lyTodayTonnes)}
+            </div>
+          )}
+          {lyTodayTonnes > 0 && (() => {
+            const pct = ((todayTonnes - lyTodayTonnes) / lyTodayTonnes) * 100;
+            const diff = todayTonnes - lyTodayTonnes;
+            return (
+              <div className="mt-2 flex items-center gap-2 flex-wrap">
+                <span className={`inline-flex items-center gap-0.5 text-[11px] font-bold px-1.5 py-0.5 rounded-full ${
+                  pct >= 0 ? "bg-emerald-500/15 text-emerald-400" : "bg-red-500/15 text-red-400"
+                }`}>
+                  {pct >= 0 ? "▲" : "▼"} {Math.abs(pct).toFixed(1)}%
+                </span>
+                <span className={`text-[11px] font-semibold ${diff >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                  {fmtTSigned(diff)}
+                </span>
+              </div>
+            );
+          })()}
           <div className="mt-1.5 text-[10px] text-muted-foreground/55">
             {String(today.getDate()).padStart(2, "0")} {MONTH_SHORT[today.getMonth()]} {today.getFullYear()} only
           </div>
-          {todayTonnes === 0 && (
-            <div className="mt-2 text-[11px] text-muted-foreground/40 italic">No data yet today</div>
+          {todayTonnes === 0 && lyTodayTonnes === 0 && (
+            <div className="mt-1 text-[11px] text-muted-foreground/40 italic">No data yet today</div>
           )}
         </div>
       </KpiCard>
 
       {/* ── 2. MTD Tonnage (teal) ── */}
       <KpiCard accentColor="#06b6d4" bgTint="bg-cyan-950/10">
-        <div className="flex items-center gap-2">
-          <Calendar03Icon size={14} className="text-cyan-400 flex-shrink-0" />
-          <span className="text-[10.5px] font-semibold text-muted-foreground truncate">
-            MTD Tonnes
-          </span>
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-[10px] font-bold tracking-widest text-cyan-400 uppercase">MTD Tonnage</span>
+          <Calendar03Icon size={13} className="text-cyan-400/60 flex-shrink-0" />
         </div>
         <div>
-          <div className="text-[32px] font-extrabold text-foreground leading-none tracking-tight">
+          <div className="text-[30px] font-extrabold text-foreground leading-none tracking-tight">
             {fmtT(mtdTonnes)}
           </div>
           {lyMtdTonnes > 0 && (
             <div className="mt-1.5 text-[11px] text-muted-foreground">
-              vs {fmtT(lyMtdTonnes)} LY MTD
+              vs LY MTD: {fmtT(lyMtdTonnes)}
             </div>
           )}
           {mtdPct !== null && (
@@ -287,178 +285,121 @@ export default function DashboardKpiGrid({
             </div>
           )}
           <div className="mt-1.5 text-[10px] text-muted-foreground/55">
-            01 {MONTH_SHORT[today.getMonth()]} – {String(today.getDate()).padStart(2, "0")} {MONTH_SHORT[today.getMonth()]} {today.getFullYear()}
+            01 {MONTH_SHORT[today.getMonth()]} – {String(today.getDate()).padStart(2, "0")} {MONTH_SHORT[today.getMonth()]} {today.getFullYear()} ({daysInMtd} days)
           </div>
         </div>
       </KpiCard>
 
-      {/* ── 3. Target Progress — Donut (amber/green) ── */}
+      {/* ── 3. Target Progress (MTD) — prorated donut (amber/green) ── */}
       {(() => {
-        const donutColor = progressPct >= 100 ? "#10b981" : progressPct >= 80 ? "#f59e0b" : "#f87171";
+        const donutColor = mtdProgressPct >= 100 ? "#10b981" : mtdProgressPct >= 80 ? "#f59e0b" : "#f87171";
+        const monthName = ["January","February","March","April","May","June","July","August","September","October","November","December"][today.getMonth()];
         return (
-          <KpiCard accentColor={progressPct >= 100 ? "#10b981" : "#f59e0b"} bgTint={progressPct >= 100 ? "bg-emerald-950/10" : "bg-amber-950/10"}>
+          <KpiCard accentColor={mtdProgressPct >= 100 ? "#10b981" : "#f59e0b"} bgTint={mtdProgressPct >= 100 ? "bg-emerald-950/10" : "bg-amber-950/10"}>
             <div className="flex items-center gap-2">
-              <CheckmarkCircle01Icon size={14} className={`flex-shrink-0 ${progressPct >= 100 ? "text-emerald-400" : "text-amber-400"}`} />
-              <span className="text-[10.5px] font-semibold text-muted-foreground whitespace-nowrap flex-1">
-                {progressPct >= 100 ? "Target Achieved" : `Target Progress (${periodLabel})`}
+              <CheckmarkCircle01Icon size={14} className={`flex-shrink-0 ${mtdProgressPct >= 100 ? "text-emerald-400" : "text-amber-400"}`} />
+              <span className="text-[10px] font-bold tracking-widest whitespace-nowrap flex-1 uppercase" style={{ color: mtdProgressPct >= 100 ? "#34d399" : "#f59e0b" }}>
+                Target Progress (MTD)
               </span>
-              {progressPct >= 100 && (
+              {mtdProgressPct >= 100 && (
                 <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 whitespace-nowrap">✓ Achieved</span>
               )}
             </div>
             <div className="flex items-center gap-3">
-              {/* Donut */}
               <div className="relative flex-shrink-0" style={{ width: 80, height: 80 }}>
-                <DonutProgress pct={progressPct} color={donutColor} size={80} />
+                <DonutProgress pct={mtdProgressPct} color={donutColor} size={80} />
                 <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                  <span className={`text-[13px] font-extrabold leading-none ${progressPct >= 100 ? "text-emerald-400" : "text-foreground"}`}>
-                    {progressPct.toFixed(1)}%
+                  <span className={`text-[13px] font-extrabold leading-none ${mtdProgressPct >= 100 ? "text-emerald-400" : "text-foreground"}`}>
+                    {mtdProgressPct.toFixed(1)}%
                   </span>
                   <span className="text-[7.5px] text-muted-foreground/60 mt-0.5">of target</span>
                 </div>
               </div>
-              {/* Stats */}
               <div className="flex-1 min-w-0 space-y-1.5">
                 <div>
                   <div className="text-[9px] text-muted-foreground/55">Actual</div>
-                  <div className="text-[12.5px] font-bold text-foreground leading-tight">{fmtT(totalTonnes)}</div>
+                  <div className="text-[12.5px] font-bold text-foreground leading-tight">{fmtT(mtdTonnes)}</div>
                 </div>
                 <div>
-                  <div className="text-[9px] text-muted-foreground/55">Target</div>
-                  <div className="text-[11.5px] font-semibold text-muted-foreground leading-tight">{fmtT(targetTonnes)}</div>
+                  <div className="text-[9px] text-muted-foreground/55">Target (prorated)</div>
+                  <div className="text-[11.5px] font-semibold text-muted-foreground leading-tight">{fmtT(proratedTarget)}</div>
                 </div>
                 <div>
                   <div className="text-[9px] text-muted-foreground/55">Gap</div>
-                  <div className={`text-[11.5px] font-bold leading-tight ${progressPct >= 100 ? "text-emerald-400" : "text-red-400"}`}>
-                    {progressPct >= 100 ? `+${fmtT(totalTonnes - targetTonnes)}` : `-${fmtT(targetTonnes - totalTonnes)}`}
+                  <div className={`text-[11.5px] font-bold leading-tight ${mtdTargetGap >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                    {mtdTargetGap >= 0 ? "+" : ""}{fmtT(mtdTargetGap)}
                   </div>
                 </div>
-                {ppDiff !== null && (
+                {lyMtdTonnes > 0 && (
                   <div>
-                    <div className="text-[9px] text-muted-foreground/55">vs {compShort}</div>
-                    <div className={`text-[10.5px] font-bold leading-tight ${ppDiff >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                      {ppDiff >= 0 ? "▲" : "▼"} {Math.abs(ppDiff).toFixed(1)} pp
+                    <div className="text-[9px] text-muted-foreground/55">vs LY MTD</div>
+                    <div className={`text-[10.5px] font-bold leading-tight ${ppVsLyMtd >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                      {ppVsLyMtd >= 0 ? "▲" : "▼"} {Math.abs(ppVsLyMtd).toFixed(1)} pp ({lyMtdProgressPct.toFixed(1)}%)
                     </div>
                   </div>
                 )}
               </div>
             </div>
+            <div className="flex items-center gap-1 text-[9.5px] text-muted-foreground/55">
+              <span>Target source: Manufacturing</span>
+              <span className="text-muted-foreground/30">|</span>
+              <span>{monthName} {today.getFullYear()}</span>
+            </div>
           </KpiCard>
         );
       })()}
 
-      {/* ── 3. Daily Average Tonnes (cyan) ── */}
+      {/* ── 4. Daily Avg Tonnes (MTD) ── */}
       <KpiCard accentColor="#06b6d4" bgTint="bg-cyan-950/10">
-        <div className="flex items-center gap-2">
-          <Calendar03Icon size={14} className="text-cyan-400 flex-shrink-0" />
-          <span className="text-[10.5px] font-semibold text-muted-foreground whitespace-nowrap">
-            Daily Avg Tonnes ({periodLabel})
-          </span>
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-[10px] font-bold tracking-widest text-cyan-400 uppercase">Daily Avg Tonnes (MTD)</span>
+          <Activity01Icon size={13} className="text-cyan-400/60 flex-shrink-0" />
         </div>
         <div>
-          <div className="text-[32px] font-extrabold text-foreground leading-none tracking-tight">
-            {nf.format(dailyAvg)} t
+          <div className="text-[27px] font-extrabold text-foreground leading-none tracking-tight">
+            {nf.format(Math.round(mtdDailyAvg * 100) / 100)} t/day
           </div>
-          <div className="mt-1 text-[10.5px] text-muted-foreground">per day</div>
-          {lyDailyAvg !== null && (
+          {lyMtdDailyAvgVal > 0 && (
             <div className="mt-1.5 text-[11px] text-muted-foreground">
-              vs {nf.format(lyDailyAvg)} t/day {compShort}
+              vs LY MTD: {nf.format(Math.round(lyMtdDailyAvgVal * 100) / 100)} t/day
             </div>
           )}
-          <div className="mt-2 flex items-center gap-2 flex-wrap">
-            {dailyAvgPct !== null ? (
-              <>
+          {lyMtdDailyAvgVal > 0 && (() => {
+            const pct = ((mtdDailyAvg - lyMtdDailyAvgVal) / lyMtdDailyAvgVal) * 100;
+            const diff = mtdDailyAvg - lyMtdDailyAvgVal;
+            return (
+              <div className="mt-2 flex items-center gap-2 flex-wrap">
                 <span className={`inline-flex items-center gap-0.5 text-[11px] font-bold px-1.5 py-0.5 rounded-full ${
-                  dailyAvgPct >= 0 ? "bg-emerald-500/15 text-emerald-400" : "bg-red-500/15 text-red-400"
+                  pct >= 0 ? "bg-emerald-500/15 text-emerald-400" : "bg-red-500/15 text-red-400"
                 }`}>
-                  {dailyAvgPct >= 0 ? "▲" : "▼"} {Math.abs(dailyAvgPct).toFixed(1)}%
+                  {pct >= 0 ? "▲" : "▼"} {Math.abs(pct).toFixed(1)}%
                 </span>
-                {dailyAvgDiff !== null && (
-                  <span className={`text-[11px] font-semibold ${dailyAvgDiff >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                    {fmtTSigned(dailyAvgDiff)}/day
-                  </span>
-                )}
-              </>
-            ) : (
-              <span className="text-[11px] text-muted-foreground/50 italic">No comparison data</span>
-            )}
-          </div>
-          {targetDailyRate !== null && (
+                <span className={`text-[11px] font-semibold ${diff >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                  {diff >= 0 ? "+" : ""}{nf.format(Math.round(Math.abs(diff) * 100) / 100)} t/day
+                </span>
+              </div>
+            );
+          })()}
+          {requiredPace > 0 && (
             <>
               <div className="mt-2">
-                <DailyAvgSparkBar dailyAvg={dailyAvg} targetDailyRate={targetDailyRate} />
+                <DailyAvgSparkBar dailyAvg={mtdDailyAvg} targetDailyRate={requiredPace} />
               </div>
               <div className="mt-1 flex items-center justify-between gap-1">
                 <span className="text-[10.5px] text-muted-foreground/55">
-                  Required: {nf.format(targetDailyRate)} t/day · {daysInPeriod}d
+                  Required target pace: {nf.format(Math.round(requiredPace * 100) / 100)} t/day
                 </span>
                 <span className={`text-[9.5px] font-semibold px-1.5 py-0.5 rounded-full whitespace-nowrap ${
-                  dailyAvg >= targetDailyRate
+                  mtdDailyAvg >= requiredPace
                     ? "bg-emerald-500/15 text-emerald-400"
                     : "bg-amber-500/15 text-amber-400"
                 }`}>
-                  {dailyAvg >= targetDailyRate ? "Ahead of pace" : "Behind pace"}
+                  {mtdDailyAvg >= requiredPace ? "Ahead of pace" : "Behind pace"}
                 </span>
               </div>
             </>
           )}
         </div>
-      </KpiCard>
-
-      {/* ── 4. Projected EOM / Run-Rate Forecast (violet) ── */}
-      <KpiCard accentColor="#8b5cf6" bgTint="bg-violet-950/10">
-        <div className="flex items-center gap-2">
-          <Activity01Icon size={14} className="text-violet-400 flex-shrink-0" />
-          <span className="text-[10.5px] font-semibold text-muted-foreground whitespace-nowrap">
-            {periodLabel === "MTD" ? "Projected Month-End"
-              : periodLabel === "QTD" ? "Projected Quarter-End"
-              : periodLabel === "YTD" ? "Projected Year-End"
-              : "Run-Rate Forecast"}
-          </span>
-        </div>
-        {predictiveLoading ? (
-          <div className="text-xs text-muted-foreground animate-pulse">Computing…</div>
-        ) : projectedEOM !== null ? (
-          <div className="flex items-end justify-between gap-2">
-            <div className="min-w-0 flex-1">
-              <div className="text-[32px] font-extrabold text-foreground leading-none tracking-tight">
-                {fmtT(projectedEOM)}
-              </div>
-              <div className="mt-1.5 text-[11px] text-muted-foreground">
-                vs Target: {fmtT(targetTonnes)}
-              </div>
-              {projVsTargetPct !== null && (
-                <div className="mt-2 flex items-center gap-2 flex-wrap">
-                  <span className={`inline-flex items-center gap-0.5 text-[11px] font-bold px-1.5 py-0.5 rounded-full ${
-                    projVsTargetPct >= 0 ? "bg-emerald-500/15 text-emerald-400" : "bg-red-500/15 text-red-400"
-                  }`}>
-                    {projVsTargetPct >= 0 ? "▲" : "▼"} {Math.abs(projVsTargetPct).toFixed(1)}%
-                  </span>
-                  {projVsTarget !== null && (
-                    <span className={`text-[11px] font-semibold ${projVsTarget >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                      {fmtTSigned(projVsTarget)}
-                    </span>
-                  )}
-                </div>
-              )}
-              <div className="mt-1.5 text-[10px] text-muted-foreground/55 leading-tight">
-                Based on run-rate, last 3 months<br />and same period last year
-              </div>
-            </div>
-            {mtd && (
-              <div className="flex-shrink-0 self-end pb-0.5 opacity-90">
-                <ForecastChart
-                  daysElapsed={mtd.days_elapsed}
-                  daysInMonth={mtd.days_in_month}
-                  actualTonnes={mtd.actual_tonnes}
-                  projectedTonnes={mtd.projected_eom_tonnes}
-                />
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="text-[28px] font-extrabold text-foreground">—</div>
-        )}
       </KpiCard>
 
     </div>
