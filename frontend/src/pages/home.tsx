@@ -1024,27 +1024,6 @@ export default function Home() {
                 </select>
               </div>
 
-              {/* Scope */}
-              <div className="flex flex-col gap-1">
-                <span className="text-[10px] text-muted-foreground">Scope</span>
-                <div className="h-9 px-2.5 flex items-center justify-between gap-2 text-[12px] rounded-lg border border-border bg-secondary text-foreground min-w-[120px]">
-                  <span className="flex items-center gap-1.5">
-                    <UserGroupIcon size={13} className="text-muted-foreground" />
-                    {saleScope === "all" ? "External" : saleScope.charAt(0).toUpperCase() + saleScope.slice(1)}
-                  </span>
-                  <ArrowDown01Icon size={13} className="text-muted-foreground" />
-                </div>
-              </div>
-
-              {/* Division */}
-              <div className="flex flex-col gap-1">
-                <span className="text-[10px] text-muted-foreground">Division</span>
-                <div className="h-9 px-2.5 flex items-center justify-between gap-2 text-[12px] rounded-lg border border-border bg-secondary text-foreground min-w-[150px] max-w-[170px]">
-                  <span className="truncate">{companyLabel === "All Companies" ? "All Divisions" : companyLabel}</span>
-                  <ArrowDown01Icon size={13} className="text-muted-foreground flex-shrink-0" />
-                </div>
-              </div>
-
               {/* Product Group filter */}
               <div className="flex flex-col gap-1">
                 <span className="text-[10px] text-muted-foreground">Product Group</span>
@@ -1058,15 +1037,6 @@ export default function Home() {
                     <option key={g} value={g}>{g}</option>
                   ))}
                 </select>
-              </div>
-
-              {/* Customer (display only) */}
-              <div className="flex flex-col gap-1">
-                <span className="text-[10px] text-muted-foreground">Customer</span>
-                <div className="h-9 px-2.5 flex items-center justify-between gap-2 text-[12px] rounded-lg border border-border bg-secondary text-foreground min-w-[140px]">
-                  <span>All Customers</span>
-                  <ArrowDown01Icon size={13} className="text-muted-foreground" />
-                </div>
               </div>
 
               {/* Clear Filters — always visible */}
@@ -1119,14 +1089,6 @@ export default function Home() {
           {error && (
             <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">{error}</div>
           )}
-
-          {/* ── Commercial Action Center ── */}
-          <CommercialActionCenter
-            predictive={predictive}
-            loading={predictiveLoading}
-            onSelectCustomer={setSelectedRisk}
-            comparisonLabel={comparisonLabel}
-          />
 
           {/* ── Performance Trends ── */}
           <div className="space-y-3">
@@ -1415,6 +1377,14 @@ export default function Home() {
             </div>
 
           </div>
+
+          {/* ── Commercial Action Center ── */}
+          <CommercialActionCenter
+            predictive={predictive}
+            loading={predictiveLoading}
+            onSelectCustomer={setSelectedRisk}
+            comparisonLabel={comparisonLabel}
+          />
 
           {/* ── Insight Bar ── */}
           {insightText && (

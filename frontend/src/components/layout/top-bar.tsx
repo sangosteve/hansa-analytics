@@ -69,9 +69,10 @@ function DateRangePicker({ compact = false }: { compact?: boolean }) {
   }
 
   const PRESETS = [
-    { label: "7d",  action: () => setDateRange(nDaysAgo(7),   today()) },
-    { label: "30d", action: () => setDateRange(nDaysAgo(30),  today()) },
-    { label: "90d", action: () => setDateRange(nDaysAgo(90),  today()) },
+    { label: "Today", action: () => setDateRange(today(), today()) },
+    { label: "7d",    action: () => setDateRange(nDaysAgo(7),   today()) },
+    { label: "30d",   action: () => setDateRange(nDaysAgo(30),  today()) },
+    { label: "90d",   action: () => setDateRange(nDaysAgo(90),  today()) },
     {
       label: "MTD",
       action: () => {
@@ -87,6 +88,21 @@ function DateRangePicker({ compact = false }: { compact?: boolean }) {
       },
     },
   ];
+
+  const activePreset = (() => {
+    if (isAllTime) return "All";
+    const t = today();
+    if (!from || !to) return null;
+    if (from === t && to === t) return "Today";
+    if (from === nDaysAgo(7) && to === t) return "7d";
+    if (from === nDaysAgo(30) && to === t) return "30d";
+    if (from === nDaysAgo(90) && to === t) return "90d";
+    const d1 = new Date(); d1.setDate(1);
+    if (from === d1.toISOString().slice(0, 10) && to === t) return "MTD";
+    const d2 = new Date(); d2.setMonth(0); d2.setDate(1);
+    if (from === d2.toISOString().slice(0, 10) && to === t) return "YTD";
+    return null;
+  })();
 
   if (compact) {
     return (
@@ -116,15 +132,19 @@ function DateRangePicker({ compact = false }: { compact?: boolean }) {
             <button
               key={p.label}
               onClick={p.action}
-              className="h-7 px-2.5 text-xs rounded-md border border-border bg-secondary text-muted-foreground hover:text-foreground hover:bg-accent/30 transition-colors"
+              className={`h-7 px-2.5 text-xs rounded-md border font-medium transition-colors ${
+                activePreset === p.label
+                  ? "border-primary/60 bg-primary/10 text-primary"
+                  : "border-border bg-secondary text-muted-foreground hover:text-foreground hover:bg-accent/30"
+              }`}
             >
               {p.label}
             </button>
           ))}
           <button
             onClick={resetDateRange}
-            className={`h-7 px-2.5 text-xs rounded-md border transition-colors ${
-              isAllTime
+            className={`h-7 px-2.5 text-xs rounded-md border font-medium transition-colors ${
+              activePreset === "All"
                 ? "border-primary/60 bg-primary/10 text-primary"
                 : "border-border bg-secondary text-muted-foreground hover:text-foreground hover:bg-accent/30"
             }`}
@@ -155,20 +175,24 @@ function DateRangePicker({ compact = false }: { compact?: boolean }) {
           onChange={handleTo}
           className="h-7 px-2 text-xs rounded border border-border bg-secondary text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50 w-[130px]"
         />
-        <div className="flex items-center gap-1 ml-0.5">
+        <div className="flex items-center gap-1 ml-1">
           {PRESETS.map((p) => (
             <button
               key={p.label}
               onClick={p.action}
-              className="h-5 px-1.5 text-[10px] rounded border border-border bg-secondary text-muted-foreground hover:text-foreground hover:bg-accent/30 transition-colors"
+              className={`h-6 px-2 text-[10px] rounded border font-medium transition-colors ${
+                activePreset === p.label
+                  ? "border-primary/60 bg-primary/10 text-primary"
+                  : "border-border bg-secondary text-muted-foreground hover:text-foreground hover:bg-accent/30"
+              }`}
             >
               {p.label}
             </button>
           ))}
           <button
             onClick={resetDateRange}
-            className={`h-5 px-1.5 text-[10px] rounded border transition-colors ${
-              isAllTime
+            className={`h-6 px-2 text-[10px] rounded border font-medium transition-colors ${
+              activePreset === "All"
                 ? "border-primary/60 bg-primary/10 text-primary"
                 : "border-border bg-secondary text-muted-foreground hover:text-foreground hover:bg-accent/30"
             }`}
