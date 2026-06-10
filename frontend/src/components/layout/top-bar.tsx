@@ -175,24 +175,15 @@ function DateRangePicker({ compact = false }: { compact?: boolean }) {
             />
           </div>
         </div>
-        <div className="flex flex-col gap-1">
-          <span className="text-[10px] text-muted-foreground">Period</span>
-          <PeriodDropdown activePeriod={activePeriod} onSelect={handleSelectPeriod} compact />
-        </div>
       </div>
     );
   }
 
   return (
     <div className="flex flex-col gap-1 min-w-0">
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-[9px] uppercase tracking-widest font-semibold text-muted-foreground/55 leading-none">
-          Date Range
-        </p>
-        <p className="text-[9px] uppercase tracking-widest font-semibold text-muted-foreground/55 leading-none">
-          Period
-        </p>
-      </div>
+      <p className="text-[9px] uppercase tracking-widest font-semibold text-muted-foreground/55 leading-none">
+        Date Range
+      </p>
       <div className="flex items-center gap-1.5">
         <input
           type="date" value={from} onChange={handleFrom}
@@ -203,7 +194,6 @@ function DateRangePicker({ compact = false }: { compact?: boolean }) {
           type="date" value={to} onChange={handleTo}
           className="h-7 px-2 text-xs rounded border border-border bg-secondary text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50 w-[118px]"
         />
-        <PeriodDropdown activePeriod={activePeriod} onSelect={handleSelectPeriod} />
       </div>
     </div>
   );
