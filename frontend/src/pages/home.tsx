@@ -204,6 +204,10 @@ export default function Home() {
   const [growthView, setGrowthView] = useState<"YoY %" | "Volume">("YoY %");
   const [quarterlyView, setQuarterlyView] = useState<"Quarterly" | "Half Year">("Quarterly");
   const [productSort, setProductSort] = useState<"By Growth" | "By Volume">("By Growth");
+  const [chartPeriod, setChartPeriod] = useState<"MTD" | "QTD" | "YTD">("MTD");
+  const [chartDailySales, setChartDailySales] = useState<DailySalesRow[] | null>(null);
+  const [chartCompDailySales, setChartCompDailySales] = useState<DailySalesRow[] | null>(null);
+  const [chartDailyLoading, setChartDailyLoading] = useState(false);
 
   const loadFiltered = async () => {
     setLoading(true);
@@ -253,6 +257,23 @@ export default function Home() {
     }
   };
 
+  const loadChartDailySales = async (from: string, to: string) => {
+    setChartDailyLoading(true);
+    try {
+      const { from: compFrom, to: compTo } = getComparisonPeriod(from, to, "same_period_ly");
+      const [cur, comp] = await Promise.all([
+        getDailySales(from, to, companyNos, saleScope),
+        getDailySales(compFrom, compTo, companyNos, saleScope),
+      ]);
+      setChartDailySales(cur);
+      setChartCompDailySales(comp);
+    } catch {
+      // non-critical
+    } finally {
+      setChartDailyLoading(false);
+    }
+  };
+
   const loadMom = async () => {
     setMomLoading(true);
     try {
@@ -289,10 +310,25 @@ export default function Home() {
   useEffect(() => { loadMom(); loadMovSummary(); }, [JSON.stringify(companyNos), saleScope]);
   useEffect(() => { loadFreshness(); }, []);
   useEffect(() => {
-    const year = new Date(dateFrom + "T00:00:00").getFullYear();
-    getTargets(year).then(setTargets).catch(() => {});
+    getTargets(new Date().getFullYear()).then(setTargets).catch(() => {});
+  }, []);
+
+  // Chart-specific daily data — independent of global date range
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [new Date(dateFrom + "T00:00:00").getFullYear()]);
+  useEffect(() => {
+    const today = new Date();
+    const todayISO = today.toISOString().slice(0, 10);
+    let from: string;
+    if (chartPeriod === "MTD") {
+      from = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-01`;
+    } else if (chartPeriod === "QTD") {
+      const qm = Math.floor(today.getMonth() / 3) * 3;
+      from = `${today.getFullYear()}-${String(qm + 1).padStart(2, "0")}-01`;
+    } else {
+      from = `${today.getFullYear()}-01-01`;
+    }
+    loadChartDailySales(from, todayISO);
+  }, [chartPeriod, JSON.stringify(companyNos), saleScope]);
 
   useEffect(() => {
     const handler = () => {
@@ -634,6 +670,117 @@ export default function Home() {
       _diffPct: diffPct,
     };
   }, [dailySales, compDailySales, dateFrom, dateTo, comparisonMode]);
+
+  // ── Chart-specific daily comparison (isolated from global date range) ───────
+  const { chartFrom, chartTo } = useMemo(() => {
+    const today = new Date();
+    const todayISO = today.toISOString().slice(0, 10);
+    if (chartPeriod === "MTD") {
+      return { chartFrom: `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-01`, chartTo: todayISO };
+    } else if (chartPeriod === "QTD") {
+      const qm = Math.floor(today.getMonth() / 3) * 3;
+      return { chartFrom: `${today.getFullYear()}-${String(qm + 1).padStart(2, "0")}-01`, chartTo: todayISO };
+    }
+    return { chartFrom: `${today.getFullYear()}-01-01`, chartTo: todayISO };
+  }, [chartPeriod]);
+
+  const chartThisYearLabel = useMemo(() => {
+    const d = new Date(chartFrom + "T00:00:00");
+    return `${monthLabels[d.getMonth()]} ${d.getFullYear()}`;
+  }, [chartFrom]);
+
+  const chartLastYearLabel = useMemo(() => {
+    const { from: compFrom } = getComparisonPeriod(chartFrom, chartTo, "same_period_ly");
+    const d = new Date(compFrom + "T00:00:00");
+    return `${monthLabels[d.getMonth()]} ${d.getFullYear()}`;
+  }, [chartFrom, chartTo]);
+
+  const chartDailyComparisonOptions = useMemo(() => {
+    if (!chartDailySales || !chartCompDailySales) return null;
+    if (chartDailySales.length === 0 && chartCompDailySales.length === 0) return null;
+    const msPerDay = 86400000;
+    const fromDate = new Date(chartFrom + "T00:00:00");
+    const toDate = new Date(chartTo + "T00:00:00");
+    const totalDays = Math.round((toDate.getTime() - fromDate.getTime()) / msPerDay) + 1;
+    const { from: compFrom } = getComparisonPeriod(chartFrom, chartTo, "same_period_ly");
+    const compFromDate = new Date(compFrom + "T00:00:00");
+    const curMap = new Map(chartDailySales.map(r => [r.date, r.cumulative_tonnes]));
+    const compMap = new Map(chartCompDailySales.map(r => [r.date, r.cumulative_tonnes]));
+    const xLabels: string[] = [];
+    const curData: (number | null)[] = [];
+    const compData: (number | null)[] = [];
+    let lastCur = 0, lastComp = 0;
+    const maxCurDay = chartDailySales.length > 0
+      ? Math.round((new Date(chartDailySales[chartDailySales.length - 1].date + "T00:00:00").getTime() - fromDate.getTime()) / msPerDay)
+      : -1;
+    const maxCompDay = chartCompDailySales.length > 0
+      ? Math.round((new Date(chartCompDailySales[chartCompDailySales.length - 1].date + "T00:00:00").getTime() - compFromDate.getTime()) / msPerDay)
+      : -1;
+    for (let i = 0; i < totalDays; i++) {
+      const curDate = new Date(fromDate.getTime() + i * msPerDay);
+      const compDate = new Date(compFromDate.getTime() + i * msPerDay);
+      const curKey = curDate.toISOString().slice(0, 10);
+      const compKey = compDate.toISOString().slice(0, 10);
+      xLabels.push(`${String(curDate.getDate()).padStart(2)} ${monthLabels[curDate.getMonth()]}`);
+      if (curMap.has(curKey)) lastCur = curMap.get(curKey)!;
+      if (compMap.has(compKey)) lastComp = compMap.get(compKey)!;
+      curData.push(i <= maxCurDay ? lastCur : null);
+      compData.push(i <= maxCompDay ? lastComp : null);
+    }
+    const curFinal = curData.filter(v => v !== null);
+    const compFinal = compData.filter(v => v !== null);
+    const curEnd = curFinal.length > 0 ? curFinal[curFinal.length - 1] as number : 0;
+    const compEnd = compFinal.length > 0 ? compFinal[compFinal.length - 1] as number : 0;
+    const diffPct = compEnd > 0 ? ((curEnd - compEnd) / compEnd) * 100 : null;
+    return {
+      ...darkChartBase,
+      tooltip: {
+        ...darkChartBase.tooltip, trigger: "axis",
+        // @ts-ignore
+        formatter: (params) => params.filter(item => item.value != null)
+          // @ts-ignore
+          .map(item => `${item.seriesName}: ${numberFormatter.format(item.value)} t`).join("<br />"),
+      },
+      legend: { show: false },
+      grid: { left: "8%", right: "5%", bottom: "12%", top: "10%" },
+      xAxis: {
+        type: "category", data: xLabels,
+        axisLine: { lineStyle: { color: "#30363d" } },
+        axisLabel: { color: "#8b949e", fontSize: 9, interval: Math.max(1, Math.floor(totalDays / 8) - 1) },
+        splitLine: { show: false },
+      },
+      yAxis: {
+        type: "value",
+        axisLabel: { color: "#8b949e", fontSize: 9, formatter: (v: number) => `${v} t` },
+        splitLine: { lineStyle: { color: "#21262d" } },
+      },
+      series: [
+        {
+          name: "This Year", type: "line", data: curData, connectNulls: false, smooth: false,
+          lineStyle: { width: 2.5, color: "#34d399" }, itemStyle: { color: "#34d399" },
+          showSymbol: true, symbol: "circle", symbolSize: 5,
+          label: { show: true, position: "top", fontSize: 8.5, color: "#34d399",
+            // @ts-ignore
+            formatter: (p: any) => p.value != null ? `${numberFormatter.format(p.value)}` : "" },
+          areaStyle: { color: { type: "linear", x: 0, y: 0, x2: 0, y2: 1,
+            colorStops: [{ offset: 0, color: "#34d39930" }, { offset: 1, color: "transparent" }] } },
+          endLabel: { show: false },
+        },
+        {
+          name: "Last Year", type: "line", data: compData, connectNulls: false, smooth: false,
+          lineStyle: { width: 1.5, color: "#6b7280", type: "dashed" }, itemStyle: { color: "#6b7280" },
+          showSymbol: false,
+          label: { show: true, position: "bottom", fontSize: 8, color: "#6b7280",
+            // @ts-ignore
+            formatter: (p: any) => p.value != null ? `${numberFormatter.format(p.value)}` : "" },
+          endLabel: { show: false },
+        },
+      ],
+      _curEnd: curEnd,
+      _compEnd: compEnd,
+      _diffPct: diffPct,
+    };
+  }, [chartDailySales, chartCompDailySales, chartFrom, chartTo]);
 
   // ── Monthly comparison chart ───────────────────────────────────────────────
   const monthlyComparisonOptions = useMemo(() => ({
@@ -1068,18 +1215,25 @@ export default function Home() {
   }, [halfYearData, currentYear, previousYear]);
 
   const currentMonthTarget = useMemo(() => {
-    const d = new Date(dateFrom + "T00:00:00");
-    const year = d.getFullYear();
-    const month = d.getMonth() + 1;
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = today.getMonth() + 1;
     const singleCompany = companyNos.length === 1 && !companyNos.includes("all") ? companyNos[0] : null;
     return (
+      // Exact match: company + scope
       targets.find(t => t.year === year && t.month === month && t.company_no === singleCompany && t.scope === saleScope) ??
+      // Global company + exact scope
       targets.find(t => t.year === year && t.month === month && t.company_no === null && t.scope === saleScope) ??
+      // Company + "all" scope
       targets.find(t => t.year === year && t.month === month && t.company_no === singleCompany && t.scope === "all") ??
+      // Global company + "all" scope
       targets.find(t => t.year === year && t.month === month && t.company_no === null && t.scope === "all") ??
+      // Best available: any target for this month (company-specific first)
+      targets.find(t => t.year === year && t.month === month && t.company_no === singleCompany) ??
+      targets.find(t => t.year === year && t.month === month && t.company_no === null) ??
       null
     );
-  }, [targets, dateFrom, companyNos, saleScope]);
+  }, [targets, companyNos, saleScope]);
 
   const divisionChartOptions = useMemo(() => {
     if (!divisionBreakdown.length) return null;
@@ -1296,57 +1450,39 @@ export default function Home() {
             {/* Row 1: Daily Comparison + Cumulative YTD */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
 
-              {/* MTD Daily Comparison */}
+              {/* Daily Comparison — has its own period filter, independent of header date range */}
               <div className="rounded-xl border border-border bg-card p-4">
                 <div className="flex items-start justify-between mb-2 gap-2">
                   <div>
                     <h3 className="text-[13px] font-semibold text-foreground">
-                      {showDailyChart
-                        ? `${filterPeriodLabel || "Period"} Daily Comparison (Tonnes)`
-                        : "Monthly Comparison (Tonnes)"}
+                      {chartPeriod} Daily Comparison (Tonnes)
                     </h3>
                     <div className="flex items-center gap-3 mt-1">
                       <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                        <span className="inline-block w-3 h-[2px] rounded bg-emerald-400" /> This Year ({dailyThisYearLabel})
+                        <span className="inline-block w-3 h-[2px] rounded bg-emerald-400" /> This Year ({chartThisYearLabel})
                       </span>
                       <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                        <span className="inline-block w-3 border-t border-dashed border-muted-foreground" /> Last Year ({dailyLastYearLabel})
+                        <span className="inline-block w-3 border-t border-dashed border-muted-foreground" /> Last Year ({chartLastYearLabel})
                       </span>
                     </div>
                   </div>
                   <DropdownBadge
-                    value={["MTD","QTD","YTD"].includes(filterPeriodLabel) ? filterPeriodLabel : "MTD"}
+                    value={chartPeriod}
                     options={[{ value: "MTD" }, { value: "QTD" }, { value: "YTD" }]}
-                    onChange={(v) => {
-                      const today = new Date();
-                      const todayISO = today.toISOString().slice(0, 10);
-                      if (v === "MTD") {
-                        setDateRange(`${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-01`, todayISO);
-                      } else if (v === "QTD") {
-                        const qm = Math.floor(today.getMonth() / 3) * 3;
-                        setDateRange(`${today.getFullYear()}-${String(qm + 1).padStart(2, "0")}-01`, todayISO);
-                      } else {
-                        setDateRange(`${today.getFullYear()}-01-01`, todayISO);
-                      }
-                    }}
+                    onChange={(v) => setChartPeriod(v as "MTD" | "QTD" | "YTD")}
                   />
                 </div>
                 <div className="h-[220px]">
-                  {showDailyChart
-                    ? (dailyLoading ? loadingOverlay : dailyComparisonOptions ? (
-                        <ReactECharts option={dailyComparisonOptions} style={{ width: "100%", height: "100%" }} notMerge lazyUpdate />
-                      ) : (
-                        <div className="flex h-full items-center justify-center text-muted-foreground/50 text-xs">No daily data for this range</div>
-                      ))
-                    : (momLoading ? loadingOverlay : (
-                        <ReactECharts option={monthlyComparisonOptions} style={{ width: "100%", height: "100%" }} notMerge lazyUpdate />
-                      ))
-                  }
+                  {chartDailyLoading ? loadingOverlay : chartDailyComparisonOptions ? (
+                    <ReactECharts option={chartDailyComparisonOptions} style={{ width: "100%", height: "100%" }} notMerge lazyUpdate />
+                  ) : (
+                    <div className="flex h-full items-center justify-center text-muted-foreground/50 text-xs">No daily data for this range</div>
+                  )}
                 </div>
-                {showDailyChart && dailyComparisonOptions && (() => {
-                  const curEnd = (dailyComparisonOptions as any)._curEnd ?? 0;
-                  const compEnd = (dailyComparisonOptions as any)._compEnd ?? 0;
-                  const diffPct = (dailyComparisonOptions as any)._diffPct;
+                {chartDailyComparisonOptions && (() => {
+                  const curEnd = (chartDailyComparisonOptions as any)._curEnd ?? 0;
+                  const compEnd = (chartDailyComparisonOptions as any)._compEnd ?? 0;
+                  const diffPct = (chartDailyComparisonOptions as any)._diffPct;
                   const diff = curEnd - compEnd;
                   return (
                     <div className="mt-3 pt-3 border-t border-border/40 flex items-center justify-between gap-4 text-[12px]">
