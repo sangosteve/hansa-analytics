@@ -695,14 +695,11 @@ export default function Home() {
     const totalDays = Math.round((toDate.getTime() - fromDate.getTime()) / msPerDay) + 1;
     const { from: compFrom } = getComparisonPeriod(chartFrom, chartTo, "same_period_ly");
     const compFromDate = new Date(compFrom + "T00:00:00");
-    const curMap = new Map(chartDailySales.map(r => [r.date, r.cumulative_tonnes]));
-    const compMap = new Map(chartCompDailySales.map(r => [r.date, r.cumulative_tonnes]));
     const curDailyMap = new Map(chartDailySales.map(r => [r.date, r.tonnes]));
+    const compDailyMap = new Map(chartCompDailySales.map(r => [r.date, r.tonnes]));
     const xLabels: string[] = [];
     const curData: (number | null)[] = [];
     const compData: (number | null)[] = [];
-    const curDailyPoints: (number | null)[] = [];
-    let lastCur = 0, lastComp = 0;
     const maxCurDay = chartDailySales.length > 0
       ? Math.round((new Date(chartDailySales[chartDailySales.length - 1].date + "T00:00:00").getTime() - fromDate.getTime()) / msPerDay)
       : -1;
@@ -715,28 +712,23 @@ export default function Home() {
       const curKey = curDate.toISOString().slice(0, 10);
       const compKey = compDate.toISOString().slice(0, 10);
       xLabels.push(`${String(curDate.getDate()).padStart(2)} ${monthLabels[curDate.getMonth()]}`);
-      if (curMap.has(curKey)) lastCur = curMap.get(curKey)!;
-      if (compMap.has(compKey)) lastComp = compMap.get(compKey)!;
-      curData.push(i <= maxCurDay ? lastCur : null);
-      compData.push(i <= maxCompDay ? lastComp : null);
-      curDailyPoints.push(i <= maxCurDay ? (curDailyMap.get(curKey) ?? 0) : null);
+      curData.push(i <= maxCurDay ? (curDailyMap.get(curKey) ?? 0) : null);
+      compData.push(i <= maxCompDay ? (compDailyMap.get(compKey) ?? 0) : null);
     }
-    const curFinal = curData.filter(v => v !== null);
-    const compFinal = compData.filter(v => v !== null);
-    const curEnd = curFinal.length > 0 ? curFinal[curFinal.length - 1] as number : 0;
-    const compEnd = compFinal.length > 0 ? compFinal[compFinal.length - 1] as number : 0;
+    const curEnd = chartDailySales.reduce((s, r) => s + r.tonnes, 0);
+    const compEnd = chartCompDailySales.reduce((s, r) => s + r.tonnes, 0);
     const diffPct = compEnd > 0 ? ((curEnd - compEnd) / compEnd) * 100 : null;
     return {
       ...darkChartBase,
       tooltip: {
         ...darkChartBase.tooltip, trigger: "axis",
         // @ts-ignore
-        formatter: (params) => params.filter(item => item.value != null)
+        formatter: (params) => params.filter(item => item.value != null && item.value > 0)
           // @ts-ignore
           .map(item => `${item.seriesName}: ${numberFormatter.format(item.value)} t`).join("<br />"),
       },
       legend: { show: false },
-      grid: { left: "8%", right: "5%", bottom: "12%", top: "10%" },
+      grid: { left: "8%", right: "8%", bottom: "12%", top: "10%" },
       xAxis: {
         type: "category", data: xLabels,
         axisLine: { lineStyle: { color: "#30363d" } },
@@ -748,24 +740,25 @@ export default function Home() {
         axisLabel: { color: "#8b949e", fontSize: 9, formatter: (v: number) => `${v} t` },
         splitLine: { lineStyle: { color: "#21262d" } },
       },
+      graphic: curEnd > 0 ? [{
+        type: "group", right: 10, top: 6,
+        children: [
+          { type: "rect", z: 100, shape: { width: 100, height: 18, r: 3 }, style: { fill: "#34d39915", stroke: "#34d39940", lineWidth: 1 } },
+          { type: "text", z: 101, style: { text: `Total: ${numberFormatter.format(Math.round(curEnd * 100) / 100)} t`, fill: "#34d399", fontSize: 9, fontWeight: "bold", x: 7, y: 3 } },
+        ]
+      }] : [],
       series: [
         {
-          name: "This Year", type: "line", data: curData, connectNulls: false, smooth: false,
-          lineStyle: { width: 2.5, color: "#34d399" }, itemStyle: { color: "#34d399" },
-          showSymbol: true, symbol: "circle", symbolSize: 5,
-          label: { show: true, position: "top", fontSize: 8.5, color: "#34d399",
+          name: "This Year", type: "bar", data: curData, barMaxWidth: 18,
+          itemStyle: { color: "#34d399", borderRadius: [3, 3, 0, 0] },
+          label: { show: true, position: "top", fontSize: 8, color: "#34d399",
             // @ts-ignore
-            formatter: (p: any) => { const d = curDailyPoints[p.dataIndex]; return d != null && d > 0 ? numberFormatter.format(d) : ""; } },
-          areaStyle: { color: { type: "linear", x: 0, y: 0, x2: 0, y2: 1,
-            colorStops: [{ offset: 0, color: "#34d39930" }, { offset: 1, color: "transparent" }] } },
-          endLabel: { show: false },
+            formatter: (p: any) => p.value != null && p.value > 0 ? numberFormatter.format(p.value) : "" },
         },
         {
-          name: "Last Year", type: "line", data: compData, connectNulls: false, smooth: false,
-          lineStyle: { width: 1.5, color: "#6b7280", type: "dashed" }, itemStyle: { color: "#6b7280" },
-          showSymbol: false,
+          name: "Last Year", type: "bar", data: compData, barMaxWidth: 18,
+          itemStyle: { color: "#6b728045", borderRadius: [3, 3, 0, 0] },
           label: { show: false },
-          endLabel: { show: false },
         },
       ],
       _curEnd: curEnd,
