@@ -38,6 +38,7 @@ import {
   buildComparisonModeLabel,
   type ComparisonMode,
 } from "@/lib/comparison-utils";
+import { computeActivePeriod } from "@/lib/period-utils";
 import { useCompany } from "@/lib/company-context";
 import { CustomerDrilldownModal } from "@/components/home/customer-drilldown-modal";
 
@@ -1449,14 +1450,21 @@ export default function Home() {
             {/* Comparison banner */}
             <div className="flex items-center gap-2.5 px-4 py-2.5 rounded-xl border border-primary/15 bg-primary/5 text-[12px]">
               <span className="flex-shrink-0 h-5 w-5 rounded-full bg-primary/15 text-primary font-bold flex items-center justify-center text-[11px] leading-none">i</span>
-              <span className="text-muted-foreground flex-1">
-                All comparisons are for the same period:{" "}
-                <span className="text-primary font-medium">
+              <span className="text-muted-foreground flex-1 min-w-0">
+                <span className="text-primary font-semibold">{computeActivePeriod(dateFrom, dateTo)}</span>
+                <span className="mx-1.5 text-muted-foreground/40">·</span>
+                <span className="text-muted-foreground/70">
+                  {comparisonMode === "previous_period"
+                    ? "same-length prior period:"
+                    : "same equivalent period last year:"}
+                </span>
+                {" "}
+                <span className="text-foreground/85 font-medium">
                   {getComparisonBannerText(dateFrom, dateTo, comparisonMode)}
                 </span>
               </span>
               <button
-                className="flex-shrink-0 text-primary/70 hover:text-primary transition-colors whitespace-nowrap"
+                className="flex-shrink-0 text-primary/60 hover:text-primary transition-colors whitespace-nowrap text-[11px]"
                 title="Same-period comparison aligns both periods to the same calendar days so you compare like-for-like, not a partial month against a full month."
               >
                 Why same-period comparison? ⓘ
