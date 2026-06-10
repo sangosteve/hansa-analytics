@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useLocation } from "wouter";
 import {
   Building01Icon,
@@ -39,167 +39,271 @@ const PAGE_TITLES: Record<string, string> = {
   "/settings": "Settings",
 };
 
-function today() {
-  return new Date().toISOString().slice(0, 10);
+// ── Date helpers ──────────────────────────────────────────────────────────────
+function toISO(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+function todayISO(): string {
+  return toISO(new Date());
+}
+function yesterdayISO(): string {
+  const d = new Date(); d.setDate(d.getDate() - 1); return toISO(d);
+}
+function nDaysAgo(n: number): string {
+  const d = new Date(); d.setDate(d.getDate() - n); return toISO(d);
+}
+function startOfWeekISO(): string {
+  const d = new Date();
+  const day = d.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  d.setDate(d.getDate() + diff);
+  return toISO(d);
+}
+function endOfLastWeekISO(): string {
+  const d = new Date();
+  const day = d.getDay();
+  d.setDate(d.getDate() + (day === 0 ? -7 : -day));
+  return toISO(d);
+}
+function startOfLastWeekISO(): string {
+  const d = new Date(endOfLastWeekISO());
+  d.setDate(d.getDate() - 6);
+  return toISO(d);
+}
+function startOfMonthISO(): string {
+  const d = new Date(); return toISO(new Date(d.getFullYear(), d.getMonth(), 1));
+}
+function startOfLastMonthISO(): string {
+  const d = new Date(); return toISO(new Date(d.getFullYear(), d.getMonth() - 1, 1));
+}
+function endOfLastMonthISO(): string {
+  const d = new Date(); return toISO(new Date(d.getFullYear(), d.getMonth(), 0));
+}
+function startOfQuarterISO(): string {
+  const d = new Date();
+  return toISO(new Date(d.getFullYear(), Math.floor(d.getMonth() / 3) * 3, 1));
+}
+function endOfLastQuarterISO(): string {
+  const d = new Date();
+  return toISO(new Date(d.getFullYear(), Math.floor(d.getMonth() / 3) * 3, 0));
+}
+function startOfLastQuarterISO(): string {
+  const d = new Date(endOfLastQuarterISO());
+  return toISO(new Date(d.getFullYear(), Math.floor(d.getMonth() / 3) * 3, 1));
+}
+function startOfYearISO(): string {
+  return toISO(new Date(new Date().getFullYear(), 0, 1));
+}
+function startOfLastYearISO(): string {
+  return toISO(new Date(new Date().getFullYear() - 1, 0, 1));
+}
+function endOfLastYearISO(): string {
+  return toISO(new Date(new Date().getFullYear() - 1, 11, 31));
 }
 
-function nDaysAgo(n: number) {
-  const d = new Date();
-  d.setDate(d.getDate() - n);
-  return d.toISOString().slice(0, 10);
+// ── Period presets ────────────────────────────────────────────────────────────
+function getPeriodPresets(): Record<string, { from: string; to: string }> {
+  const t = todayISO();
+  return {
+    "Today":          { from: t, to: t },
+    "Yesterday":      { from: yesterdayISO(), to: yesterdayISO() },
+    "This Week":      { from: startOfWeekISO(), to: t },
+    "Last Week":      { from: startOfLastWeekISO(), to: endOfLastWeekISO() },
+    "This Month":     { from: startOfMonthISO(), to: t },
+    "Last Month":     { from: startOfLastMonthISO(), to: endOfLastMonthISO() },
+    "This Quarter":   { from: startOfQuarterISO(), to: t },
+    "Last Quarter":   { from: startOfLastQuarterISO(), to: endOfLastQuarterISO() },
+    "This Year":      { from: startOfYearISO(), to: t },
+    "Last Year":      { from: startOfLastYearISO(), to: endOfLastYearISO() },
+    "Rolling 7 Days": { from: nDaysAgo(6), to: t },
+    "Rolling 30 Days":{ from: nDaysAgo(29), to: t },
+    "Rolling 90 Days":{ from: nDaysAgo(89), to: t },
+    "All Time":       { from: "2020-01-01", to: "2030-12-31" },
+  };
+}
+
+const PERIOD_GROUPS = [
+  {
+    group: "Preset Periods",
+    items: ["Today", "Yesterday", "This Week", "Last Week", "This Month", "Last Month", "This Quarter", "Last Quarter", "This Year", "Last Year"],
+  },
+  {
+    group: "Rolling Periods",
+    items: ["Rolling 7 Days", "Rolling 30 Days", "Rolling 90 Days"],
+  },
+  {
+    group: "Other",
+    items: ["All Time", "Custom Range"],
+  },
+];
+
+function computeActivePeriod(from: string, to: string): string {
+  if (!from || !to) return "Custom Range";
+  const presets = getPeriodPresets();
+  for (const [label, preset] of Object.entries(presets)) {
+    if (preset.from === from && preset.to === to) return label;
+  }
+  const msPerDay = 86_400_000;
+  const days = Math.round((new Date(to).getTime() - new Date(from).getTime()) / msPerDay) + 1;
+  return `Custom Range · ${days} day${days !== 1 ? "s" : ""}`;
+}
+
+// ── Period Dropdown ───────────────────────────────────────────────────────────
+function PeriodDropdown({
+  activePeriod,
+  onSelect,
+  compact = false,
+}: {
+  activePeriod: string;
+  onSelect: (label: string) => void;
+  compact?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const isCustom = activePeriod.startsWith("Custom Range");
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  return (
+    <div ref={ref} className={`relative ${compact ? "w-full" : "flex-shrink-0"}`}>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className={`flex items-center gap-1.5 font-medium transition-colors ${
+          compact
+            ? "w-full justify-between h-9 px-3 rounded-md border border-primary/40 bg-primary/10 text-primary text-xs"
+            : "h-7 px-2.5 rounded border border-primary/40 bg-primary/10 text-primary text-[10.5px] min-w-[130px] max-w-[200px]"
+        }`}
+      >
+        <span className="truncate flex-1 text-left">{activePeriod}</span>
+        <ArrowDown01Icon
+          size={compact ? 12 : 11}
+          className={`flex-shrink-0 text-primary/70 transition-transform ${open ? "rotate-180" : ""}`}
+        />
+      </button>
+      {open && (
+        <div
+          className={`absolute z-50 rounded-lg border border-border bg-card shadow-xl py-1 max-h-80 overflow-y-auto ${
+            compact ? "left-0 right-0 top-10" : "right-0 top-8 min-w-[200px]"
+          }`}
+        >
+          {PERIOD_GROUPS.map((g, gi) => (
+            <div key={g.group}>
+              <div
+                className={`px-3 py-1 text-[9px] uppercase tracking-widest text-muted-foreground/50 font-semibold ${
+                  gi > 0 ? "border-t border-border/40 mt-0.5 pt-1.5" : ""
+                }`}
+              >
+                {g.group}
+              </div>
+              {g.items.map((item) => {
+                const isActive = activePeriod === item || (item === "Custom Range" && isCustom);
+                return (
+                  <button
+                    key={item}
+                    onClick={() => { onSelect(item); setOpen(false); }}
+                    className={`w-full text-left px-3 py-1.5 text-[11px] transition-colors ${
+                      isActive
+                        ? "text-primary font-semibold bg-primary/5"
+                        : "text-foreground hover:bg-muted"
+                    }`}
+                  >
+                    {item}
+                  </button>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ── Date Range Picker ─────────────────────────────────────────────────────────
 function DateRangePicker({ compact = false }: { compact?: boolean }) {
-  const { dateFrom, dateTo, setDateRange, resetDateRange, isAllTime } = useCompany();
+  const { dateFrom, dateTo, setDateRange, resetDateRange } = useCompany();
 
   const from = dateFrom ?? "";
   const to   = dateTo   ?? "";
 
+  const activePeriod = computeActivePeriod(from, to);
+
   function handleFrom(e: React.ChangeEvent<HTMLInputElement>) {
     const val = e.target.value;
     if (val && to && val <= to) setDateRange(val, to);
-    else if (val) setDateRange(val, to || today());
+    else if (val) setDateRange(val, to || todayISO());
   }
 
   function handleTo(e: React.ChangeEvent<HTMLInputElement>) {
     const val = e.target.value;
     if (val && from && val >= from) setDateRange(from, val);
-    else if (val) setDateRange(from || nDaysAgo(30), val);
+    else if (val) setDateRange(from || nDaysAgo(29), val);
   }
 
-  const PRESETS = [
-    { label: "Today", action: () => setDateRange(today(), today()) },
-    { label: "7d",    action: () => setDateRange(nDaysAgo(7),   today()) },
-    { label: "30d",   action: () => setDateRange(nDaysAgo(30),  today()) },
-    { label: "90d",   action: () => setDateRange(nDaysAgo(90),  today()) },
-    {
-      label: "MTD",
-      action: () => {
-        const d = new Date(); d.setDate(1);
-        setDateRange(d.toISOString().slice(0, 10), today());
-      },
-    },
-    {
-      label: "YTD",
-      action: () => {
-        const d = new Date(); d.setMonth(0); d.setDate(1);
-        setDateRange(d.toISOString().slice(0, 10), today());
-      },
-    },
-  ];
-
-  const activePreset = (() => {
-    if (isAllTime) return "All";
-    const t = today();
-    if (!from || !to) return null;
-    if (from === t && to === t) return "Today";
-    if (from === nDaysAgo(7) && to === t) return "7d";
-    if (from === nDaysAgo(30) && to === t) return "30d";
-    if (from === nDaysAgo(90) && to === t) return "90d";
-    const d1 = new Date(); d1.setDate(1);
-    if (from === d1.toISOString().slice(0, 10) && to === t) return "MTD";
-    const d2 = new Date(); d2.setMonth(0); d2.setDate(1);
-    if (from === d2.toISOString().slice(0, 10) && to === t) return "YTD";
-    return null;
-  })();
+  function handleSelectPeriod(label: string) {
+    if (label === "Custom Range") return;
+    if (label === "All Time") { resetDateRange(); return; }
+    const presets = getPeriodPresets();
+    const preset = presets[label];
+    if (preset) setDateRange(preset.from, preset.to);
+  }
 
   if (compact) {
     return (
       <div className="space-y-3">
         <p className="text-xs font-semibold text-foreground">Date Range</p>
         <div className="flex flex-col gap-2">
-          <input
-            type="date"
-            value={from}
-            onChange={handleFrom}
-            className="h-9 px-3 text-sm rounded-md border border-border bg-secondary text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50 w-full"
-          />
-          <div className="flex items-center gap-2">
-            <div className="h-px flex-1 bg-border" />
-            <span className="text-muted-foreground text-xs">to</span>
-            <div className="h-px flex-1 bg-border" />
+          <div className="flex flex-col gap-1">
+            <span className="text-[10px] text-muted-foreground">From</span>
+            <input
+              type="date" value={from} onChange={handleFrom}
+              className="h-9 px-3 text-sm rounded-md border border-border bg-secondary text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50 w-full"
+            />
           </div>
-          <input
-            type="date"
-            value={to}
-            onChange={handleTo}
-            className="h-9 px-3 text-sm rounded-md border border-border bg-secondary text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50 w-full"
-          />
+          <div className="flex flex-col gap-1">
+            <span className="text-[10px] text-muted-foreground">To</span>
+            <input
+              type="date" value={to} onChange={handleTo}
+              className="h-9 px-3 text-sm rounded-md border border-border bg-secondary text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50 w-full"
+            />
+          </div>
         </div>
-        <div className="flex flex-wrap gap-1.5">
-          {PRESETS.map((p) => (
-            <button
-              key={p.label}
-              onClick={p.action}
-              className={`h-7 px-2.5 text-xs rounded-md border font-medium transition-colors ${
-                activePreset === p.label
-                  ? "border-primary/60 bg-primary/10 text-primary"
-                  : "border-border bg-secondary text-muted-foreground hover:text-foreground hover:bg-accent/30"
-              }`}
-            >
-              {p.label}
-            </button>
-          ))}
-          <button
-            onClick={resetDateRange}
-            className={`h-7 px-2.5 text-xs rounded-md border font-medium transition-colors ${
-              activePreset === "All"
-                ? "border-primary/60 bg-primary/10 text-primary"
-                : "border-border bg-secondary text-muted-foreground hover:text-foreground hover:bg-accent/30"
-            }`}
-          >
-            All
-          </button>
+        <div className="flex flex-col gap-1">
+          <span className="text-[10px] text-muted-foreground">Period</span>
+          <PeriodDropdown activePeriod={activePeriod} onSelect={handleSelectPeriod} compact />
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col gap-1">
-      <p className="text-[9px] uppercase tracking-widest font-semibold text-muted-foreground/55 leading-none">
-        Date Range
-      </p>
+    <div className="flex flex-col gap-1 min-w-0">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-[9px] uppercase tracking-widest font-semibold text-muted-foreground/55 leading-none">
+          Date Range
+        </p>
+        <p className="text-[9px] uppercase tracking-widest font-semibold text-muted-foreground/55 leading-none">
+          Period
+        </p>
+      </div>
       <div className="flex items-center gap-1.5">
         <input
-          type="date"
-          value={from}
-          onChange={handleFrom}
-          className="h-7 px-2 text-xs rounded border border-border bg-secondary text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50 w-[130px]"
+          type="date" value={from} onChange={handleFrom}
+          className="h-7 px-2 text-xs rounded border border-border bg-secondary text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50 w-[118px]"
         />
         <span className="text-muted-foreground text-xs flex-shrink-0">–</span>
         <input
-          type="date"
-          value={to}
-          onChange={handleTo}
-          className="h-7 px-2 text-xs rounded border border-border bg-secondary text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50 w-[130px]"
+          type="date" value={to} onChange={handleTo}
+          className="h-7 px-2 text-xs rounded border border-border bg-secondary text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50 w-[118px]"
         />
-        <div className="flex items-center gap-1 ml-1">
-          {PRESETS.map((p) => (
-            <button
-              key={p.label}
-              onClick={p.action}
-              className={`h-6 px-2 text-[10px] rounded border font-medium transition-colors ${
-                activePreset === p.label
-                  ? "border-primary/60 bg-primary/10 text-primary"
-                  : "border-border bg-secondary text-muted-foreground hover:text-foreground hover:bg-accent/30"
-              }`}
-            >
-              {p.label}
-            </button>
-          ))}
-          <button
-            onClick={resetDateRange}
-            className={`h-6 px-2 text-[10px] rounded border font-medium transition-colors ${
-              activePreset === "All"
-                ? "border-primary/60 bg-primary/10 text-primary"
-                : "border-border bg-secondary text-muted-foreground hover:text-foreground hover:bg-accent/30"
-            }`}
-          >
-            All
-          </button>
-        </div>
+        <PeriodDropdown activePeriod={activePeriod} onSelect={handleSelectPeriod} />
       </div>
     </div>
   );
@@ -310,7 +414,7 @@ export default function TopBar({ onMobileMenuToggle }: { onMobileMenuToggle?: ()
           <Menu01Icon size={18} />
         </button>
 
-        {/* ── Page title (visible on all sizes, truncates) ── */}
+        {/* ── Page title ── */}
         <h1 className="font-semibold text-sm text-foreground truncate flex-shrink min-w-0 mr-auto md:mr-0">
           {pageTitle}
         </h1>
@@ -376,7 +480,7 @@ export default function TopBar({ onMobileMenuToggle }: { onMobileMenuToggle?: ()
           )}
         </button>
 
-        {/* ── Refresh Data (shown on all sizes) ── */}
+        {/* ── Refresh Data ── */}
         <div className="flex items-stretch rounded-lg overflow-hidden border border-primary/60 h-8 flex-shrink-0">
           <button
             onClick={handleDefaultRefresh}
