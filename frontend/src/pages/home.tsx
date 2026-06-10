@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ChartDownIcon,
   Activity01Icon,
@@ -123,6 +123,52 @@ function InsightChip({ label, variant = "neutral" }: { label: string; variant?: 
   );
 }
 
+function DropdownBadge({
+  value,
+  options,
+  onChange,
+}: {
+  value: string;
+  options: { value: string }[];
+  onChange: (v: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+  return (
+    <div ref={ref} className="relative flex-shrink-0">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="flex items-center gap-1 h-7 px-2.5 rounded-lg border border-border bg-secondary text-[11px] text-foreground hover:bg-muted transition-colors cursor-pointer"
+      >
+        {value} <ArrowDown01Icon size={11} className={`text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <div className="absolute right-0 top-8 z-50 min-w-[120px] rounded-lg border border-border bg-card shadow-lg py-1">
+          {options.map(o => (
+            <button
+              key={o.value}
+              onClick={() => { onChange(o.value); setOpen(false); }}
+              className={`w-full text-left px-3 py-1.5 text-[11px] hover:bg-muted transition-colors ${
+                o.value === value ? "text-primary font-semibold" : "text-foreground"
+              }`}
+            >
+              {o.value}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 const loadingOverlay = (
   <div className="flex h-full items-center justify-center text-muted-foreground text-sm">
     <div className="flex items-center gap-2">
@@ -133,7 +179,7 @@ const loadingOverlay = (
 );
 
 export default function Home() {
-  const { companyNos, saleScope, companyLabel, dateFrom, dateTo, isAllTime } = useCompany();
+  const { companyNos, saleScope, companyLabel, dateFrom, dateTo, isAllTime, setDateRange } = useCompany();
 
   const [summary, setSummary] = useState<SalesSummaryResponse | null>(null);
   const [momSummary, setMomSummary] = useState<SalesSummaryResponse | null>(null);
@@ -151,6 +197,10 @@ export default function Home() {
   const [compDailySales, setCompDailySales] = useState<DailySalesRow[] | null>(null);
   const [dailyLoading, setDailyLoading] = useState(false);
   const [productGroupFilter, setProductGroupFilter] = useState("all");
+  const [cumulView, setCumulView] = useState<"Cumulative" | "Monthly">("Cumulative");
+  const [growthView, setGrowthView] = useState<"YoY %" | "Volume">("YoY %");
+  const [quarterlyView, setQuarterlyView] = useState<"Quarterly" | "Half Year">("Quarterly");
+  const [productSort, setProductSort] = useState<"By Growth" | "By Volume">("By Growth");
 
   const loadFiltered = async () => {
     setLoading(true);
@@ -704,6 +754,61 @@ export default function Home() {
     }],
   }), [growthData, lastCurrentYearMonth]);
 
+  const growthVolumeOptions = useMemo(() => {
+    if (!currentYear || !previousYear) return null;
+    const curData = Array(12).fill(0);
+    const prevData = Array(12).fill(0);
+    momRows.forEach(r => {
+      if (r.year === currentYear) curData[r.month - 1] = r.total_tonnes;
+      if (r.year === previousYear) prevData[r.month - 1] = r.total_tonnes;
+    });
+    return {
+      ...darkChartBase,
+      tooltip: {
+        ...darkChartBase.tooltip,
+        trigger: "axis",
+        // @ts-ignore
+        formatter: (params) => params
+          // @ts-ignore
+          .filter(item => item.value != null && item.value > 0)
+          // @ts-ignore
+          .map(item => `${item.seriesName}: ${numberFormatter.format(item.value)} t`)
+          .join("<br />"),
+      },
+      grid: { left: "8%", right: "4%", bottom: "14%", top: "12%" },
+      xAxis: {
+        type: "category",
+        data: monthLabels,
+        axisLine: { lineStyle: { color: "#30363d" } },
+        axisLabel: { color: "#8b949e", fontSize: 9 },
+        splitLine: { show: false },
+      },
+      yAxis: {
+        type: "value",
+        axisLabel: { color: "#8b949e", fontSize: 9, formatter: (v: number) => `${v} t` },
+        splitLine: { lineStyle: { color: "#21262d" } },
+      },
+      series: [
+        {
+          name: String(currentYear),
+          type: "bar",
+          data: curData.map((v, i) => (i + 1 <= lastCurrentYearMonth && v > 0 ? v : null)),
+          itemStyle: { color: "#34d399", borderRadius: [3, 3, 0, 0] },
+          barGap: "15%",
+          label: { show: false },
+        },
+        {
+          name: String(previousYear),
+          type: "bar",
+          data: prevData.map(v => (v > 0 ? v : null)),
+          itemStyle: { color: "#4b5563", borderRadius: [3, 3, 0, 0] },
+          barGap: "15%",
+          label: { show: false },
+        },
+      ],
+    };
+  }, [momRows, currentYear, previousYear, lastCurrentYearMonth]);
+
   const cumulativeComparisonOptions = useMemo(() => {
     const annualTarget = DEFAULT_TARGET_TONNES * 12;
     const targetData = Array.from({ length: 12 }, (_, i) => (i + 1) * (annualTarget / 12));
@@ -883,6 +988,76 @@ export default function Home() {
       ],
     };
   }, [quarterlyData, currentYear, previousYear]);
+
+  const halfYearData = useMemo(() => {
+    if (!quarterlyData.length) return [];
+    const h1Cur = quarterlyData.slice(0, 2).reduce((s, q) => s + q.current, 0);
+    const h2Cur = quarterlyData.slice(2, 4).reduce((s, q) => s + q.current, 0);
+    const h1Prev = quarterlyData.slice(0, 2).reduce((s, q) => s + q.previous, 0);
+    const h2Prev = quarterlyData.slice(2, 4).reduce((s, q) => s + q.previous, 0);
+    return [
+      { h: "H1 (Q1+Q2)", current: h1Cur, previous: h1Prev, pct: h1Prev > 0 ? ((h1Cur - h1Prev) / h1Prev) * 100 : 0 },
+      { h: "H2 (Q3+Q4)", current: h2Cur, previous: h2Prev, pct: h2Prev > 0 ? ((h2Cur - h2Prev) / h2Prev) * 100 : 0 },
+    ];
+  }, [quarterlyData]);
+
+  const halfYearChartOptions = useMemo(() => {
+    if (!halfYearData.length) return null;
+    return {
+      ...darkChartBase,
+      tooltip: {
+        ...darkChartBase.tooltip,
+        trigger: "axis",
+        // @ts-ignore
+        formatter: (params) => params
+          // @ts-ignore
+          .filter(item => item.value != null && item.value > 0)
+          // @ts-ignore
+          .map(item => `${item.seriesName}: ${numberFormatter.format(item.value)} t`)
+          .join("<br />"),
+      },
+      legend: { show: false },
+      grid: { left: "12%", right: "4%", bottom: "12%", top: "12%" },
+      xAxis: {
+        type: "category",
+        data: halfYearData.map(d => d.h),
+        axisLine: { lineStyle: { color: "#30363d" } },
+        axisLabel: { color: "#8b949e" },
+        splitLine: { show: false },
+      },
+      yAxis: {
+        type: "value",
+        axisLabel: { color: "#8b949e", fontSize: 9, formatter: (v: number) => `${numberFormatter.format(v)} t` },
+        splitLine: { lineStyle: { color: "#21262d" } },
+      },
+      series: [
+        {
+          name: String(currentYear ?? "Current"),
+          type: "bar",
+          data: halfYearData.map(d => d.current > 0 ? d.current : null),
+          itemStyle: { color: "#34d399", borderRadius: [3, 3, 0, 0] },
+          barGap: "15%",
+          label: {
+            show: true, position: "top", fontSize: 9, fontWeight: "bold", color: "#e6edf3",
+            // @ts-ignore
+            formatter: (p: any) => p.value > 0 ? `${numberFormatter.format(p.value)}` : "",
+          },
+        },
+        {
+          name: String(previousYear ?? "Prior"),
+          type: "bar",
+          data: halfYearData.map(d => d.previous > 0 ? d.previous : null),
+          itemStyle: { color: "#4b5563", borderRadius: [3, 3, 0, 0] },
+          barGap: "15%",
+          label: {
+            show: true, position: "top", fontSize: 9, color: "#8b949e",
+            // @ts-ignore
+            formatter: (p: any) => p.value > 0 ? `${numberFormatter.format(p.value)}` : "",
+          },
+        },
+      ],
+    };
+  }, [halfYearData, currentYear, previousYear]);
 
   const divisionChartOptions = useMemo(() => {
     if (!divisionBreakdown.length) return null;
@@ -1116,9 +1291,22 @@ export default function Home() {
                       </span>
                     </div>
                   </div>
-                  <span className="flex items-center gap-1 h-7 px-2.5 rounded-lg border border-border bg-secondary text-[11px] text-foreground flex-shrink-0">
-                    {filterPeriodLabel || "MTD"} <ArrowDown01Icon size={11} className="text-muted-foreground" />
-                  </span>
+                  <DropdownBadge
+                    value={["MTD","QTD","YTD"].includes(filterPeriodLabel) ? filterPeriodLabel : "MTD"}
+                    options={[{ value: "MTD" }, { value: "QTD" }, { value: "YTD" }]}
+                    onChange={(v) => {
+                      const today = new Date();
+                      const todayISO = today.toISOString().slice(0, 10);
+                      if (v === "MTD") {
+                        setDateRange(`${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-01`, todayISO);
+                      } else if (v === "QTD") {
+                        const qm = Math.floor(today.getMonth() / 3) * 3;
+                        setDateRange(`${today.getFullYear()}-${String(qm + 1).padStart(2, "0")}-01`, todayISO);
+                      } else {
+                        setDateRange(`${today.getFullYear()}-01-01`, todayISO);
+                      }
+                    }}
+                  />
                 </div>
                 <div className="h-[220px]">
                   {showDailyChart
@@ -1177,13 +1365,15 @@ export default function Home() {
                       </span>
                     </div>
                   </div>
-                  <span className="flex items-center gap-1 h-7 px-2.5 rounded-lg border border-border bg-secondary text-[11px] text-foreground flex-shrink-0">
-                    YTD <ArrowDown01Icon size={11} className="text-muted-foreground" />
-                  </span>
+                  <DropdownBadge
+                    value={cumulView}
+                    options={[{ value: "Cumulative" }, { value: "Monthly" }]}
+                    onChange={(v) => setCumulView(v as "Cumulative" | "Monthly")}
+                  />
                 </div>
                 <div className="h-[220px]">
                   {momLoading ? loadingOverlay : (
-                    <ReactECharts option={cumulativeComparisonOptions} style={{ width: "100%", height: "100%" }} notMerge lazyUpdate />
+                    <ReactECharts option={cumulView === "Monthly" ? monthlyComparisonOptions : cumulativeComparisonOptions} style={{ width: "100%", height: "100%" }} notMerge lazyUpdate />
                   )}
                 </div>
                 {cumulativeFooter && (
@@ -1230,13 +1420,15 @@ export default function Home() {
                     <h3 className="text-[13px] font-semibold text-foreground">Monthly Growth (YoY)</h3>
                     <p className="text-[10px] text-muted-foreground/60 mt-0.5">Month-to-date vs same period last year</p>
                   </div>
-                  <span className="flex items-center gap-1 h-7 px-2.5 rounded-lg border border-border bg-secondary text-[11px] text-foreground flex-shrink-0">
-                    YoY <ArrowDown01Icon size={11} className="text-muted-foreground" />
-                  </span>
+                  <DropdownBadge
+                    value={growthView}
+                    options={[{ value: "YoY %" }, { value: "Volume" }]}
+                    onChange={(v) => setGrowthView(v as "YoY %" | "Volume")}
+                  />
                 </div>
                 <div className="h-[190px]">
                   {momLoading ? loadingOverlay : (
-                    <ReactECharts option={growthOptions} style={{ width: "100%", height: "100%" }} notMerge lazyUpdate />
+                    <ReactECharts option={growthView === "Volume" ? (growthVolumeOptions ?? growthOptions) : growthOptions} style={{ width: "100%", height: "100%" }} notMerge lazyUpdate />
                   )}
                 </div>
                 {growthFooter && (
@@ -1283,27 +1475,38 @@ export default function Home() {
                       </span>
                     </div>
                   </div>
-                  <span className="flex items-center gap-1 h-7 px-2.5 rounded-lg border border-border bg-secondary text-[11px] text-foreground flex-shrink-0">
-                    Quarterly <ArrowDown01Icon size={11} className="text-muted-foreground" />
-                  </span>
+                  <DropdownBadge
+                    value={quarterlyView}
+                    options={[{ value: "Quarterly" }, { value: "Half Year" }]}
+                    onChange={(v) => setQuarterlyView(v as "Quarterly" | "Half Year")}
+                  />
                 </div>
                 <div className="h-[190px]">
-                  {momLoading ? loadingOverlay : quarterlyChartOptions ? (
-                    <ReactECharts option={quarterlyChartOptions} style={{ width: "100%", height: "100%" }} notMerge lazyUpdate />
+                  {momLoading ? loadingOverlay : (quarterlyView === "Half Year" ? halfYearChartOptions : quarterlyChartOptions) ? (
+                    <ReactECharts option={(quarterlyView === "Half Year" ? halfYearChartOptions : quarterlyChartOptions)!} style={{ width: "100%", height: "100%" }} notMerge lazyUpdate />
                   ) : (
                     <div className="flex h-full items-center justify-center text-muted-foreground/50 text-xs">No data</div>
                   )}
                 </div>
-                {quarterlyData.length > 0 && (
+                {(quarterlyView === "Half Year" ? halfYearData.length > 0 : quarterlyData.length > 0) && (
                   <div className="mt-2 pt-2 border-t border-border/40 flex flex-wrap items-center justify-between gap-1">
                     <div className="flex gap-1.5 flex-wrap">
-                      {quarterlyData.filter(q => q.previous > 0).map(q => (
-                        <span key={q.q} className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-                          q.pct >= 0 ? "bg-emerald-500/10 text-emerald-400" : "bg-red-500/10 text-red-400"
-                        }`}>
-                          {q.q}: {q.pct >= 0 ? "+" : ""}{q.pct.toFixed(1)}%
-                        </span>
-                      ))}
+                      {quarterlyView === "Half Year"
+                        ? halfYearData.filter(h => h.previous > 0).map(h => (
+                            <span key={h.h} className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                              h.pct >= 0 ? "bg-emerald-500/10 text-emerald-400" : "bg-red-500/10 text-red-400"
+                            }`}>
+                              {h.h.split(" ")[0]}: {h.pct >= 0 ? "+" : ""}{h.pct.toFixed(1)}%
+                            </span>
+                          ))
+                        : quarterlyData.filter(q => q.previous > 0).map(q => (
+                            <span key={q.q} className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                              q.pct >= 0 ? "bg-emerald-500/10 text-emerald-400" : "bg-red-500/10 text-red-400"
+                            }`}>
+                              {q.q}: {q.pct >= 0 ? "+" : ""}{q.pct.toFixed(1)}%
+                            </span>
+                          ))
+                      }
                     </div>
                     <span className="text-[9px] text-primary/60 hover:text-primary cursor-pointer transition-colors">View full quarterly report →</span>
                   </div>
@@ -1317,9 +1520,11 @@ export default function Home() {
                     <h3 className="text-[13px] font-semibold text-foreground">Product Group Trends (YTD)</h3>
                     <p className="text-[10px] text-muted-foreground/60 mt-0.5">vs same period last year</p>
                   </div>
-                  <span className="flex items-center gap-1 h-7 px-2.5 rounded-lg border border-border bg-secondary text-[11px] text-foreground flex-shrink-0">
-                    YTD <ArrowDown01Icon size={11} className="text-muted-foreground" />
-                  </span>
+                  <DropdownBadge
+                    value={productSort}
+                    options={[{ value: "By Growth" }, { value: "By Volume" }]}
+                    onChange={(v) => setProductSort(v as "By Growth" | "By Volume")}
+                  />
                 </div>
                 {predictiveLoading ? loadingOverlay : filteredProductGroups.length === 0 ? (
                   <div className="flex h-[190px] items-center justify-center text-muted-foreground/50 text-xs">No data</div>
@@ -1335,8 +1540,10 @@ export default function Home() {
                         </tr>
                       </thead>
                       <tbody>
-                        {filteredProductGroups
-                          .sort((a, b) => Math.abs(b.pct_change ?? 0) - Math.abs(a.pct_change ?? 0))
+                        {[...filteredProductGroups]
+                          .sort((a, b) => productSort === "By Volume"
+                            ? b.current_3m_tonnes - a.current_3m_tonnes
+                            : Math.abs(b.pct_change ?? 0) - Math.abs(a.pct_change ?? 0))
                           .slice(0, 8)
                           .map((g, i) => {
                             const pct = g.pct_change ?? 0;
