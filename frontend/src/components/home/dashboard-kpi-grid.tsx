@@ -116,7 +116,7 @@ function DonutProgress({ pct, color, size = 80 }: { pct: number; color: string; 
 function DailyAvgSparkBar({ dailyAvg, targetDailyRate }: { dailyAvg: number; targetDailyRate: number | null }) {
   if (!targetDailyRate || targetDailyRate <= 0) return null;
   const pct = Math.min((dailyAvg / targetDailyRate) * 100, 130);
-  const color = dailyAvg >= targetDailyRate ? "#3FB950" : dailyAvg >= targetDailyRate * 0.8 ? "#E3B341" : "#F85149";
+  const color = dailyAvg >= targetDailyRate ? "#3B82F6" : dailyAvg >= targetDailyRate * 0.8 ? "#E3B341" : "#F85149";
   return (
     <div className="w-full h-1.5 rounded-full bg-white/8 overflow-hidden">
       <div className="h-full rounded-full transition-all duration-700"
@@ -286,7 +286,7 @@ export default function DashboardKpiGrid({
 
       {/* ── 3. Target Progress (MTD) ── */}
       {(() => {
-        const donutColor = mtdProgressPct >= 100 ? "#3FB950" : mtdProgressPct >= 80 ? "#E3B341" : "#F85149";
+        const donutColor = mtdProgressPct >= 100 ? "#3B82F6" : mtdProgressPct >= 80 ? "#E3B341" : "#F85149";
         const monthName = ["January","February","March","April","May","June","July","August","September","October","November","December"][today.getMonth()];
         return (
           <KpiCard>

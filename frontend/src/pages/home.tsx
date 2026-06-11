@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useTheme } from "@/lib/theme-context";
 import {
   ChartDownIcon,
   Activity01Icon,
@@ -43,10 +44,10 @@ import { useCompany } from "@/lib/company-context";
 import { CustomerDrilldownModal } from "@/components/home/customer-drilldown-modal";
 
 const monthLabels = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-const chartColors = ["#3FB950","#58A6FF","#E3B341","#F85149","#BC8CFF","#79C0FF"];
+const chartColors = ["#3B82F6","#6366F1","#F59E0B","#EF4444","#A78BFA","#60A5FA"];
 const divisionColors: Record<string, string> = {
   "3": "#58A6FF",
-  "4": "#3FB950",
+  "4": "#6366F1",
   "5": "#fb923c",
   "6": "#f87171",
 };
@@ -105,11 +106,17 @@ function DataFreshnessIndicator({ freshness }: { freshness: RefreshFreshness | n
   );
 }
 
-const darkChartBase = {
-  backgroundColor: "transparent",
-  textStyle: { color: "#8b949e" },
-  tooltip: { backgroundColor: "#1c2128", borderColor: "#30363d", textStyle: { color: "#e6edf3" } },
-};
+function getChartBase(isDark: boolean) {
+  return isDark ? {
+    backgroundColor: "transparent",
+    textStyle: { color: "#71717A" },
+    tooltip: { backgroundColor: "#1F2028", borderColor: "#27272A", textStyle: { color: "#FAFAFA" } },
+  } : {
+    backgroundColor: "transparent",
+    textStyle: { color: "#71717A" },
+    tooltip: { backgroundColor: "#FFFFFF", borderColor: "#E4E4E7", textStyle: { color: "#18181B" } },
+  };
+}
 
 function InsightChip({ label, variant = "neutral" }: { label: string; variant?: "green" | "red" | "amber" | "blue" | "neutral" }) {
   const styles = {
@@ -183,6 +190,9 @@ const loadingOverlay = (
 
 export default function Home() {
   const { companyNos, saleScope, companyLabel, dateFrom, dateTo, isAllTime, setDateRange } = useCompany();
+  const { theme } = useTheme();
+  const isDark = theme === "dark";
+  const chartBase = useMemo(() => getChartBase(isDark), [isDark]);
 
   const [summary, setSummary] = useState<SalesSummaryResponse | null>(null);
   const [momSummary, setMomSummary] = useState<SalesSummaryResponse | null>(null);
@@ -505,7 +515,7 @@ export default function Home() {
       if (pv > 0) { const p = ((v - pv) / pv) * 100; if (p < maxDrop) { maxDrop = p; dropIdx = i; } }
     });
     return { ytdPct, peakMonth: peakVal > 0 ? monthLabels[peakIdx] : null, dropMonth: dropIdx >= 0 ? monthLabels[dropIdx] : null };
-  }, [momRows, currentYear, previousYear, lastCurrentYearMonth]);
+  }, [momRows, currentYear, previousYear, lastCurrentYearMonth, isDark]);
 
   const growthChips = useMemo(() => {
     if (!growthData.length) return null;
@@ -546,7 +556,7 @@ export default function Home() {
     const vsLYPct = prevYTD > 0 ? ((curYTD - prevYTD) / prevYTD) * 100 : null;
     const gapToLY = prevYTD - curYTD;
     return { curYTD, vsLYPct, gapToLY };
-  }, [momRows, currentYear, previousYear, lastCurrentYearMonth]);
+  }, [momRows, currentYear, previousYear, lastCurrentYearMonth, isDark]);
 
   const cumulativeFooter = useMemo(() => {
     if (!cumulativeChips) return null;
@@ -641,9 +651,9 @@ export default function Home() {
     const diffPct = compEnd > 0 ? ((curEnd - compEnd) / compEnd) * 100 : null;
 
     return {
-      ...darkChartBase,
+      ...chartBase,
       tooltip: {
-        ...darkChartBase.tooltip,
+        ...chartBase.tooltip,
         trigger: "axis",
         // @ts-ignore
         formatter: (params) => params
@@ -659,13 +669,13 @@ export default function Home() {
         type: "category",
         data: xLabels,
         axisLine: { lineStyle: { color: "#30363d" } },
-        axisLabel: { color: "#8b949e", fontSize: 9,
+        axisLabel: { color: isDark ? "#8b949e" : "#71717A", fontSize: 9,
           interval: Math.max(1, Math.floor(totalDays / 8) - 1) },
         splitLine: { show: false },
       },
       yAxis: {
         type: "value",
-        axisLabel: { color: "#8b949e", fontSize: 9, formatter: (v: number) => `${v} t` },
+        axisLabel: { color: isDark ? "#8b949e" : "#71717A", fontSize: 9, formatter: (v: number) => `${v} t` },
         splitLine: { lineStyle: { color: "#21262d" } },
       },
       series: [
@@ -675,8 +685,8 @@ export default function Home() {
           data: curData,
           connectNulls: false,
           smooth: false,
-          lineStyle: { width: 2.5, color: "#3FB950" },
-          itemStyle: { color: "#3FB950" },
+          lineStyle: { width: 2.5, color: "#3B82F6" },
+          itemStyle: { color: "#3B82F6" },
           showSymbol: true,
           symbol: "circle",
           symbolSize: 5,
@@ -684,14 +694,14 @@ export default function Home() {
             show: true,
             position: "top",
             fontSize: 8.5,
-            color: "#3FB950",
+            color: "#3B82F6",
             // @ts-ignore
             formatter: (p: any) => p.value != null ? `${numberFormatter.format(p.value)}` : "",
           },
           areaStyle: {
             color: {
               type: "linear", x: 0, y: 0, x2: 0, y2: 1,
-              colorStops: [{ offset: 0, color: "#3FB95030" }, { offset: 1, color: "transparent" }],
+              colorStops: [{ offset: 0, color: "#3B82F630" }, { offset: 1, color: "transparent" }],
             },
           },
           endLabel: {
@@ -724,7 +734,7 @@ export default function Home() {
       _compEnd: compEnd,
       _diffPct: diffPct,
     };
-  }, [dailySales, compDailySales, dateFrom, dateTo, comparisonMode]);
+  }, [dailySales, compDailySales, dateFrom, dateTo, comparisonMode, isDark]);
 
   // ── Chart-specific daily comparison (isolated from global date range) ───────
   const { chartFrom, chartTo } = useMemo(() => {
@@ -783,9 +793,9 @@ export default function Home() {
     const compEnd = chartCompDailySales.reduce((s, r) => s + r.tonnes, 0);
     const diffPct = compEnd > 0 ? ((curEnd - compEnd) / compEnd) * 100 : null;
     return {
-      ...darkChartBase,
+      ...chartBase,
       tooltip: {
-        ...darkChartBase.tooltip, trigger: "axis",
+        ...chartBase.tooltip, trigger: "axis",
         // @ts-ignore
         formatter: (params) => params.filter(item => item.value != null && item.value > 0)
           // @ts-ignore
@@ -796,31 +806,31 @@ export default function Home() {
       xAxis: {
         type: "category", data: xLabels,
         axisLine: { lineStyle: { color: "#30363d" } },
-        axisLabel: { color: "#8b949e", fontSize: 9, interval: Math.max(1, Math.floor(totalDays / 8) - 1) },
+        axisLabel: { color: isDark ? "#8b949e" : "#71717A", fontSize: 9, interval: Math.max(1, Math.floor(totalDays / 8) - 1) },
         splitLine: { show: false },
       },
       yAxis: {
         type: "value",
-        axisLabel: { color: "#8b949e", fontSize: 9, formatter: (v: number) => `${v} t` },
+        axisLabel: { color: isDark ? "#8b949e" : "#71717A", fontSize: 9, formatter: (v: number) => `${v} t` },
         splitLine: { lineStyle: { color: "#21262d" } },
       },
       graphic: curEnd > 0 ? [{
         type: "group", right: 10, top: 6,
         children: [
-          { type: "rect", z: 100, shape: { width: 100, height: 18, r: 3 }, style: { fill: "#3FB95015", stroke: "#3FB95040", lineWidth: 1 } },
-          { type: "text", z: 101, style: { text: `Total: ${numberFormatter.format(Math.round(curEnd * 100) / 100)} t`, fill: "#3FB950", fontSize: 9, fontWeight: "bold", x: 7, y: 3 } },
+          { type: "rect", z: 100, shape: { width: 100, height: 18, r: 3 }, style: { fill: "#3B82F615", stroke: "#3B82F640", lineWidth: 1 } },
+          { type: "text", z: 101, style: { text: `Total: ${numberFormatter.format(Math.round(curEnd * 100) / 100)} t`, fill: "#3B82F6", fontSize: 9, fontWeight: "bold", x: 7, y: 3 } },
         ]
       }] : [],
       series: [
         {
           name: "This Year", type: "line", data: curData, connectNulls: false, smooth: false,
-          lineStyle: { width: 2.5, color: "#3FB950" }, itemStyle: { color: "#3FB950" },
+          lineStyle: { width: 2.5, color: "#3B82F6" }, itemStyle: { color: "#3B82F6" },
           showSymbol: true, symbol: "circle", symbolSize: 5,
-          label: { show: true, position: "top", fontSize: 8.5, color: "#3FB950",
+          label: { show: true, position: "top", fontSize: 8.5, color: "#3B82F6",
             // @ts-ignore
             formatter: (p: any) => p.value != null && p.value > 0 ? numberFormatter.format(p.value) : "" },
           areaStyle: { color: { type: "linear", x: 0, y: 0, x2: 0, y2: 1,
-            colorStops: [{ offset: 0, color: "#3FB95030" }, { offset: 1, color: "transparent" }] } },
+            colorStops: [{ offset: 0, color: "#3B82F630" }, { offset: 1, color: "transparent" }] } },
         },
         {
           name: "Last Year", type: "line", data: compData, connectNulls: false, smooth: false,
@@ -833,7 +843,7 @@ export default function Home() {
       _compEnd: compEnd,
       _diffPct: diffPct,
     };
-  }, [chartDailySales, chartCompDailySales, chartFrom, chartTo]);
+  }, [chartDailySales, chartCompDailySales, chartFrom, chartTo, isDark]);
 
   // ── MTD Daily Performance — combo chart (bars=daily, solid line=cumul actual, dashed=cumul LY) ──
   const chartMtdOptions = useMemo(() => {
@@ -851,9 +861,9 @@ export default function Home() {
     });
     const lastLyIdx = lyLineData.reduce((acc: number, v: number | null, i: number) => v != null ? i : acc, -1);
     return {
-      ...darkChartBase,
+      ...chartBase,
       tooltip: {
-        ...darkChartBase.tooltip,
+        ...chartBase.tooltip,
         trigger: "axis",
         // @ts-ignore
         formatter: (params: any) => {
@@ -874,29 +884,29 @@ export default function Home() {
       legend: {
         data: ["Daily Tonnes (Actual)", "Cumulative MTD (Actual)", "Cumulative MTD (LY)"],
         top: 4,
-        textStyle: { color: "#8b949e", fontSize: 9 },
+        textStyle: { color: isDark ? "#8b949e" : "#71717A", fontSize: 9 },
       },
       grid: { left: "8%", right: "8%", bottom: "12%", top: "22%" },
       xAxis: {
         type: "category",
         data: xLabels,
         axisLine: { lineStyle: { color: "#30363d" } },
-        axisLabel: { color: "#8b949e", fontSize: 9, interval: Math.max(0, Math.floor(chartDailySales.length / 8) - 1) },
+        axisLabel: { color: isDark ? "#8b949e" : "#71717A", fontSize: 9, interval: Math.max(0, Math.floor(chartDailySales.length / 8) - 1) },
         splitLine: { show: false },
       },
       yAxis: [
         {
           type: "value",
           name: "Daily t",
-          nameTextStyle: { color: "#8b949e", fontSize: 8 },
-          axisLabel: { color: "#8b949e", fontSize: 8, formatter: (v: number) => `${numberFormatter.format(v)}` },
+          nameTextStyle: { color: isDark ? "#8b949e" : "#71717A", fontSize: 8 },
+          axisLabel: { color: isDark ? "#8b949e" : "#71717A", fontSize: 8, formatter: (v: number) => `${numberFormatter.format(v)}` },
           splitLine: { lineStyle: { color: "#21262d" } },
         },
         {
           type: "value",
           name: "Cumul t",
-          nameTextStyle: { color: "#8b949e", fontSize: 8 },
-          axisLabel: { color: "#8b949e", fontSize: 8, formatter: (v: number) => `${numberFormatter.format(v)}` },
+          nameTextStyle: { color: isDark ? "#8b949e" : "#71717A", fontSize: 8 },
+          axisLabel: { color: isDark ? "#8b949e" : "#71717A", fontSize: 8, formatter: (v: number) => `${numberFormatter.format(v)}` },
           splitLine: { show: false },
         },
       ],
@@ -906,12 +916,12 @@ export default function Home() {
           type: "bar",
           data: barData,
           yAxisIndex: 0,
-          itemStyle: { color: "#3FB950", borderRadius: [2, 2, 0, 0] },
+          itemStyle: { color: "#3B82F6", borderRadius: [2, 2, 0, 0] },
           label: {
             show: true,
             position: "top",
             fontSize: 7.5,
-            color: "#3FB950",
+            color: "#3B82F6",
             // @ts-ignore
             formatter: (p: any) => p.value != null && p.value > 0 ? numberFormatter.format(p.value) : "",
           },
@@ -922,8 +932,8 @@ export default function Home() {
           data: lineData,
           yAxisIndex: 1,
           smooth: false,
-          lineStyle: { color: "#3FB950", width: 2 },
-          itemStyle: { color: "#3FB950" },
+          lineStyle: { color: "#3B82F6", width: 2 },
+          itemStyle: { color: "#3B82F6" },
           showSymbol: true,
           symbol: "circle",
           symbolSize: 4,
@@ -931,7 +941,7 @@ export default function Home() {
             show: true,
             position: "top",
             fontSize: 7.5,
-            color: "#3FB950",
+            color: "#3B82F6",
             // @ts-ignore
             formatter: (p: any) => p.dataIndex === lineData.length - 1 && p.value != null && p.value > 0
               ? numberFormatter.format(p.value) : "",
@@ -944,8 +954,8 @@ export default function Home() {
           yAxisIndex: 1,
           smooth: false,
           connectNulls: false,
-          lineStyle: { color: "#8b949e", width: 1.5, type: "dashed" },
-          itemStyle: { color: "#8b949e" },
+          lineStyle: { color: isDark ? "#8b949e" : "#71717A", width: 1.5, type: "dashed" },
+          itemStyle: { color: isDark ? "#8b949e" : "#71717A" },
           showSymbol: true,
           symbol: "circle",
           symbolSize: 3,
@@ -953,7 +963,7 @@ export default function Home() {
             show: true,
             position: "top",
             fontSize: 7.5,
-            color: "#8b949e",
+            color: isDark ? "#8b949e" : "#71717A",
             // @ts-ignore
             formatter: (p: any) => p.dataIndex === lastLyIdx && p.value != null && p.value > 0
               ? numberFormatter.format(p.value) : "",
@@ -961,7 +971,7 @@ export default function Home() {
         },
       ],
     };
-  }, [chartPeriod, chartDailySales, mtdCompDailySales]);
+  }, [chartPeriod, chartDailySales, mtdCompDailySales, isDark]);
 
   // ── QTD monthly bar chart ──────────────────────────────────────────────────
   const chartQtdBarOptions = useMemo(() => {
@@ -987,9 +997,9 @@ export default function Home() {
     const compTotal = compBars.reduce((s, v) => s + v, 0);
     const diffPct = compTotal > 0 ? ((curTotal - compTotal) / compTotal) * 100 : null;
     return {
-      ...darkChartBase,
+      ...chartBase,
       tooltip: {
-        ...darkChartBase.tooltip, trigger: "axis",
+        ...chartBase.tooltip, trigger: "axis",
         // @ts-ignore
         formatter: (params: any) => params
           .filter((item: any) => item.value > 0)
@@ -1001,20 +1011,20 @@ export default function Home() {
       xAxis: {
         type: "category", data: monthNames,
         axisLine: { lineStyle: { color: "#30363d" } },
-        axisLabel: { color: "#8b949e", fontSize: 10 },
+        axisLabel: { color: isDark ? "#8b949e" : "#71717A", fontSize: 10 },
         splitLine: { show: false },
       },
       yAxis: {
         type: "value",
-        axisLabel: { color: "#8b949e", fontSize: 9, formatter: (v: number) => `${v} t` },
+        axisLabel: { color: isDark ? "#8b949e" : "#71717A", fontSize: 9, formatter: (v: number) => `${v} t` },
         splitLine: { lineStyle: { color: "#21262d" } },
       },
       series: [
         {
           name: `This Year (${from.getFullYear()})`,
           type: "bar", data: curBars, barMaxWidth: 56,
-          itemStyle: { color: "#3FB950", borderRadius: [4, 4, 0, 0] },
-          label: { show: true, position: "top", fontSize: 9, color: "#3FB950",
+          itemStyle: { color: "#3B82F6", borderRadius: [4, 4, 0, 0] },
+          label: { show: true, position: "top", fontSize: 9, color: "#3B82F6",
             // @ts-ignore
             formatter: (p: any) => p.value > 0 ? numberFormatter.format(p.value) : "" },
         },
@@ -1031,13 +1041,13 @@ export default function Home() {
       _compEnd: compTotal,
       _diffPct: diffPct,
     };
-  }, [chartPeriod, chartDailySales, chartCompDailySales, chartFrom]);
+  }, [chartPeriod, chartDailySales, chartCompDailySales, chartFrom, isDark]);
 
   // ── Monthly comparison chart ───────────────────────────────────────────────
   const monthlyComparisonOptions = useMemo(() => ({
-    ...darkChartBase,
+    ...chartBase,
     tooltip: {
-      ...darkChartBase.tooltip,
+      ...chartBase.tooltip,
       trigger: "axis",
       // @ts-ignore
       formatter: (params) => params
@@ -1047,20 +1057,20 @@ export default function Home() {
         .map(item => `${item.seriesName}: ${numberFormatter.format(item.value)} t`)
         .join("<br />"),
     },
-    legend: { data: momYears.map(y => String(y)), top: "4%", textStyle: { color: "#8b949e" } },
+    legend: { data: momYears.map(y => String(y)), top: "4%", textStyle: { color: isDark ? "#8b949e" : "#71717A" } },
     grid: { left: "8%", right: "4%", bottom: "14%", top: "18%" },
     xAxis: {
       type: "category",
       data: monthlyComparisonData.map(d => d.month),
       axisLine: { lineStyle: { color: "#30363d" } },
-      axisLabel: { color: "#8b949e" },
+      axisLabel: { color: isDark ? "#8b949e" : "#71717A" },
       splitLine: { show: false },
     },
     yAxis: {
       type: "value",
       name: "Tonnes",
-      nameTextStyle: { color: "#8b949e" },
-      axisLabel: { color: "#8b949e" },
+      nameTextStyle: { color: isDark ? "#8b949e" : "#71717A" },
+      axisLabel: { color: isDark ? "#8b949e" : "#71717A" },
       splitLine: { lineStyle: { color: "#21262d" } },
     },
     series: momYears.map((year, index) => ({
@@ -1108,9 +1118,9 @@ export default function Home() {
   }), [monthlyComparisonData, momYears, currentYear, lastCurrentYearMonth]);
 
   const growthOptions = useMemo(() => ({
-    ...darkChartBase,
+    ...chartBase,
     tooltip: {
-      ...darkChartBase.tooltip,
+      ...chartBase.tooltip,
       trigger: "axis",
       // @ts-ignore
       formatter: (params) => params
@@ -1125,13 +1135,13 @@ export default function Home() {
       type: "category",
       data: growthData.map(d => d.month),
       axisLine: { lineStyle: { color: "#30363d" } },
-      axisLabel: { color: "#8b949e", fontSize: 9 },
+      axisLabel: { color: isDark ? "#8b949e" : "#71717A", fontSize: 9 },
       splitLine: { show: false },
     },
     yAxis: {
       type: "value",
-      nameTextStyle: { color: "#8b949e", fontSize: 9 },
-      axisLabel: { color: "#8b949e", fontSize: 9, formatter: "{value}%" },
+      nameTextStyle: { color: isDark ? "#8b949e" : "#71717A", fontSize: 9 },
+      axisLabel: { color: isDark ? "#8b949e" : "#71717A", fontSize: 9, formatter: "{value}%" },
       splitLine: { lineStyle: { color: "#21262d" } },
     },
     series: [{
@@ -1143,7 +1153,7 @@ export default function Home() {
         return {
           value: g,
           itemStyle: {
-            color: g >= 0 ? "#3FB950" : "#f87171",
+            color: g >= 0 ? "#3B82F6" : "#f87171",
             borderRadius: g >= 0 ? [3, 3, 0, 0] : [0, 0, 3, 3],
           },
         };
@@ -1153,7 +1163,7 @@ export default function Home() {
         // @ts-ignore
         position: (p: any) => (p.data?.value ?? 0) >= 0 ? "top" : "bottom",
         fontSize: 8,
-        color: "#8b949e",
+        color: isDark ? "#8b949e" : "#71717A",
         // @ts-ignore
         formatter: (p: any) => p.data?.value != null ? `${p.data.value.toFixed(0)}%` : "",
       },
@@ -1169,9 +1179,9 @@ export default function Home() {
       if (r.year === previousYear) prevData[r.month - 1] = r.total_tonnes;
     });
     return {
-      ...darkChartBase,
+      ...chartBase,
       tooltip: {
-        ...darkChartBase.tooltip,
+        ...chartBase.tooltip,
         trigger: "axis",
         // @ts-ignore
         formatter: (params) => params
@@ -1186,12 +1196,12 @@ export default function Home() {
         type: "category",
         data: monthLabels,
         axisLine: { lineStyle: { color: "#30363d" } },
-        axisLabel: { color: "#8b949e", fontSize: 9 },
+        axisLabel: { color: isDark ? "#8b949e" : "#71717A", fontSize: 9 },
         splitLine: { show: false },
       },
       yAxis: {
         type: "value",
-        axisLabel: { color: "#8b949e", fontSize: 9, formatter: (v: number) => `${v} t` },
+        axisLabel: { color: isDark ? "#8b949e" : "#71717A", fontSize: 9, formatter: (v: number) => `${v} t` },
         splitLine: { lineStyle: { color: "#21262d" } },
       },
       series: [
@@ -1199,7 +1209,7 @@ export default function Home() {
           name: String(currentYear),
           type: "bar",
           data: curData.map((v, i) => (i + 1 <= lastCurrentYearMonth && v > 0 ? v : null)),
-          itemStyle: { color: "#3FB950", borderRadius: [3, 3, 0, 0] },
+          itemStyle: { color: "#3B82F6", borderRadius: [3, 3, 0, 0] },
           barGap: "15%",
           label: { show: false },
         },
@@ -1213,12 +1223,12 @@ export default function Home() {
         },
       ],
     };
-  }, [momRows, currentYear, previousYear, lastCurrentYearMonth]);
+  }, [momRows, currentYear, previousYear, lastCurrentYearMonth, isDark]);
 
   const cumulativeComparisonOptions = useMemo(() => {
     const annualTarget = DEFAULT_TARGET_TONNES * 12;
     const targetData = Array.from({ length: 12 }, (_, i) => (i + 1) * (annualTarget / 12));
-    const yearColor = (year: number) => (year === currentYear ? "#3FB950" : "#6b7280");
+    const yearColor = (year: number) => (year === currentYear ? "#3B82F6" : "#6b7280");
     const baseSeries = momYears.map((year) => ({
       name: String(year),
       type: "line",
@@ -1243,7 +1253,7 @@ export default function Home() {
         color: {
           type: "linear", x: 0, y: 0, x2: 0, y2: 1,
           colorStops: [
-            { offset: 0, color: "#3FB95020" },
+            { offset: 0, color: "#3B82F620" },
             { offset: 1, color: "transparent" },
           ],
         },
@@ -1300,9 +1310,9 @@ export default function Home() {
       showSymbol: false,
     };
     return {
-      ...darkChartBase,
+      ...chartBase,
       tooltip: {
-        ...darkChartBase.tooltip,
+        ...chartBase.tooltip,
         trigger: "axis",
         // @ts-ignore
         formatter: (params) => params
@@ -1318,12 +1328,12 @@ export default function Home() {
         type: "category",
         data: cumulativeComparisonData.map(d => d.month),
         axisLine: { lineStyle: { color: "#30363d" } },
-        axisLabel: { color: "#8b949e" },
+        axisLabel: { color: isDark ? "#8b949e" : "#71717A" },
         splitLine: { show: false },
       },
       yAxis: {
         type: "value",
-        axisLabel: { color: "#8b949e", formatter: (v: number) => `${numberFormatter.format(v)} t` },
+        axisLabel: { color: isDark ? "#8b949e" : "#71717A", formatter: (v: number) => `${numberFormatter.format(v)} t` },
         splitLine: { lineStyle: { color: "#21262d" } },
       },
       series: [...baseSeries, targetSeries, ytdAverageSeries],
@@ -1333,9 +1343,9 @@ export default function Home() {
   const quarterlyChartOptions = useMemo(() => {
     if (!quarterlyData.length) return null;
     return {
-      ...darkChartBase,
+      ...chartBase,
       tooltip: {
-        ...darkChartBase.tooltip,
+        ...chartBase.tooltip,
         trigger: "axis",
         // @ts-ignore
         formatter: (params) => params
@@ -1351,12 +1361,12 @@ export default function Home() {
         type: "category",
         data: quarterlyData.map(d => d.q),
         axisLine: { lineStyle: { color: "#30363d" } },
-        axisLabel: { color: "#8b949e" },
+        axisLabel: { color: isDark ? "#8b949e" : "#71717A" },
         splitLine: { show: false },
       },
       yAxis: {
         type: "value",
-        axisLabel: { color: "#8b949e", fontSize: 9, formatter: (v: number) => `${numberFormatter.format(v)} t` },
+        axisLabel: { color: isDark ? "#8b949e" : "#71717A", fontSize: 9, formatter: (v: number) => `${numberFormatter.format(v)} t` },
         splitLine: { lineStyle: { color: "#21262d" } },
       },
       series: [
@@ -1364,7 +1374,7 @@ export default function Home() {
           name: String(currentYear ?? "Current"),
           type: "bar",
           data: quarterlyData.map(d => d.current > 0 ? d.current : null),
-          itemStyle: { color: "#3FB950", borderRadius: [3, 3, 0, 0] },
+          itemStyle: { color: "#3B82F6", borderRadius: [3, 3, 0, 0] },
           barGap: "15%",
           label: {
             show: true,
@@ -1386,7 +1396,7 @@ export default function Home() {
             show: true,
             position: "top",
             fontSize: 9,
-            color: "#8b949e",
+            color: isDark ? "#8b949e" : "#71717A",
             // @ts-ignore
             formatter: (p: any) => p.value > 0 ? `${numberFormatter.format(p.value)}` : "",
           },
@@ -1410,9 +1420,9 @@ export default function Home() {
   const halfYearChartOptions = useMemo(() => {
     if (!halfYearData.length) return null;
     return {
-      ...darkChartBase,
+      ...chartBase,
       tooltip: {
-        ...darkChartBase.tooltip,
+        ...chartBase.tooltip,
         trigger: "axis",
         // @ts-ignore
         formatter: (params) => params
@@ -1428,12 +1438,12 @@ export default function Home() {
         type: "category",
         data: halfYearData.map(d => d.h),
         axisLine: { lineStyle: { color: "#30363d" } },
-        axisLabel: { color: "#8b949e" },
+        axisLabel: { color: isDark ? "#8b949e" : "#71717A" },
         splitLine: { show: false },
       },
       yAxis: {
         type: "value",
-        axisLabel: { color: "#8b949e", fontSize: 9, formatter: (v: number) => `${numberFormatter.format(v)} t` },
+        axisLabel: { color: isDark ? "#8b949e" : "#71717A", fontSize: 9, formatter: (v: number) => `${numberFormatter.format(v)} t` },
         splitLine: { lineStyle: { color: "#21262d" } },
       },
       series: [
@@ -1441,7 +1451,7 @@ export default function Home() {
           name: String(currentYear ?? "Current"),
           type: "bar",
           data: halfYearData.map(d => d.current > 0 ? d.current : null),
-          itemStyle: { color: "#3FB950", borderRadius: [3, 3, 0, 0] },
+          itemStyle: { color: "#3B82F6", borderRadius: [3, 3, 0, 0] },
           barGap: "15%",
           label: {
             show: true, position: "top", fontSize: 9, fontWeight: "bold", color: "#e6edf3",
@@ -1456,7 +1466,7 @@ export default function Home() {
           itemStyle: { color: "#4b5563", borderRadius: [3, 3, 0, 0] },
           barGap: "15%",
           label: {
-            show: true, position: "top", fontSize: 9, color: "#8b949e",
+            show: true, position: "top", fontSize: 9, color: isDark ? "#8b949e" : "#71717A",
             // @ts-ignore
             formatter: (p: any) => p.value > 0 ? `${numberFormatter.format(p.value)}` : "",
           },
@@ -1490,9 +1500,9 @@ export default function Home() {
     if (!divisionBreakdown.length) return null;
     const total = divisionBreakdown.reduce((s, d) => s + d.total_tonnes, 0);
     return {
-      ...darkChartBase,
+      ...chartBase,
       tooltip: {
-        ...darkChartBase.tooltip,
+        ...chartBase.tooltip,
         trigger: "item",
         // @ts-ignore
         formatter: (p) => `${p.name}: ${numberFormatter.format(p.value)} t (${p.percent}%)`,
@@ -1584,7 +1594,7 @@ export default function Home() {
           <div className="flex items-start justify-between gap-3 pb-3 border-b border-border">
             <div className="flex items-center gap-3">
               <div className="flex flex-col items-center justify-center leading-none">
-                <span className="text-[20px] font-extrabold tracking-tight text-emerald-400">PSS</span>
+                <span className="text-[20px] font-extrabold tracking-tight text-foreground">PSS</span>
                 <span className="text-[8px] font-semibold tracking-[0.2em] text-muted-foreground/70 -mt-0.5">DASHBOARD</span>
               </div>
               <div className="h-9 w-px bg-border" />
@@ -1617,7 +1627,7 @@ export default function Home() {
                 <select
                   value={comparisonMode}
                   onChange={e => setComparisonMode(e.target.value as ComparisonMode)}
-                  className="h-9 px-2.5 text-[12px] rounded-lg border border-primary/40 bg-primary/10 text-primary font-medium focus:outline-none focus:ring-1 focus:ring-primary/50 cursor-pointer min-w-[200px]"
+                  className="h-9 px-2.5 text-[12px] rounded-lg border border-border bg-muted text-foreground font-medium focus:outline-none focus:ring-1 focus:ring-ring/30 cursor-pointer min-w-[200px]"
                 >
                   <option value="same_period_ly">
                     {filterPeriodLabel ? `${filterPeriodLabel} vs LY ${filterPeriodLabel} (Same Day)` : "Same Period (Last Year)"}
@@ -1709,7 +1719,7 @@ export default function Home() {
                       {chartPeriod === "MTD" ? (
                         <>
                           <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                            <span className="inline-block w-3 h-2.5 rounded-sm bg-emerald-400 opacity-80" />
+                            <span className="inline-block w-3 h-2.5 rounded-sm bg-blue-400 opacity-80" />
                             {" "}Daily tonnes
                           </span>
                           <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
@@ -1721,8 +1731,8 @@ export default function Home() {
                         <>
                           <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
                             {chartPeriod === "QTD"
-                              ? <span className="inline-block w-3 h-2.5 rounded-sm bg-emerald-400 opacity-80" />
-                              : <span className="inline-block w-3 h-[2px] rounded bg-emerald-400" />}
+                              ? <span className="inline-block w-3 h-2.5 rounded-sm bg-blue-400 opacity-80" />
+                              : <span className="inline-block w-3 h-[2px] rounded bg-blue-400" />}
                             {" "}This Year ({chartThisYearLabel})
                           </span>
                           <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
@@ -1846,7 +1856,7 @@ export default function Home() {
                     <h3 className="text-[13px] font-semibold text-foreground">Cumulative YTD Sales Comparison</h3>
                     <div className="flex items-center gap-3 mt-1 flex-wrap">
                       <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                        <span className="inline-block w-3 h-[2px] rounded bg-emerald-400" /> This Year ({currentYear})
+                        <span className="inline-block w-3 h-[2px] rounded bg-blue-400" /> This Year ({currentYear})
                       </span>
                       <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
                         <span className="inline-block w-3 h-[2px] rounded bg-muted-foreground" /> Last Year ({previousYear})
@@ -1968,7 +1978,7 @@ export default function Home() {
                     </h3>
                     <div className="flex items-center gap-3 mt-1">
                       <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                        <span className="inline-block w-3 h-[2px] rounded bg-emerald-400" /> This Year ({currentYear})
+                        <span className="inline-block w-3 h-[2px] rounded bg-blue-400" /> This Year ({currentYear})
                       </span>
                       <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
                         <span className="inline-block w-3 h-[2px] rounded bg-muted-foreground" /> Last Year ({previousYear})

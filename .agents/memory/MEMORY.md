@@ -6,3 +6,4 @@
 - [Vite proxy required](vite-proxy.md) — frontend/vite.config.ts must have server.proxy for /api → http://localhost:8080 or all API calls return HTML 404.
 - [AI Insights architecture](ai-insights-architecture.md) — 4-step orchestration: classify_intent → plan_steps (AI) → execute_tools (safe analytics_tools only) → synthesize; business_context.py is single source of truth for company mapping and glossary
 - [JSX self-closing div grep pitfall](jsx-self-close-grep.md) — grep counts of <div vs </div> are off by 1 per self-closing <div … /> tag; trust JSX parser errors over grep counts to find real structural issues
+- [Kravio theme palette](kravio-theme.md) — PSS green removed; neutral dark primary (#18181B light / #A1A1AA dark); blue charts (#3B82F6); chartBase theme-aware via getChartBase(isDark); light sidebar is white with dark active pill

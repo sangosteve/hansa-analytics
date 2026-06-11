@@ -51,7 +51,7 @@ function ActionCard({
           <div className="text-[11px] text-muted-foreground mt-1.5 leading-tight">{impactLine}</div>
         )}
         {trendPct != null && (
-          <div className={`text-[14px] font-bold mt-1 ${trendPositive ? "text-green-400" : "text-red-400"}`}>
+          <div className={`text-[14px] font-bold mt-1 ${trendPositive ? "text-blue-400" : "text-red-400"}`}>
             {trendPositive ? "▲" : "▼"} {Math.abs(trendPct).toFixed(1)}%
           </div>
         )}
@@ -250,16 +250,16 @@ export default function CommercialActionCenter({
 
         {/* 6. Growing Groups */}
         <ActionCard
-          icon={<ChartUpIcon size={18} className="text-emerald-400" />}
-          iconBg="bg-emerald-500/15"
+          icon={<ChartUpIcon size={18} className="text-blue-400" />}
+          iconBg="bg-blue-500/15"
           title={<>Growing<br />Groups</>}
           count={growingGroups.length}
           unit="groups"
           impactLine={growingGained > 0 ? `+${fmtT(growingGained)} vs ${cmpLabel}` : "No gained volume"}
           trendPct={growingAvgPct > 0 ? growingAvgPct : null}
           trendPositive={true}
-          border="border-emerald-800/50"
-          bg="bg-emerald-950/20"
+          border="border-border"
+          bg="bg-card"
         />
 
       </div>

@@ -35,8 +35,8 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
       <div className={`flex items-center h-[60px] border-b border-[var(--sidebar-border)] px-4 flex-shrink-0 ${
         (collapsed && !isMobileOverlay) ? "justify-center" : "gap-3"
       }`}>
-        <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center">
-          <ChartHistogramIcon size={18} color="var(--sidebar-primary)" strokeWidth={2} />
+        <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-[var(--sidebar-primary)] flex items-center justify-center">
+          <ChartHistogramIcon size={17} color="var(--sidebar-primary-foreground)" strokeWidth={2} />
         </div>
         {(!collapsed || isMobileOverlay) && (
           <div className="overflow-hidden flex-1">
@@ -74,7 +74,7 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
                     group flex items-center gap-3 px-2 py-2.5 rounded-lg text-sm
                     transition-all duration-150 select-none
                     ${active
-                      ? "bg-[var(--sidebar-primary)]/10 text-[var(--sidebar-primary)] font-medium"
+                      ? "bg-[var(--sidebar-primary)] text-[var(--sidebar-primary-foreground)] font-medium"
                       : "text-[var(--sidebar-foreground)]/55 hover:bg-[var(--sidebar-accent)] hover:text-[var(--sidebar-foreground)] font-normal"
                     }
                     ${(collapsed && !isMobileOverlay) ? "justify-center" : ""}
@@ -83,11 +83,11 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
                 >
                   <Icon
                     size={17}
-                    className={`flex-shrink-0 ${active ? "text-[var(--sidebar-primary)]" : "text-[var(--sidebar-foreground)]/40 group-hover:text-[var(--sidebar-foreground)]/70"}`}
+                    className={`flex-shrink-0 ${active ? "opacity-100" : "opacity-40 group-hover:opacity-70"}`}
                   />
                   {(!collapsed || isMobileOverlay) && <span className="truncate">{item.label}</span>}
                   {active && (!collapsed || isMobileOverlay) && (
-                    <span className="ml-auto w-1.5 h-1.5 rounded-full bg-[var(--sidebar-primary)] opacity-60" />
+                    <span className="ml-auto w-1.5 h-1.5 rounded-full bg-[var(--sidebar-primary-foreground)] opacity-50 flex-shrink-0" />
                   )}
                 </Link>
               </li>
@@ -109,8 +109,8 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
           `}
         >
           {theme === "dark"
-            ? <Sun01Icon size={17} className="flex-shrink-0 text-[var(--sidebar-foreground)]/40" />
-            : <Moon01Icon size={17} className="flex-shrink-0 text-[var(--sidebar-foreground)]/40" />
+            ? <Sun01Icon size={17} className="flex-shrink-0 opacity-40" />
+            : <Moon01Icon size={17} className="flex-shrink-0 opacity-40" />
           }
           {(!collapsed || isMobileOverlay) && (
             <span className="text-sm">
@@ -146,7 +146,7 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
       {/* ── Mobile backdrop ── */}
       {mobileOpen && (
         <div
-          className="fixed inset-0 z-40 bg-black/60 lg:hidden"
+          className="fixed inset-0 z-40 bg-black/50 lg:hidden"
           onClick={onMobileClose}
         />
       )}
