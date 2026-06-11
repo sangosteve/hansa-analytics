@@ -35,19 +35,19 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
       <div className={`flex items-center h-[60px] border-b border-[var(--sidebar-border)] px-4 flex-shrink-0 ${
         (collapsed && !isMobileOverlay) ? "justify-center" : "gap-3"
       }`}>
-        <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-emerald-950/70 border border-emerald-800/40 flex items-center justify-center">
-          <ChartHistogramIcon size={18} color="#34d399" strokeWidth={2} />
+        <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center">
+          <ChartHistogramIcon size={18} color="var(--sidebar-primary)" strokeWidth={2} />
         </div>
         {(!collapsed || isMobileOverlay) && (
           <div className="overflow-hidden flex-1">
-            <p className="font-bold text-sm text-white leading-none">PSS</p>
-            <p className="text-[10px] text-white/50 leading-none mt-0.5">Analytics</p>
+            <p className="font-bold text-sm text-[var(--sidebar-foreground)] leading-none">PSS</p>
+            <p className="text-[10px] text-[var(--sidebar-foreground)]/40 leading-none mt-0.5">Analytics</p>
           </div>
         )}
         {isMobileOverlay && (
           <button
             onClick={onMobileClose}
-            className="ml-auto h-7 w-7 flex items-center justify-center rounded-md text-white/50 hover:text-white hover:bg-white/10 transition-colors"
+            className="ml-auto h-7 w-7 flex items-center justify-center rounded-md text-[var(--sidebar-foreground)]/40 hover:text-[var(--sidebar-foreground)] hover:bg-[var(--sidebar-accent)] transition-colors"
           >
             <Cancel01Icon size={16} />
           </button>
@@ -57,8 +57,8 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
       {/* ── Nav items ── */}
       <nav className="flex-1 py-4 overflow-y-auto overflow-x-hidden">
         {(!collapsed || isMobileOverlay) && (
-          <p className="px-4 mb-2 text-[10px] uppercase tracking-widest font-semibold text-white/35 select-none">
-            Main
+          <p className="px-4 mb-2 text-[9px] uppercase tracking-widest font-semibold text-[var(--sidebar-foreground)]/30 select-none">
+            Main Navigation
           </p>
         )}
         <ul className="space-y-0.5 px-2">
@@ -71,23 +71,23 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
                   href={item.path}
                   onClick={isMobileOverlay ? onMobileClose : undefined}
                   className={`
-                    group flex items-center gap-3 px-2 py-2.5 rounded-lg text-sm font-medium
-                    transition-all duration-150 select-none relative
+                    group flex items-center gap-3 px-2 py-2.5 rounded-lg text-sm
+                    transition-all duration-150 select-none
                     ${active
-                      ? "bg-[var(--sidebar-primary)] text-[var(--sidebar-primary-foreground)] shadow-md"
-                      : "text-white/70 hover:bg-[var(--sidebar-accent)] hover:text-white"
+                      ? "bg-[var(--sidebar-primary)]/10 text-[var(--sidebar-primary)] font-medium"
+                      : "text-[var(--sidebar-foreground)]/55 hover:bg-[var(--sidebar-accent)] hover:text-[var(--sidebar-foreground)] font-normal"
                     }
                     ${(collapsed && !isMobileOverlay) ? "justify-center" : ""}
                   `}
                   title={(collapsed && !isMobileOverlay) ? item.label : undefined}
                 >
                   <Icon
-                    size={18}
-                    className={`flex-shrink-0 ${active ? "text-[var(--sidebar-primary-foreground)]" : "text-white/60 group-hover:text-white"}`}
+                    size={17}
+                    className={`flex-shrink-0 ${active ? "text-[var(--sidebar-primary)]" : "text-[var(--sidebar-foreground)]/40 group-hover:text-[var(--sidebar-foreground)]/70"}`}
                   />
                   {(!collapsed || isMobileOverlay) && <span className="truncate">{item.label}</span>}
                   {active && (!collapsed || isMobileOverlay) && (
-                    <span className="ml-auto w-1.5 h-1.5 rounded-full bg-[var(--sidebar-primary-foreground)] opacity-70" />
+                    <span className="ml-auto w-1.5 h-1.5 rounded-full bg-[var(--sidebar-primary)] opacity-60" />
                   )}
                 </Link>
               </li>
@@ -103,17 +103,17 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
           title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
           className={`
             w-full flex items-center gap-3 px-2 py-2.5 rounded-lg text-sm
-            text-white/70 hover:bg-[var(--sidebar-accent)] hover:text-white
+            text-[var(--sidebar-foreground)]/55 hover:bg-[var(--sidebar-accent)] hover:text-[var(--sidebar-foreground)]
             transition-all duration-150
             ${(collapsed && !isMobileOverlay) ? "justify-center" : ""}
           `}
         >
           {theme === "dark"
-            ? <Sun01Icon size={18} className="flex-shrink-0 text-white/60" />
-            : <Moon01Icon size={18} className="flex-shrink-0 text-white/60" />
+            ? <Sun01Icon size={17} className="flex-shrink-0 text-[var(--sidebar-foreground)]/40" />
+            : <Moon01Icon size={17} className="flex-shrink-0 text-[var(--sidebar-foreground)]/40" />
           }
           {(!collapsed || isMobileOverlay) && (
-            <span className="text-sm font-medium">
+            <span className="text-sm">
               {theme === "dark" ? "Light mode" : "Dark mode"}
             </span>
           )}
@@ -125,16 +125,16 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
             title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
             className={`
               w-full flex items-center gap-3 px-2 py-2.5 rounded-lg text-sm
-              text-white/50 hover:bg-[var(--sidebar-accent)] hover:text-white
+              text-[var(--sidebar-foreground)]/40 hover:bg-[var(--sidebar-accent)] hover:text-[var(--sidebar-foreground)]
               transition-all duration-150
               ${collapsed ? "justify-center" : ""}
             `}
           >
             {collapsed
-              ? <ArrowRight01Icon size={18} className="flex-shrink-0" />
-              : <ArrowLeft01Icon  size={18} className="flex-shrink-0" />
+              ? <ArrowRight01Icon size={17} className="flex-shrink-0" />
+              : <ArrowLeft01Icon  size={17} className="flex-shrink-0" />
             }
-            {!collapsed && <span className="text-sm font-medium">Collapse</span>}
+            {!collapsed && <span className="text-sm">Collapse</span>}
           </button>
         )}
       </div>
@@ -146,7 +146,7 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
       {/* ── Mobile backdrop ── */}
       {mobileOpen && (
         <div
-          className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm lg:hidden"
+          className="fixed inset-0 z-40 bg-black/60 lg:hidden"
           onClick={onMobileClose}
         />
       )}
@@ -157,7 +157,7 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
           lg:hidden
           fixed inset-y-0 left-0 z-50 w-64 flex flex-col
           bg-[var(--sidebar)] text-[var(--sidebar-foreground)]
-          border-r border-[var(--sidebar-border)] shadow-2xl
+          border-r border-[var(--sidebar-border)]
           transform transition-transform duration-300 ease-in-out
           ${mobileOpen ? "translate-x-0" : "-translate-x-full"}
         `}

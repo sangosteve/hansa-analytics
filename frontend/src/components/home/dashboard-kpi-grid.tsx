@@ -79,16 +79,16 @@ function ForecastChart({ daysElapsed, daysInMonth, actualTonnes, projectedTonnes
     <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} fill="none">
       <defs>
         <linearGradient id="fg2" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#818cf8" stopOpacity="0.25" />
-          <stop offset="100%" stopColor="#818cf8" stopOpacity="0" />
+          <stop offset="0%" stopColor="#58A6FF" stopOpacity="0.2" />
+          <stop offset="100%" stopColor="#58A6FF" stopOpacity="0" />
         </linearGradient>
       </defs>
       <polygon points={`${pL},${by} ${pL},${by} ${tx},${ay} ${tx},${by}`} fill="url(#fg2)" />
-      <line x1={pL} y1={by} x2={tx} y2={ay} stroke="#818cf8" strokeWidth="1.8" strokeLinecap="round" />
-      <line x1={tx} y1={ay} x2={W - pR} y2={py} stroke="#818cf8" strokeWidth="1.8" strokeDasharray="3 2.5" strokeLinecap="round" />
-      <circle cx={W - pR} cy={py} r="2.5" fill="#818cf8" />
-      <line x1={tx} y1={pT - 2} x2={tx} y2={H - pB} stroke="#fbbf24" strokeWidth="1" strokeDasharray="2 2" />
-      <text x={tx + 2} y={pT + 1} fill="#fbbf24" fontSize="6.5" fontFamily="system-ui" fontWeight="600">Today</text>
+      <line x1={pL} y1={by} x2={tx} y2={ay} stroke="#58A6FF" strokeWidth="1.8" strokeLinecap="round" />
+      <line x1={tx} y1={ay} x2={W - pR} y2={py} stroke="#58A6FF" strokeWidth="1.8" strokeDasharray="3 2.5" strokeLinecap="round" />
+      <circle cx={W - pR} cy={py} r="2.5" fill="#58A6FF" />
+      <line x1={tx} y1={pT - 2} x2={tx} y2={H - pB} stroke="#E3B341" strokeWidth="1" strokeDasharray="2 2" />
+      <text x={tx + 2} y={pT + 1} fill="#E3B341" fontSize="6.5" fontFamily="system-ui" fontWeight="600">Today</text>
     </svg>
   );
 }
@@ -102,7 +102,7 @@ function DonutProgress({ pct, color, size = 80 }: { pct: number; color: string; 
   const offset = circ / 4;
   return (
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ transform: "rotate(0deg)" }}>
-      <circle cx={cx} cy={cy} r={r} fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth={9} />
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth={9} />
       <circle cx={cx} cy={cy} r={r} fill="none" stroke={color} strokeWidth={9}
         strokeDasharray={`${filled} ${circ - filled}`}
         strokeDashoffset={offset}
@@ -116,9 +116,9 @@ function DonutProgress({ pct, color, size = 80 }: { pct: number; color: string; 
 function DailyAvgSparkBar({ dailyAvg, targetDailyRate }: { dailyAvg: number; targetDailyRate: number | null }) {
   if (!targetDailyRate || targetDailyRate <= 0) return null;
   const pct = Math.min((dailyAvg / targetDailyRate) * 100, 130);
-  const color = dailyAvg >= targetDailyRate ? "#34d399" : dailyAvg >= targetDailyRate * 0.8 ? "#f59e0b" : "#f87171";
+  const color = dailyAvg >= targetDailyRate ? "#3FB950" : dailyAvg >= targetDailyRate * 0.8 ? "#E3B341" : "#F85149";
   return (
-    <div className="w-full h-1.5 rounded-full bg-white/10 overflow-hidden">
+    <div className="w-full h-1.5 rounded-full bg-white/8 overflow-hidden">
       <div className="h-full rounded-full transition-all duration-700"
         style={{ width: `${Math.min(pct, 100)}%`, background: color }} />
     </div>
@@ -135,17 +135,12 @@ function KpiSkeleton() {
   );
 }
 
-function KpiCard({ children, accentColor, bgTint, className = "" }: {
+function KpiCard({ children, className = "" }: {
   children: React.ReactNode;
-  accentColor: string;
-  bgTint?: string;
   className?: string;
 }) {
   return (
-    <div
-      className={`relative rounded-xl bg-card p-4 overflow-hidden flex flex-col gap-2.5 ${bgTint ?? ""} ${className}`}
-      style={{ border: `1px solid ${accentColor}66` }}
-    >
+    <div className={`rounded-xl border border-border bg-card p-4 flex flex-col gap-2.5 ${className}`}>
       {children}
     </div>
   );
@@ -192,7 +187,6 @@ export default function DashboardKpiGrid({
   const periodLabel = inferPeriodLabel(dateFrom, dateTo);
   const compShort = comparisonLabel ?? getCompShortLabel(comparisonMode, periodLabel);
 
-  // MTD-specific computed values (prorated target, daily avg, etc.)
   const proratedTarget = daysInMonth > 0 ? targetTonnes * (daysInMtd / daysInMonth) : targetTonnes;
   const mtdProgressPct = proratedTarget > 0 ? (mtdTonnes / proratedTarget) * 100 : 0;
   const lyMtdProgressPct = proratedTarget > 0 ? (lyMtdTonnes / proratedTarget) * 100 : 0;
@@ -217,11 +211,11 @@ export default function DashboardKpiGrid({
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
 
-      {/* ── 1. Today's Tonnage (green) ── */}
-      <KpiCard accentColor="#10b981" bgTint="bg-emerald-950/10">
+      {/* ── 1. Today's Tonnage ── */}
+      <KpiCard>
         <div className="flex items-center justify-between gap-2">
-          <span className="text-[10px] font-bold tracking-widest text-emerald-400 uppercase">Today's Tonnage</span>
-          <ChartUpIcon size={13} className="text-emerald-400/60 flex-shrink-0" />
+          <span className="text-[10px] font-semibold tracking-widest text-muted-foreground uppercase">Today's Tonnage</span>
+          <ChartUpIcon size={13} className="text-muted-foreground/40 flex-shrink-0" />
         </div>
         <div>
           <div className="text-[30px] font-extrabold text-foreground leading-none tracking-tight">
@@ -237,18 +231,18 @@ export default function DashboardKpiGrid({
             const diff = todayTonnes - lyTodayTonnes;
             return (
               <div className="mt-2 flex items-center gap-2 flex-wrap">
-                <span className={`inline-flex items-center gap-0.5 text-[11px] font-bold px-1.5 py-0.5 rounded-full ${
-                  pct >= 0 ? "bg-emerald-500/15 text-emerald-400" : "bg-red-500/15 text-red-400"
+                <span className={`inline-flex items-center gap-0.5 text-[11px] font-semibold px-1.5 py-0.5 rounded-full ${
+                  pct >= 0 ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-400"
                 }`}>
                   {pct >= 0 ? "▲" : "▼"} {Math.abs(pct).toFixed(1)}%
                 </span>
-                <span className={`text-[11px] font-semibold ${diff >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                <span className={`text-[11px] font-medium ${diff >= 0 ? "text-green-400" : "text-red-400"}`}>
                   {fmtTSigned(diff)}
                 </span>
               </div>
             );
           })()}
-          <div className="mt-1.5 text-[10px] text-muted-foreground/55">
+          <div className="mt-1.5 text-[10px] text-muted-foreground/50">
             {String(today.getDate()).padStart(2, "0")} {MONTH_SHORT[today.getMonth()]} {today.getFullYear()} only
           </div>
           {todayTonnes === 0 && lyTodayTonnes === 0 && (
@@ -257,11 +251,11 @@ export default function DashboardKpiGrid({
         </div>
       </KpiCard>
 
-      {/* ── 2. MTD Tonnage (teal) ── */}
-      <KpiCard accentColor="#06b6d4" bgTint="bg-cyan-950/10">
+      {/* ── 2. MTD Tonnage ── */}
+      <KpiCard>
         <div className="flex items-center justify-between gap-2">
-          <span className="text-[10px] font-bold tracking-widest text-cyan-400 uppercase">MTD Tonnage</span>
-          <Calendar03Icon size={13} className="text-cyan-400/60 flex-shrink-0" />
+          <span className="text-[10px] font-semibold tracking-widest text-muted-foreground uppercase">MTD Tonnage</span>
+          <Calendar03Icon size={13} className="text-muted-foreground/40 flex-shrink-0" />
         </div>
         <div>
           <div className="text-[30px] font-extrabold text-foreground leading-none tracking-tight">
@@ -274,75 +268,75 @@ export default function DashboardKpiGrid({
           )}
           {mtdPct !== null && (
             <div className="mt-2 flex items-center gap-2 flex-wrap">
-              <span className={`inline-flex items-center gap-0.5 text-[11px] font-bold px-1.5 py-0.5 rounded-full ${
-                mtdPct >= 0 ? "bg-emerald-500/15 text-emerald-400" : "bg-red-500/15 text-red-400"
+              <span className={`inline-flex items-center gap-0.5 text-[11px] font-semibold px-1.5 py-0.5 rounded-full ${
+                mtdPct >= 0 ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-400"
               }`}>
                 {mtdPct >= 0 ? "▲" : "▼"} {Math.abs(mtdPct).toFixed(1)}%
               </span>
-              <span className={`text-[11px] font-semibold ${mtdDiff >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+              <span className={`text-[11px] font-medium ${mtdDiff >= 0 ? "text-green-400" : "text-red-400"}`}>
                 {fmtTSigned(mtdDiff)}
               </span>
             </div>
           )}
-          <div className="mt-1.5 text-[10px] text-muted-foreground/55">
+          <div className="mt-1.5 text-[10px] text-muted-foreground/50">
             01 {MONTH_SHORT[today.getMonth()]} – {String(today.getDate()).padStart(2, "0")} {MONTH_SHORT[today.getMonth()]} {today.getFullYear()} ({daysInMtd} days)
           </div>
         </div>
       </KpiCard>
 
-      {/* ── 3. Target Progress (MTD) — prorated donut (amber/green) ── */}
+      {/* ── 3. Target Progress (MTD) ── */}
       {(() => {
-        const donutColor = mtdProgressPct >= 100 ? "#10b981" : mtdProgressPct >= 80 ? "#f59e0b" : "#f87171";
+        const donutColor = mtdProgressPct >= 100 ? "#3FB950" : mtdProgressPct >= 80 ? "#E3B341" : "#F85149";
         const monthName = ["January","February","March","April","May","June","July","August","September","October","November","December"][today.getMonth()];
         return (
-          <KpiCard accentColor={mtdProgressPct >= 100 ? "#10b981" : "#f59e0b"} bgTint={mtdProgressPct >= 100 ? "bg-emerald-950/10" : "bg-amber-950/10"}>
+          <KpiCard>
             <div className="flex items-center gap-2">
-              <CheckmarkCircle01Icon size={14} className={`flex-shrink-0 ${mtdProgressPct >= 100 ? "text-emerald-400" : "text-amber-400"}`} />
-              <span className="text-[10px] font-bold tracking-widest whitespace-nowrap flex-1 uppercase" style={{ color: mtdProgressPct >= 100 ? "#34d399" : "#f59e0b" }}>
+              <CheckmarkCircle01Icon size={13} className={`flex-shrink-0 ${mtdProgressPct >= 100 ? "text-green-400" : "text-amber-400"}`} />
+              <span className="text-[10px] font-semibold tracking-widest text-muted-foreground whitespace-nowrap flex-1 uppercase">
                 Target Progress (MTD)
               </span>
               {mtdProgressPct >= 100 && (
-                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 whitespace-nowrap">✓ Achieved</span>
+                <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-green-500/10 text-green-400 whitespace-nowrap">✓ Achieved</span>
               )}
             </div>
             <div className="flex items-center gap-3">
               <div className="relative flex-shrink-0" style={{ width: 80, height: 80 }}>
                 <DonutProgress pct={mtdProgressPct} color={donutColor} size={80} />
                 <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                  <span className={`text-[13px] font-extrabold leading-none ${mtdProgressPct >= 100 ? "text-emerald-400" : "text-foreground"}`}>
+                  <span className={`text-[13px] font-extrabold leading-none ${mtdProgressPct >= 100 ? "text-green-400" : "text-foreground"}`}>
                     {mtdProgressPct.toFixed(1)}%
                   </span>
-                  <span className="text-[7.5px] text-muted-foreground/60 mt-0.5">of target</span>
+                  <span className="text-[7.5px] text-muted-foreground/50 mt-0.5">of target</span>
                 </div>
               </div>
               <div className="flex-1 min-w-0 space-y-1.5">
                 <div>
-                  <div className="text-[9px] text-muted-foreground/55">Actual</div>
+                  <div className="text-[9px] text-muted-foreground/50">Actual</div>
                   <div className="text-[12.5px] font-bold text-foreground leading-tight">{fmtT(mtdTonnes)}</div>
                 </div>
                 <div>
-                  <div className="text-[9px] text-muted-foreground/55">Target (prorated)</div>
-                  <div className="text-[11.5px] font-semibold text-muted-foreground leading-tight">{fmtT(proratedTarget)}</div>
+                  <div className="text-[9px] text-muted-foreground/50">Target (prorated)</div>
+                  <div className="text-[11.5px] font-medium text-muted-foreground leading-tight">{fmtT(proratedTarget)}</div>
                 </div>
                 <div>
-                  <div className="text-[9px] text-muted-foreground/55">Gap</div>
-                  <div className={`text-[11.5px] font-bold leading-tight ${mtdTargetGap >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                  <div className="text-[9px] text-muted-foreground/50">Gap</div>
+                  <div className={`text-[11.5px] font-bold leading-tight ${mtdTargetGap >= 0 ? "text-green-400" : "text-red-400"}`}>
                     {mtdTargetGap >= 0 ? "+" : ""}{fmtT(mtdTargetGap)}
                   </div>
                 </div>
                 {lyMtdTonnes > 0 && (
                   <div>
-                    <div className="text-[9px] text-muted-foreground/55">vs LY MTD</div>
-                    <div className={`text-[10.5px] font-bold leading-tight ${ppVsLyMtd >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                    <div className="text-[9px] text-muted-foreground/50">vs LY MTD</div>
+                    <div className={`text-[10.5px] font-semibold leading-tight ${ppVsLyMtd >= 0 ? "text-green-400" : "text-red-400"}`}>
                       {ppVsLyMtd >= 0 ? "▲" : "▼"} {Math.abs(ppVsLyMtd).toFixed(1)} pp ({lyMtdProgressPct.toFixed(1)}%)
                     </div>
                   </div>
                 )}
               </div>
             </div>
-            <div className="flex items-center gap-1 text-[9.5px] text-muted-foreground/55">
+            <div className="flex items-center gap-1 text-[9.5px] text-muted-foreground/50">
               <span>Target source: Manufacturing</span>
-              <span className="text-muted-foreground/30">|</span>
+              <span className="text-muted-foreground/25">|</span>
               <span>{monthName} {today.getFullYear()}</span>
             </div>
           </KpiCard>
@@ -350,10 +344,10 @@ export default function DashboardKpiGrid({
       })()}
 
       {/* ── 4. Daily Avg Tonnes (MTD) ── */}
-      <KpiCard accentColor="#06b6d4" bgTint="bg-cyan-950/10">
+      <KpiCard>
         <div className="flex items-center justify-between gap-2">
-          <span className="text-[10px] font-bold tracking-widest text-cyan-400 uppercase">Daily Avg Tonnes (MTD)</span>
-          <Activity01Icon size={13} className="text-cyan-400/60 flex-shrink-0" />
+          <span className="text-[10px] font-semibold tracking-widest text-muted-foreground uppercase">Daily Avg Tonnes (MTD)</span>
+          <Activity01Icon size={13} className="text-muted-foreground/40 flex-shrink-0" />
         </div>
         <div>
           <div className="text-[27px] font-extrabold text-foreground leading-none tracking-tight">
@@ -369,12 +363,12 @@ export default function DashboardKpiGrid({
             const diff = mtdDailyAvg - lyMtdDailyAvgVal;
             return (
               <div className="mt-2 flex items-center gap-2 flex-wrap">
-                <span className={`inline-flex items-center gap-0.5 text-[11px] font-bold px-1.5 py-0.5 rounded-full ${
-                  pct >= 0 ? "bg-emerald-500/15 text-emerald-400" : "bg-red-500/15 text-red-400"
+                <span className={`inline-flex items-center gap-0.5 text-[11px] font-semibold px-1.5 py-0.5 rounded-full ${
+                  pct >= 0 ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-400"
                 }`}>
                   {pct >= 0 ? "▲" : "▼"} {Math.abs(pct).toFixed(1)}%
                 </span>
-                <span className={`text-[11px] font-semibold ${diff >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                <span className={`text-[11px] font-medium ${diff >= 0 ? "text-green-400" : "text-red-400"}`}>
                   {diff >= 0 ? "+" : ""}{nf.format(Math.round(Math.abs(diff) * 100) / 100)} t/day
                 </span>
               </div>
@@ -386,13 +380,13 @@ export default function DashboardKpiGrid({
                 <DailyAvgSparkBar dailyAvg={mtdDailyAvg} targetDailyRate={requiredPace} />
               </div>
               <div className="mt-1 flex items-center justify-between gap-1">
-                <span className="text-[10.5px] text-muted-foreground/55">
+                <span className="text-[10.5px] text-muted-foreground/50">
                   Required target pace: {nf.format(Math.round(requiredPace * 100) / 100)} t/day
                 </span>
                 <span className={`text-[9.5px] font-semibold px-1.5 py-0.5 rounded-full whitespace-nowrap ${
                   mtdDailyAvg >= requiredPace
-                    ? "bg-emerald-500/15 text-emerald-400"
-                    : "bg-amber-500/15 text-amber-400"
+                    ? "bg-green-500/10 text-green-400"
+                    : "bg-amber-500/10 text-amber-400"
                 }`}>
                   {mtdDailyAvg >= requiredPace ? "Ahead of pace" : "Behind pace"}
                 </span>

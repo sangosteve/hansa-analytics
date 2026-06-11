@@ -34,7 +34,7 @@ function ActionCard({
   border, bg, onViewDetails,
 }: CardProps) {
   return (
-    <div className={`rounded-xl p-4 flex flex-col gap-2.5 min-h-[165px] border ${border} ${bg}`}>
+    <div className={`rounded-xl p-4 flex flex-col gap-2.5 min-h-[165px] border border-border bg-card`}>
       <div className="flex items-start gap-2.5">
         <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${iconBg}`}>
           {icon}
@@ -51,7 +51,7 @@ function ActionCard({
           <div className="text-[11px] text-muted-foreground mt-1.5 leading-tight">{impactLine}</div>
         )}
         {trendPct != null && (
-          <div className={`text-[14px] font-bold mt-1 ${trendPositive ? "text-emerald-400" : "text-red-400"}`}>
+          <div className={`text-[14px] font-bold mt-1 ${trendPositive ? "text-green-400" : "text-red-400"}`}>
             {trendPositive ? "▲" : "▼"} {Math.abs(trendPct).toFixed(1)}%
           </div>
         )}
@@ -59,7 +59,7 @@ function ActionCard({
 
       <button
         onClick={onViewDetails}
-        className="flex items-center gap-1 text-[11px] text-emerald-400 hover:text-emerald-300 transition-colors self-start font-medium"
+        className="flex items-center gap-1 text-[11px] text-primary hover:opacity-75 transition-opacity self-start font-medium"
       >
         View details <ArrowRight01Icon size={10} />
       </button>
@@ -88,8 +88,8 @@ function MissedReorderCard() {
 
   if (loading) {
     return (
-      <div className="rounded-xl border border-blue-800/50 bg-blue-950/20 p-4 animate-pulse min-h-[165px]">
-        <div className="h-9 w-9 rounded-lg bg-blue-500/15 mb-2.5" />
+      <div className="rounded-xl border border-border bg-card p-4 animate-pulse min-h-[165px]">
+        <div className="h-9 w-9 rounded-lg bg-muted/60 mb-2.5" />
         <div className="h-3 w-28 bg-muted/50 rounded mb-2" />
         <div className="h-8 w-16 bg-muted/60 rounded" />
       </div>
@@ -183,7 +183,7 @@ export default function CommercialActionCenter({
           <h2 className="text-[15px] font-semibold text-foreground">Commercial Action Center</h2>
           <p className="text-[11px] text-muted-foreground mt-0.5">Key areas that need your attention</p>
         </div>
-        <button className="flex-shrink-0 flex items-center gap-1 text-[12px] font-medium text-emerald-400 hover:text-emerald-300 transition-colors">
+        <button className="flex-shrink-0 flex items-center gap-1 text-[12px] font-medium text-primary hover:opacity-75 transition-opacity">
           View all <ArrowRight01Icon size={12} />
         </button>
       </div>

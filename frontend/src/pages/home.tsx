@@ -43,10 +43,10 @@ import { useCompany } from "@/lib/company-context";
 import { CustomerDrilldownModal } from "@/components/home/customer-drilldown-modal";
 
 const monthLabels = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-const chartColors = ["#818cf8","#34d399","#fb923c","#f87171","#a78bfa","#38bdf8"];
+const chartColors = ["#3FB950","#58A6FF","#E3B341","#F85149","#BC8CFF","#79C0FF"];
 const divisionColors: Record<string, string> = {
-  "3": "#818cf8",
-  "4": "#34d399",
+  "3": "#58A6FF",
+  "4": "#3FB950",
   "5": "#fb923c",
   "6": "#f87171",
 };
@@ -675,8 +675,8 @@ export default function Home() {
           data: curData,
           connectNulls: false,
           smooth: false,
-          lineStyle: { width: 2.5, color: "#34d399" },
-          itemStyle: { color: "#34d399" },
+          lineStyle: { width: 2.5, color: "#3FB950" },
+          itemStyle: { color: "#3FB950" },
           showSymbol: true,
           symbol: "circle",
           symbolSize: 5,
@@ -684,14 +684,14 @@ export default function Home() {
             show: true,
             position: "top",
             fontSize: 8.5,
-            color: "#34d399",
+            color: "#3FB950",
             // @ts-ignore
             formatter: (p: any) => p.value != null ? `${numberFormatter.format(p.value)}` : "",
           },
           areaStyle: {
             color: {
               type: "linear", x: 0, y: 0, x2: 0, y2: 1,
-              colorStops: [{ offset: 0, color: "#34d39930" }, { offset: 1, color: "transparent" }],
+              colorStops: [{ offset: 0, color: "#3FB95030" }, { offset: 1, color: "transparent" }],
             },
           },
           endLabel: {
@@ -807,20 +807,20 @@ export default function Home() {
       graphic: curEnd > 0 ? [{
         type: "group", right: 10, top: 6,
         children: [
-          { type: "rect", z: 100, shape: { width: 100, height: 18, r: 3 }, style: { fill: "#34d39915", stroke: "#34d39940", lineWidth: 1 } },
-          { type: "text", z: 101, style: { text: `Total: ${numberFormatter.format(Math.round(curEnd * 100) / 100)} t`, fill: "#34d399", fontSize: 9, fontWeight: "bold", x: 7, y: 3 } },
+          { type: "rect", z: 100, shape: { width: 100, height: 18, r: 3 }, style: { fill: "#3FB95015", stroke: "#3FB95040", lineWidth: 1 } },
+          { type: "text", z: 101, style: { text: `Total: ${numberFormatter.format(Math.round(curEnd * 100) / 100)} t`, fill: "#3FB950", fontSize: 9, fontWeight: "bold", x: 7, y: 3 } },
         ]
       }] : [],
       series: [
         {
           name: "This Year", type: "line", data: curData, connectNulls: false, smooth: false,
-          lineStyle: { width: 2.5, color: "#34d399" }, itemStyle: { color: "#34d399" },
+          lineStyle: { width: 2.5, color: "#3FB950" }, itemStyle: { color: "#3FB950" },
           showSymbol: true, symbol: "circle", symbolSize: 5,
-          label: { show: true, position: "top", fontSize: 8.5, color: "#34d399",
+          label: { show: true, position: "top", fontSize: 8.5, color: "#3FB950",
             // @ts-ignore
             formatter: (p: any) => p.value != null && p.value > 0 ? numberFormatter.format(p.value) : "" },
           areaStyle: { color: { type: "linear", x: 0, y: 0, x2: 0, y2: 1,
-            colorStops: [{ offset: 0, color: "#34d39930" }, { offset: 1, color: "transparent" }] } },
+            colorStops: [{ offset: 0, color: "#3FB95030" }, { offset: 1, color: "transparent" }] } },
         },
         {
           name: "Last Year", type: "line", data: compData, connectNulls: false, smooth: false,
@@ -906,12 +906,12 @@ export default function Home() {
           type: "bar",
           data: barData,
           yAxisIndex: 0,
-          itemStyle: { color: "#34d399", borderRadius: [2, 2, 0, 0] },
+          itemStyle: { color: "#3FB950", borderRadius: [2, 2, 0, 0] },
           label: {
             show: true,
             position: "top",
             fontSize: 7.5,
-            color: "#34d399",
+            color: "#3FB950",
             // @ts-ignore
             formatter: (p: any) => p.value != null && p.value > 0 ? numberFormatter.format(p.value) : "",
           },
@@ -922,8 +922,8 @@ export default function Home() {
           data: lineData,
           yAxisIndex: 1,
           smooth: false,
-          lineStyle: { color: "#34d399", width: 2 },
-          itemStyle: { color: "#34d399" },
+          lineStyle: { color: "#3FB950", width: 2 },
+          itemStyle: { color: "#3FB950" },
           showSymbol: true,
           symbol: "circle",
           symbolSize: 4,
@@ -931,7 +931,7 @@ export default function Home() {
             show: true,
             position: "top",
             fontSize: 7.5,
-            color: "#34d399",
+            color: "#3FB950",
             // @ts-ignore
             formatter: (p: any) => p.dataIndex === lineData.length - 1 && p.value != null && p.value > 0
               ? numberFormatter.format(p.value) : "",
@@ -1013,8 +1013,8 @@ export default function Home() {
         {
           name: `This Year (${from.getFullYear()})`,
           type: "bar", data: curBars, barMaxWidth: 56,
-          itemStyle: { color: "#34d399", borderRadius: [4, 4, 0, 0] },
-          label: { show: true, position: "top", fontSize: 9, color: "#34d399",
+          itemStyle: { color: "#3FB950", borderRadius: [4, 4, 0, 0] },
+          label: { show: true, position: "top", fontSize: 9, color: "#3FB950",
             // @ts-ignore
             formatter: (p: any) => p.value > 0 ? numberFormatter.format(p.value) : "" },
         },
@@ -1143,7 +1143,7 @@ export default function Home() {
         return {
           value: g,
           itemStyle: {
-            color: g >= 0 ? "#34d399" : "#f87171",
+            color: g >= 0 ? "#3FB950" : "#f87171",
             borderRadius: g >= 0 ? [3, 3, 0, 0] : [0, 0, 3, 3],
           },
         };
@@ -1199,7 +1199,7 @@ export default function Home() {
           name: String(currentYear),
           type: "bar",
           data: curData.map((v, i) => (i + 1 <= lastCurrentYearMonth && v > 0 ? v : null)),
-          itemStyle: { color: "#34d399", borderRadius: [3, 3, 0, 0] },
+          itemStyle: { color: "#3FB950", borderRadius: [3, 3, 0, 0] },
           barGap: "15%",
           label: { show: false },
         },
@@ -1218,7 +1218,7 @@ export default function Home() {
   const cumulativeComparisonOptions = useMemo(() => {
     const annualTarget = DEFAULT_TARGET_TONNES * 12;
     const targetData = Array.from({ length: 12 }, (_, i) => (i + 1) * (annualTarget / 12));
-    const yearColor = (year: number) => (year === currentYear ? "#34d399" : "#6b7280");
+    const yearColor = (year: number) => (year === currentYear ? "#3FB950" : "#6b7280");
     const baseSeries = momYears.map((year) => ({
       name: String(year),
       type: "line",
@@ -1243,7 +1243,7 @@ export default function Home() {
         color: {
           type: "linear", x: 0, y: 0, x2: 0, y2: 1,
           colorStops: [
-            { offset: 0, color: "#34d39920" },
+            { offset: 0, color: "#3FB95020" },
             { offset: 1, color: "transparent" },
           ],
         },
@@ -1364,7 +1364,7 @@ export default function Home() {
           name: String(currentYear ?? "Current"),
           type: "bar",
           data: quarterlyData.map(d => d.current > 0 ? d.current : null),
-          itemStyle: { color: "#34d399", borderRadius: [3, 3, 0, 0] },
+          itemStyle: { color: "#3FB950", borderRadius: [3, 3, 0, 0] },
           barGap: "15%",
           label: {
             show: true,
@@ -1441,7 +1441,7 @@ export default function Home() {
           name: String(currentYear ?? "Current"),
           type: "bar",
           data: halfYearData.map(d => d.current > 0 ? d.current : null),
-          itemStyle: { color: "#34d399", borderRadius: [3, 3, 0, 0] },
+          itemStyle: { color: "#3FB950", borderRadius: [3, 3, 0, 0] },
           barGap: "15%",
           label: {
             show: true, position: "top", fontSize: 9, fontWeight: "bold", color: "#e6edf3",
@@ -1517,7 +1517,7 @@ export default function Home() {
         data: divisionBreakdown.map(d => ({
           name: d.label,
           value: d.total_tonnes,
-          itemStyle: { color: divisionColors[d.company_no] ?? "#818cf8" },
+          itemStyle: { color: divisionColors[d.company_no] ?? "#58A6FF" },
         })),
       }],
     };
@@ -2106,17 +2106,17 @@ export default function Home() {
 
           {/* ── Insight Bar ── */}
           {insightText && (
-            <div className="rounded-xl border border-emerald-800/30 bg-emerald-950/20 px-4 py-3 flex items-center gap-3">
-              <div className="flex-shrink-0 h-8 w-8 rounded-full bg-emerald-500/15 border border-emerald-700/30 flex items-center justify-center">
-                <Idea01Icon size={16} className="text-emerald-400" />
+            <div className="rounded-xl border border-border bg-card px-4 py-3 flex items-center gap-3">
+              <div className="flex-shrink-0 h-8 w-8 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center">
+                <Idea01Icon size={16} className="text-primary" />
               </div>
               <div className="flex-1 min-w-0">
-                <span className="text-[12px] font-bold text-emerald-400 mr-2">Insight</span>
-                <span className="text-[12px] text-foreground/80">{insightText}</span>
+                <span className="text-[12px] font-semibold text-primary mr-2">Insight</span>
+                <span className="text-[12px] text-muted-foreground">{insightText}</span>
               </div>
               <button
                 onClick={() => document.dispatchEvent(new Event("open-ai-drawer"))}
-                className="flex-shrink-0 flex items-center gap-1 text-[12px] font-medium text-emerald-400 hover:text-emerald-300 transition-colors whitespace-nowrap"
+                className="flex-shrink-0 flex items-center gap-1 text-[12px] font-medium text-primary hover:opacity-80 transition-opacity whitespace-nowrap"
               >
                 View all insights <ArrowRight01Icon size={11} />
               </button>
