@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse
 
 from app.api.routes_ai import router as ai_router
+from app.api.routes_copilot import router as copilot_router
 from app.api.routes_targets import router as targets_router
 from app.api.routes_oauth import router as oauth_router
 from app.api.routes_analytics import router as analytics_router
@@ -17,6 +18,7 @@ from app.api.routes_movement import router as movement_router
 from app.api.routes_refresh import router as refresh_router
 from app.api.routes_sales_summary import router as sales_summary_router
 from app.api.routes_stock import router as stock_router
+from app.api.copilot_swagger import COPILOT_SWAGGER
 from app.core.config import settings
 from app.services.scheduler_service import start_scheduler, stop_scheduler
 
@@ -117,6 +119,7 @@ app.include_router(movement_router)
 app.include_router(stock_router)
 app.include_router(ai_router)
 app.include_router(targets_router)
+app.include_router(copilot_router)
 
 
 @app.get("/")
@@ -131,9 +134,27 @@ def healthz():
 
 @app.get("/openapi.yaml", include_in_schema=False)
 def openapi_yaml():
-    """Return the OpenAPI schema as YAML — useful for Copilot connectors."""
+    """Return the full OpenAPI 3.1 schema as YAML — developer documentation."""
     schema = app.openapi()
     return PlainTextResponse(
         yaml.safe_dump(json.loads(json.dumps(schema)), allow_unicode=True, sort_keys=False),
         media_type="application/yaml",
+    )
+
+
+@app.get("/copilot-swagger.yaml", include_in_schema=False)
+def copilot_swagger_yaml():
+    """Copilot-safe Swagger 2.0 spec (YAML) — exposes only safe, read-only reporting endpoints."""
+    return PlainTextResponse(
+        yaml.safe_dump(COPILOT_SWAGGER, allow_unicode=True, sort_keys=False),
+        media_type="application/yaml",
+    )
+
+
+@app.get("/copilot-swagger.json", include_in_schema=False)
+def copilot_swagger_json():
+    """Copilot-safe Swagger 2.0 spec (JSON) — exposes only safe, read-only reporting endpoints."""
+    return PlainTextResponse(
+        json.dumps(COPILOT_SWAGGER, indent=2),
+        media_type="application/json",
     )

@@ -34,6 +34,10 @@ class Settings(BaseSettings):
     # Set to e.g. https://hansa-analytics-api.onrender.com (no trailing slash).
     api_url: str = "https://hansa-analytics-api.onrender.com"
 
+    # Bearer token for Copilot connector endpoints (/api/copilot/*).
+    # Set COPILOT_API_TOKEN in the environment. Never log or expose this value.
+    copilot_api_token: Optional[str] = None
+
     openai_api_key: Optional[str] = None
     openai_model: str = "gpt-4o"
 
