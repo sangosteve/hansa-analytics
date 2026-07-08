@@ -6,7 +6,7 @@ from pydantic import BaseModel
 
 from app.db.database import get_db
 
-router = APIRouter(prefix="/api/targets", tags=["targets"])
+router = APIRouter(prefix="/api/targets", tags=["Targets"])
 
 
 def _ensure_table(db: Session) -> None:

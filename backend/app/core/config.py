@@ -30,6 +30,10 @@ class Settings(BaseSettings):
     # If unset, relative redirects are used (only works when backend == frontend origin).
     frontend_url: Optional[str] = None
 
+    # Public API base URL — used in the OpenAPI `servers` field for connector imports.
+    # Set to e.g. https://hansa-analytics-api.onrender.com (no trailing slash).
+    api_url: str = "https://hansa-analytics-api.onrender.com"
+
     openai_api_key: Optional[str] = None
     openai_model: str = "gpt-4o"
 

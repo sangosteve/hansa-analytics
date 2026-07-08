@@ -12,7 +12,7 @@ from sqlalchemy import text
 from app.core.filters import build_company_filter, build_scope_sql
 from app.db.database import get_db
 
-router = APIRouter(prefix="/api/movement", tags=["movement"])
+router = APIRouter(prefix="/api/movement", tags=["Movement Analytics"])
 
 
 def _resolve(company_nos, company_no):

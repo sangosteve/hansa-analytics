@@ -11,7 +11,7 @@ from app.db.database import get_db
 from app.schemas.ai import AIInsightRequest, AIInsightResponse, AISuggestion
 from app.services.ai_insights_service import generate_insight, get_suggested_questions
 
-router = APIRouter(prefix="/api/ai", tags=["ai"])
+router = APIRouter(prefix="/api/ai", tags=["AI Insights"])
 
 
 @router.post("/insights", response_model=AIInsightResponse)

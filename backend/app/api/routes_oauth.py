@@ -24,7 +24,7 @@ from app.services import oauth_service
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/hansa", tags=["hansa-oauth"])
+router = APIRouter(prefix="/api/hansa", tags=["Hansa OAuth"])
 
 # In-memory store of the last callback received (safe — code value is never stored)
 _last_callback: dict = {}
